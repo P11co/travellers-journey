@@ -1,0 +1,22 @@
+# Environment & secrets
+.env
+*.env
+.env.*
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+
+# Expo / React Native
+.expo/
+ios/build/
+android/build/
+android/.gradle/
+
+# OS
+.DS_Store
+Thumbs.db
