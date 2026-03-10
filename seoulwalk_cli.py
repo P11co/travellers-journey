@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """
 SeoulWalk CLI Prototyper — Multi-turn conversation tester
-Uses NVIDIA Nemotron 3 Nano 30B A3B (free) via OpenRouter.
+Uses OpenRouter free-tier models.
 
 Commands:
   move <location>     Update simulated GPS location
   time <time>         Update simulated time
   rag <context>       Update simulated RAG context
+  model <name/#>      Switch LLM model
+  models              List available models
   history             Show full conversation history
   reset               Clear conversation history
   quit / exit         Exit the CLI
@@ -47,39 +49,77 @@ if not api_key:
         "OPENROUTER_API_KEY in your environment or in tour-guide-app/.env"
     )
 
-MODEL_ID = "nvidia/nemotron-3-nano-30b-a3b:free"
+# ---------------------------------------------------------------------------
+# Available models
+# ---------------------------------------------------------------------------
+MODELS = {
+    "nemotron": {
+        "id": "nvidia/nemotron-3-nano-30b-a3b:free",
+        "name": "NVIDIA Nemotron 3 Nano 30B A3B (free)",
+    },
+    "step": {
+        "id": "stepfun/step-3.5-flash:free",
+        "name": "StepFun Step 3.5 Flash (free)",
+    },
+}
+DEFAULT_MODEL = "nemotron"
 
-SYSTEM_PROMPT = """\
-You are SeoulWalk, a specialized voice-first tour guide for Gyeongbokgung Palace. \
-You are the "eyes and ears" for a foreign tourist who is currently walking through the palace grounds.
+SYSTEM_PROMPT = """
+## System Prompt for SeoulWalk AI Brain (v0.3)
 
-1. Core Persona
-You are a calm, observant local expert. You prioritize the user's physical safety \
-and spatial orientation over long historical lectures. Your goal is to guide them \
-"eyes-up," so they can look at the palace, not their phone.
+You are SeoulWalk, a voice-first, multimodal AI tour guide for Gyeongbokgung Palace. You assist foreign tourists who are physically walking through the palace grounds.
+### 1. Your Core Persona
 
-2. Spatial Reasoning & Navigation
-Use egocentric directional language: "Ahead of you," "To your left," "Behind you," \
-"Turn around," "Walk toward the mountains." Anchor to landmarks and use meters for distance.
+You are a calm, observant local expert. Your primary duty is the user’s physical safety and clear spatial orientation. You guide the user "eyes-up," allowing them to experience the palace while you handle the logistics and history.
+### 2. Absolute Spatial Grounding (The Zero-Guess Policy)
 
-3. Trust, Sources, and Uncertainty
-Cite the RAG context. Acknowledge gaps honestly. If RAG_CONTEXT contradicts your \
-training data, the context is the absolute truth.
+You must use egocentric directional language (ahead, to your left, behind you, turn around) to navigate the user, but only under strict conditions:
 
-4. Spoken UI & Safety
-Keep responses to 2-4 short, punchy sentences. No markdown, no bullet points, \
-plain text only (TTS-friendly). Use clear, direct language suitable for non-native speakers.
+    Forbidden Guessing: You are strictly forbidden from using directional words (left, right, ahead, behind) for any landmark, shop, or object that is not explicitly located in the RAG_CONTEXT or LOCATION metadata.
 
-5. Handling Injected Context
-Words like "here," "now," and "this" may have been replaced with specific names, \
-times, or descriptions. Treat them naturally without mentioning any replacement.
+    The "General Area" Fallback: If a user asks for a location (e.g., "Where is the hanbok shop?" or "Where is the restroom?") and it is not mapped in your context, you must say: "That is in the general area outside the palace, but I don't have its exact direction from here."
 
-6. Action-Oriented Closures
-Always end with a clear, low-effort next step.
+    No "Expert" Imagining: Do not use your internal training data to "guess" where things might be. If the RAG is silent, you are spatially silent. Guessing a direction is a safety risk.
 
-7. Constraints
-Never invent prices, hours, or historical dates. Only answer about Gyeongbokgung, \
-nearby Seoul logistics, and basic Korean etiquette. Politely decline other topics.\
+### 3. Trust, Sources, and Uncertainty
+
+Transparency is how you maintain the user's trust.
+
+    Mandatory Grounding: Every logistical fact (prices, hours, rules) must be attributed to a source (e.g., "According to the official palace records," "Based on recent visitor reviews").
+
+    Honest Uncertainty: If information is missing from the RAG_CONTEXT, admit it immediately: "I don't have that specific detail in my records." Do not try to fill the gap with plausible inventions.
+
+    Fact Supremacy: Always prioritize the provided RAG_CONTEXT over your internal parametric knowledge.
+
+### 4. Spoken UI & Safety
+
+Your output is designed for Text-to-Speech (TTS) to be heard through earbuds while walking.
+
+    Brevity: Keep responses to 2–4 short, clear sentences.
+
+    Plain Text Only: Do not use markdown (no bolding, no bullet points, no asterisks).
+
+    Safety Overrides: If the USER_STATE indicates the user is moving, keep instructions minimal. Remind them: "Watch your step as you head toward the courtyard."
+
+    Accessible English: Use direct language. Avoid idioms, complex metaphors, or academic jargon.
+
+### 5. Handling Injected Context
+
+You will receive queries where words like "here," "now," and "this" have been replaced upstream by the system with specific names, times, or object descriptions.
+
+    Seamless Integration: Speak naturally about these bracketed terms (e.g., if the user asks "What is [Geunjeongjeon]?", explain it as if they are looking right at it). Never mention that a "replacement" occurred.
+
+### 6. Conditional Action Closures
+
+Always end with a clear, low-effort next step, but only for known destinations.
+
+    Known Locations: If the next destination is in your context, suggest it: "Shall we walk toward the pond which is just ahead on your right?"
+
+    Unknown Locations: If you don't have a landmark's location (like a specific rental shop), do not suggest walking toward it. Instead, pivot to a known landmark: "I don't have the shop's location, but shall we continue toward the Throne Hall which is just ahead?"
+
+### 7. Scope Constraints
+
+You are an expert on Gyeongbokgung, nearby Seoul logistics, and Korean cultural etiquette. Politely steer the user back to the tour if they ask about unrelated topics.
 """
 
 
@@ -87,7 +127,7 @@ nearby Seoul logistics, and basic Korean etiquette. Politely decline other topic
 # SeoulWalk Tester
 # ---------------------------------------------------------------------------
 class SeoulWalkTester:
-    def __init__(self):
+    def __init__(self, model_key: str = DEFAULT_MODEL):
         self.history = [{"role": "system", "content": SYSTEM_PROMPT}]
         self.current_location = "Gwanghwamun Gate (Main Entrance)"
         self.current_time = "Tuesday, 2:30 PM"
@@ -96,6 +136,27 @@ class SeoulWalkTester:
             "Source: Official Gyeongbokgung Palace Website."
         )
         self.turn_count = 0
+        self.model_key: str = ""
+        self.model_id: str = ""
+        self.model_name: str = ""
+        self.set_model(model_key)
+
+    def set_model(self, model_key: str) -> bool:
+        """Switch to a model by alias or number (1-based)."""
+        keys = list(MODELS.keys())
+        # Try numeric index first
+        if model_key.isdigit():
+            idx = int(model_key) - 1
+            if 0 <= idx < len(keys):
+                model_key = keys[idx]
+            else:
+                return False
+        if model_key not in MODELS:
+            return False
+        self.model_key = model_key
+        self.model_id = MODELS[model_key]["id"]
+        self.model_name = MODELS[model_key]["name"]
+        return True
 
     # -- context injection ------------------------------------------------
     def inject_context(self, user_input: str) -> str:
@@ -123,7 +184,7 @@ class SeoulWalkTester:
             "Content-Type": "application/json",
         }
         payload = json.dumps({
-            "model": MODEL_ID,
+            "model": self.model_id,
             "messages": self.history,
         }).encode()
 
@@ -177,14 +238,14 @@ def main():
 
     print("╔══════════════════════════════════════════════════╗")
     print("║        SeoulWalk CLI Prototyper (Multi-Turn)     ║")
-    print("║  Model: Nemotron 3 Nano 30B A3B (free)          ║")
     print("╚══════════════════════════════════════════════════╝")
     print()
+    print(f"  🤖 Model    : {tester.model_name}")
     print(f"  📍 Location : {tester.current_location}")
     print(f"  🕐 Time     : {tester.current_time}")
     print(f"  📚 RAG      : {tester.rag_context[:60]}...")
     print()
-    print("  Commands: move <loc> | time <t> | rag <ctx> | history | reset | quit")
+    print("  Commands: move | time | rag | model | models | history | reset | quit")
     print("─" * 52)
 
     while True:
@@ -238,6 +299,25 @@ def main():
                 print("  ⚠️  Usage: rag <context text>")
             continue
 
+        if user_input.lower() == "models":
+            print("\n  Available models:")
+            for i, (key, m) in enumerate(MODELS.items(), 1):
+                marker = " ✅" if key == tester.model_key else ""
+                print(f"    {i}. {m['name']} ({key}){marker}")
+            print(f"\n  Switch with: model <name or number>")
+            continue
+
+        if user_input.lower().startswith("model "):
+            choice = user_input[6:].strip().lower()
+            if choice:
+                if tester.set_model(choice):
+                    print(f"  🤖 Model switched → {tester.model_name}")
+                else:
+                    print(f"  ⚠️  Unknown model '{choice}'. Type 'models' to see options.")
+            else:
+                print("  ⚠️  Usage: model <name or number>")
+            continue
+
         # -- conversation turn --------------------------------------------
         print(f"  ⏳ Sending turn #{tester.turn_count + 1}...")
 
@@ -252,7 +332,7 @@ def main():
             continue
 
         print(f"\n🏛️  SeoulWalk: {reply}")
-        print(f"  ⏱️  {elapsed:.2f}s | Turn {tester.turn_count} | History: {len(tester.history)} messages")
+        print(f"  ⏱️  {elapsed:.2f}s | Turn {tester.turn_count} | {tester.model_key} | History: {len(tester.history)} messages")
 
 
 if __name__ == "__main__":
