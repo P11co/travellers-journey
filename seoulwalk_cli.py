@@ -22,6 +22,31 @@ import time
 import urllib.request
 import urllib.error
 
+try:
+    import chromadb
+    from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+    CHROMA_AVAILABLE = True
+except ImportError:
+    CHROMA_AVAILABLE = False
+
+try:
+    import numpy as np
+    import sounddevice as sd
+    import websocket
+    import urllib.parse
+    # from elevenlabs.client import ElevenLabs  # Commented out — switched to Deepgram TTS
+    AUDIO_AVAILABLE = True
+except ImportError:
+    AUDIO_AVAILABLE = False
+
+import json
+import tempfile
+import threading
+import sys
+import subprocess
+import argparse
+import time
+
 # ---------------------------------------------------------------------------
 # .env loader
 # ---------------------------------------------------------------------------
@@ -124,6 +149,158 @@ You are an expert on Gyeongbokgung, nearby Seoul logistics, and Korean cultural 
 
 
 # ---------------------------------------------------------------------------
+# Voice Integration
+# ---------------------------------------------------------------------------
+class VoiceInterface:
+    def __init__(self, assembly_key: str, deepgram_key: str):
+        self.assembly_key = assembly_key
+        self.deepgram_key = deepgram_key
+        # self.eleven_client = ElevenLabs(api_key=eleven_key)  # Commented out — switched to Deepgram
+        self.fs = 16000
+        self.is_recording = False
+        self.ws = None
+        self.transcript = ""
+        self.audio_thread = None
+
+    def _record_thread(self, ws):
+        frames_per_buffer = 800
+        with sd.InputStream(samplerate=self.fs, channels=1, dtype='int16') as stream:
+            while self.is_recording and ws and getattr(ws, 'sock', None) and ws.sock.connected:
+                try:
+                    data, overflowed = stream.read(frames_per_buffer)
+                    ws.send(data.tobytes(), websocket.ABNF.OPCODE_BINARY)
+                except Exception:
+                    break
+
+    def record_until_keypress(self) -> str:
+        try:
+            cmd = input("\n🎤 Press ENTER to start speaking (or type 'quit')...")
+            if cmd.lower() in ("quit", "exit", "q"):
+                return "quit"
+        except (EOFError, KeyboardInterrupt):
+            return "quit"
+            
+        print("🔴 Connecting to AssemblyAI...", end="", flush=True)
+        self.transcript = ""
+        self.is_recording = True
+        
+        params = {"sample_rate": self.fs, "speech_model": "u3-rt-pro"}
+        endpoint = f"wss://streaming.assemblyai.com/v3/ws?{urllib.parse.urlencode(params)}"
+        
+        self.ws = websocket.WebSocketApp(
+            endpoint,
+            header={"Authorization": self.assembly_key},
+            on_open=self._on_ws_open,
+            on_message=self._on_ws_message,
+            on_error=self._on_ws_error,
+            on_close=self._on_ws_close
+        )
+        
+        ws_thread = threading.Thread(target=self.ws.run_forever)
+        ws_thread.daemon = True
+        ws_thread.start()
+        
+        try:
+            input()
+        except (EOFError, KeyboardInterrupt):
+            pass
+            
+        self.is_recording = False
+        
+        if self.ws and getattr(self.ws, 'sock', None) and self.ws.sock.connected:
+            terminate_msg = {"type": "Terminate"}
+            self.ws.send(json.dumps(terminate_msg))
+            time.sleep(1.0) # give time to receive final message
+            self.ws.close()
+            
+        ws_thread.join(timeout=2.0)
+        
+        # Clear the line on finish
+        print("\r" + " " * 80 + "\r", end="", flush=True)
+        return self.transcript.strip()
+
+    def _on_ws_open(self, ws):
+        print("\r🔴 Recording... (Press ENTER to stop)        ", end="", flush=True)
+        self.audio_thread = threading.Thread(target=self._record_thread, args=(ws,))
+        self.audio_thread.daemon = True
+        self.audio_thread.start()
+
+    def _on_ws_message(self, ws, message):
+        try:
+            data = json.loads(message)
+            if data.get('type') == 'Turn':
+                text = data.get('transcript', '')
+                formatted = data.get('turn_is_formatted', False)
+                if formatted:
+                    self.transcript += text + " "
+                    print(f"\r💬 {self.transcript}", end='', flush=True)
+                else:
+                    print(f"\r💬 {self.transcript}{text}", end='', flush=True)
+        except Exception:
+            pass
+
+    def _on_ws_error(self, ws, error):
+        print(f"\n❌ AssemblyAI Error: {error}")
+        self.is_recording = False
+
+    def _on_ws_close(self, ws, status_code, msg):
+        pass
+
+    def speak(self, text: str):
+        """Use Deepgram Aura TTS to speak the response."""
+        clean_text = re.sub(r'[*_~`]', '', text)
+        print("🔊 Playing audio response (Deepgram)...")
+        try:
+            url = "https://api.deepgram.com/v1/speak?model=aura-asteria-en&encoding=mp3"
+            payload = json.dumps({"text": clean_text}).encode()
+            req = urllib.request.Request(
+                url,
+                data=payload,
+                headers={
+                    "Authorization": f"Token {self.deepgram_key}",
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                audio_data = resp.read()
+
+            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+                temp_mp3 = f.name
+                f.write(audio_data)
+
+            subprocess.run(["afplay", temp_mp3], stderr=subprocess.DEVNULL)
+        except Exception as e:
+            print(f"  ❌ Audio playback failed: {e}")
+        finally:
+            if 'temp_mp3' in locals() and os.path.exists(temp_mp3):
+                os.remove(temp_mp3)
+
+    # --- Original ElevenLabs TTS (commented out) ---
+    # def speak_elevenlabs(self, text: str):
+    #     clean_text = re.sub(r'[*_~`]', '', text)
+    #     print("🔊 Playing audio response...")
+    #     try:
+    #         audio_stream = self.eleven_client.text_to_speech.convert(
+    #             voice_id="EXAVITQu4vr4xnSDxMaL",
+    #             output_format="mp3_44100_128",
+    #             text=clean_text,
+    #             model_id="eleven_multilingual_v2"
+    #         )
+    #         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+    #             temp_mp3 = f.name
+    #             for chunk in audio_stream:
+    #                 if chunk:
+    #                     f.write(chunk)
+    #         subprocess.run(["afplay", temp_mp3], stderr=subprocess.DEVNULL)
+    #     except Exception as e:
+    #         print(f"  ❌ Audio playback failed: {e}")
+    #     finally:
+    #         if 'temp_mp3' in locals() and os.path.exists(temp_mp3):
+    #             os.remove(temp_mp3)
+
+
+# ---------------------------------------------------------------------------
 # SeoulWalk Tester
 # ---------------------------------------------------------------------------
 class SeoulWalkTester:
@@ -140,6 +317,25 @@ class SeoulWalkTester:
         self.model_id: str = ""
         self.model_name: str = ""
         self.set_model(model_key)
+        self.rag_top_k = 3
+        self.rag_exclude_kr = True
+
+        # Initialize ChromaDB
+        self.chroma_collection = None
+        if CHROMA_AVAILABLE:
+            chroma_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "chroma_db")
+            if os.path.exists(chroma_path):
+                try:
+                    client = chromadb.PersistentClient(path=chroma_path)
+                    embedding_fn = SentenceTransformerEmbeddingFunction(
+                        model_name="all-MiniLM-L6-v2",
+                    )
+                    self.chroma_collection = client.get_collection(
+                        name="seoulwalk",
+                        embedding_function=embedding_fn,
+                    )
+                except Exception as e:
+                    print(f"  ⚠️  ChromaDB init failed: {e}. Using static RAG.")
 
     def set_model(self, model_key: str) -> bool:
         """Switch to a model by alias or number (1-based)."""
@@ -167,13 +363,55 @@ class SeoulWalkTester:
         return out
 
     # -- API call ---------------------------------------------------------
+    def search_rag(self, query: str) -> str:
+        """Search ChromaDB for relevant context, return formatted string."""
+        if not self.chroma_collection:
+            return self.rag_context  # fallback to static
+
+        try:
+            where_filter = {"kr_only": False} if self.rag_exclude_kr else None
+            results = self.chroma_collection.query(
+                query_texts=[query],
+                n_results=self.rag_top_k,
+                where=where_filter,
+                include=["documents", "metadatas", "distances"],
+            )
+
+            docs = results["documents"][0]
+            metas = results["metadatas"][0]
+            distances = results["distances"][0]
+
+            if not docs:
+                return self.rag_context
+
+            parts = []
+            for doc, meta, dist in zip(docs, metas, distances):
+                sim = 1 - dist
+                if sim < 0.2:  # skip very low similarity
+                    continue
+                title = meta.get("title", "Unknown")
+                source = meta.get("source", "")
+                # Truncate chunk to avoid overwhelming the prompt
+                snippet = doc[:800]
+                parts.append(f"[Source: {title} | {source} | sim={sim:.2f}]\n{snippet}")
+
+            if not parts:
+                return self.rag_context
+
+            return "\n\n---\n\n".join(parts)
+        except Exception:
+            return self.rag_context
+
     def get_response(self, user_input: str) -> tuple[str, float]:
         processed = self.inject_context(user_input)
+
+        # Dynamic RAG: search ChromaDB with the user's raw input
+        live_rag = self.search_rag(user_input)
 
         full_prompt = (
             f"LOCATION: {self.current_location}\n"
             f"TIME: {self.current_time}\n"
-            f"RAG_CONTEXT: {self.rag_context}\n"
+            f"RAG_CONTEXT: {live_rag}\n"
             f"USER: {processed}"
         )
 
@@ -234,23 +472,53 @@ class SeoulWalkTester:
 # CLI loop
 # ---------------------------------------------------------------------------
 def main():
+    parser = argparse.ArgumentParser(description="SeoulWalk CLI Prototyper")
+    parser.add_argument("--voice", action="store_true", help="Enable Voice mode (STT & TTS)")
+    args = parser.parse_args()
+
+    voice_interface = None
+    if args.voice:
+        if not AUDIO_AVAILABLE:
+            print("❌ Voice dependencies not found. Run: pip install sounddevice websocket-client elevenlabs")
+            sys.exit(1)
+            
+        assembly_key = os.getenv("ASSEMBLYAI_API_KEY") or os.getenv("EXPO_PUBLIC_ASSEMBLYAI_API_KEY") or "e12f6c4104604b9badafbe4d887b7283"
+        deepgram_key = os.getenv("DEEPGRAM_API_KEY")
+        if not deepgram_key:
+            print("❌ --voice requires DEEPGRAM_API_KEY in your env / .env file.")
+            sys.exit(1)
+            
+        voice_interface = VoiceInterface(assembly_key, deepgram_key)
+
     tester = SeoulWalkTester()
 
     print("╔══════════════════════════════════════════════════╗")
     print("║        SeoulWalk CLI Prototyper (Multi-Turn)     ║")
     print("╚══════════════════════════════════════════════════╝")
     print()
+    if args.voice:
+        print("  🎙️  Voice Mode : ENABLED (AssemblyAI U3 + Deepgram Aura)")
     print(f"  🤖 Model    : {tester.model_name}")
     print(f"  📍 Location : {tester.current_location}")
     print(f"  🕐 Time     : {tester.current_time}")
-    print(f"  📚 RAG      : {tester.rag_context[:60]}...")
+    rag_status = "ChromaDB (live)" if tester.chroma_collection else "Static (fallback)"
+    print(f"  📚 RAG      : {rag_status}")
     print()
     print("  Commands: move | time | rag | model | models | history | reset | quit")
     print("─" * 52)
 
     while True:
         try:
-            user_input = input("\n🧳 Tourist: ").strip()
+            if args.voice:
+                user_input = voice_interface.record_until_keypress()
+                if user_input.lower() in ("quit", "exit", "q"):
+                    print("\n👋 Goodbye!")
+                    break
+                if not user_input:
+                    continue
+                print(f"🧳 Tourist (Voice): {user_input}")
+            else:
+                user_input = input("\n🧳 Tourist: ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\n👋 Goodbye!")
             break
@@ -333,6 +601,9 @@ def main():
 
         print(f"\n🏛️  SeoulWalk: {reply}")
         print(f"  ⏱️  {elapsed:.2f}s | Turn {tester.turn_count} | {tester.model_key} | History: {len(tester.history)} messages")
+
+        if args.voice and voice_interface:
+            voice_interface.speak(reply)
 
 
 if __name__ == "__main__":
