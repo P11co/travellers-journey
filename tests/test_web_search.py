@@ -1,0 +1,215 @@
+"""
+test_web_search.py — Tests for the web search service and search-augmented chat
+
+Tests:
+  1. LLM classifier: time-sensitive queries return True
+  2. LLM classifier: historical queries return False
+  3. LLM classifier fails gracefully (no API key)
+  4. Tavily search returns structured results
+  5. format_search_results_for_prompt produces WEB_SEARCH_RESULTS block
+  6. POST /chat with mocked search returns web_search_used=True
+  7. POST /chat for historical query skips search (web_search_used=False)
+"""
+
+import pytest
+from unittest.mock import AsyncMock, patch
+import httpx
+
+from server.services.web_search import format_search_results_for_prompt
+
+
+# ---------------------------------------------------------------------------
+# Helper — fake Tavily response
+# ---------------------------------------------------------------------------
+_MOCK_TAVILY_RESULTS = [
+    {
+        "title": "Gyeongbokgung Palace Admission & Hours",
+        "url": "https://royal.khs.go.kr/eng/",
+        "content": "Gyeongbokgung Palace is open Tuesday through Sunday, 9 AM to 6 PM. "
+                   "Adult admission is 3,000 KRW. Closed on Tuesdays.",
+        "score": 0.92,
+    },
+    {
+        "title": "Visit Korea — Gyeongbokgung",
+        "url": "https://english.visitkorea.or.kr/",
+        "content": "The palace holds the daily Changing of the Guard ceremony at 10 AM and 2 PM.",
+        "score": 0.85,
+    },
+]
+
+def _make_openrouter_response(text: str) -> httpx.Response:
+    return httpx.Response(
+        status_code=200,
+        json={"choices": [{"message": {"content": text}}]},
+    )
+
+def _make_tavily_response(results: list) -> httpx.Response:
+    return httpx.Response(
+        status_code=200,
+        json={"results": results},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for format_search_results_for_prompt
+# ---------------------------------------------------------------------------
+
+def test_format_search_results_empty():
+    """Empty results return empty string."""
+    assert format_search_results_for_prompt([]) == ""
+
+
+def test_format_search_results_includes_domain():
+    """Formatted block includes domain citation and WEB_SEARCH_RESULTS header."""
+    block = format_search_results_for_prompt(_MOCK_TAVILY_RESULTS)
+    assert "WEB_SEARCH_RESULTS" in block
+    assert "royal.khs.go.kr" in block
+    assert "3,000 KRW" in block
+    assert "[1]" in block
+    assert "[2]" in block
+
+
+# ---------------------------------------------------------------------------
+# LLM classifier tests — mock the OpenRouter call
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_classifier_time_sensitive_returns_true():
+    """A query about hours/prices should classify as needing web search."""
+    with patch("server.services.web_search.httpx.AsyncClient") as MockClient:
+        mock = AsyncMock()
+        mock.post.return_value = _make_openrouter_response("YES")
+        mock.__aenter__ = AsyncMock(return_value=mock)
+        mock.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock
+
+        from server.services.web_search import needs_web_search
+        result = await needs_web_search("What time does the palace close today?")
+
+    assert result is True
+
+
+@pytest.mark.asyncio
+async def test_classifier_historical_returns_false():
+    """A historical question should classify as NOT needing web search."""
+    with patch("server.services.web_search.httpx.AsyncClient") as MockClient:
+        mock = AsyncMock()
+        mock.post.return_value = _make_openrouter_response("NO")
+        mock.__aenter__ = AsyncMock(return_value=mock)
+        mock.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock
+
+        from server.services.web_search import needs_web_search
+        result = await needs_web_search("Who built Gyeongbokgung Palace?")
+
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_classifier_fails_gracefully():
+    """If the API call fails, classifier returns False (safe default)."""
+    with patch("server.services.web_search.httpx.AsyncClient") as MockClient:
+        mock = AsyncMock()
+        mock.post.side_effect = Exception("Network error")
+        mock.__aenter__ = AsyncMock(return_value=mock)
+        mock.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock
+
+        from server.services.web_search import needs_web_search
+        result = await needs_web_search("What time does it close?")
+
+    assert result is False
+
+
+# ---------------------------------------------------------------------------
+# Tavily search test
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_tavily_search_returns_results():
+    """Tavily search returns structured result dicts."""
+    with patch("server.services.web_search.httpx.AsyncClient") as MockClient:
+        mock = AsyncMock()
+        mock.post.return_value = _make_tavily_response(_MOCK_TAVILY_RESULTS)
+        mock.__aenter__ = AsyncMock(return_value=mock)
+        mock.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock
+
+        from server.services.web_search import tavily_search
+        results = await tavily_search("Gyeongbokgung opening hours")
+
+    assert len(results) == 2
+    assert results[0]["title"] == "Gyeongbokgung Palace Admission & Hours"
+    assert "score" in results[0]
+    assert "content" in results[0]
+
+
+@pytest.mark.asyncio
+async def test_tavily_search_fails_gracefully():
+    """Tavily search returns empty list on error."""
+    with patch("server.services.web_search.httpx.AsyncClient") as MockClient:
+        mock = AsyncMock()
+        mock.post.side_effect = Exception("Timeout")
+        mock.__aenter__ = AsyncMock(return_value=mock)
+        mock.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock
+
+        from server.services.web_search import tavily_search
+        results = await tavily_search("What time does it close?")
+
+    assert results == []
+
+
+# ---------------------------------------------------------------------------
+# Integration: POST /chat with search augmentation
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_chat_search_augmented(client):
+    """Time-sensitive query triggers web search; response includes web_search_used=True."""
+    llm_reply = "The palace closes at 6 PM today (royal.khs.go.kr)."
+
+    with patch("server.routers.chat.needs_web_search", new=AsyncMock(return_value=True)), \
+         patch("server.routers.chat.search_with_fallback", new=AsyncMock(return_value=_MOCK_TAVILY_RESULTS)), \
+         patch("server.routers.chat.httpx.AsyncClient") as MockChatClient:
+
+        chat_llm_mock = AsyncMock()
+        chat_llm_mock.post.return_value = _make_openrouter_response(llm_reply)
+        chat_llm_mock.__aenter__ = AsyncMock(return_value=chat_llm_mock)
+        chat_llm_mock.__aexit__ = AsyncMock(return_value=False)
+        MockChatClient.return_value = chat_llm_mock
+
+        resp = await client.post("/chat", json={"message": "What time does it close today?"})
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["web_search_used"] is True
+    assert "6 PM" in data["reply"]
+
+
+@pytest.mark.asyncio
+async def test_chat_no_search_for_history(client):
+    """Historical question skips web search; web_search_used=False."""
+    llm_reply = "Gyeongbokgung was built in 1395 by the Joseon dynasty."
+
+    with patch("server.services.web_search.httpx.AsyncClient") as MockSearchClient, \
+         patch("server.routers.chat.httpx.AsyncClient") as MockChatClient:
+
+        # Classifier says NO
+        classifier_mock = AsyncMock()
+        classifier_mock.post.return_value = _make_openrouter_response("NO")
+        classifier_mock.__aenter__ = AsyncMock(return_value=classifier_mock)
+        classifier_mock.__aexit__ = AsyncMock(return_value=False)
+        MockSearchClient.return_value = classifier_mock
+
+        chat_llm_mock = AsyncMock()
+        chat_llm_mock.post.return_value = _make_openrouter_response(llm_reply)
+        chat_llm_mock.__aenter__ = AsyncMock(return_value=chat_llm_mock)
+        chat_llm_mock.__aexit__ = AsyncMock(return_value=False)
+        MockChatClient.return_value = chat_llm_mock
+
+        resp = await client.post("/chat", json={"message": "Who built this palace?"})
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["web_search_used"] is False
