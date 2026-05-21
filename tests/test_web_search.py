@@ -74,40 +74,72 @@ def test_format_search_results_includes_domain():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_classifier_time_sensitive_returns_true():
-    """A query about hours/prices should classify as needing web search."""
+async def test_classifier_web_search():
+    """A query about hours/prices should classify as WEB_SEARCH."""
     with patch("server.services.web_search.httpx.AsyncClient") as MockClient:
         mock = AsyncMock()
-        mock.post.return_value = _make_openrouter_response("YES")
+        mock.post.return_value = _make_openrouter_response("WEB_SEARCH")
         mock.__aenter__ = AsyncMock(return_value=mock)
         mock.__aexit__ = AsyncMock(return_value=False)
         MockClient.return_value = mock
 
-        from server.services.web_search import needs_web_search
-        result = await needs_web_search("What time does the palace close today?")
+        from server.services.web_search import classify_intent
+        result = await classify_intent("What time does the palace close today?")
 
-    assert result is True
+    assert result == "WEB_SEARCH"
 
 
 @pytest.mark.asyncio
-async def test_classifier_historical_returns_false():
-    """A historical question should classify as NOT needing web search."""
+async def test_classifier_rag():
+    """A historical question should classify as RAG."""
     with patch("server.services.web_search.httpx.AsyncClient") as MockClient:
         mock = AsyncMock()
-        mock.post.return_value = _make_openrouter_response("NO")
+        mock.post.return_value = _make_openrouter_response("RAG")
         mock.__aenter__ = AsyncMock(return_value=mock)
         mock.__aexit__ = AsyncMock(return_value=False)
         MockClient.return_value = mock
 
-        from server.services.web_search import needs_web_search
-        result = await needs_web_search("Who built Gyeongbokgung Palace?")
+        from server.services.web_search import classify_intent
+        result = await classify_intent("Who built Gyeongbokgung Palace?")
 
-    assert result is False
+    assert result == "RAG"
+
+
+@pytest.mark.asyncio
+async def test_classifier_map_static():
+    """A surroundings question should classify as MAP_STATIC."""
+    with patch("server.services.web_search.httpx.AsyncClient") as MockClient:
+        mock = AsyncMock()
+        mock.post.return_value = _make_openrouter_response("MAP_STATIC")
+        mock.__aenter__ = AsyncMock(return_value=mock)
+        mock.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock
+
+        from server.services.web_search import classify_intent
+        result = await classify_intent("What buildings are around me?")
+
+    assert result == "MAP_STATIC"
+
+
+@pytest.mark.asyncio
+async def test_classifier_map_geocode():
+    """A specific place search should classify as MAP_GEOCODE."""
+    with patch("server.services.web_search.httpx.AsyncClient") as MockClient:
+        mock = AsyncMock()
+        mock.post.return_value = _make_openrouter_response("MAP_GEOCODE")
+        mock.__aenter__ = AsyncMock(return_value=mock)
+        mock.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock
+
+        from server.services.web_search import classify_intent
+        result = await classify_intent("Where is Kyobo Bookstore?")
+
+    assert result == "MAP_GEOCODE"
 
 
 @pytest.mark.asyncio
 async def test_classifier_fails_gracefully():
-    """If the API call fails, classifier returns False (safe default)."""
+    """If the API call fails, classifier returns RAG (safe default)."""
     with patch("server.services.web_search.httpx.AsyncClient") as MockClient:
         mock = AsyncMock()
         mock.post.side_effect = Exception("Network error")
@@ -115,10 +147,22 @@ async def test_classifier_fails_gracefully():
         mock.__aexit__ = AsyncMock(return_value=False)
         MockClient.return_value = mock
 
-        from server.services.web_search import needs_web_search
-        result = await needs_web_search("What time does it close?")
+        from server.services.web_search import classify_intent
+        result = await classify_intent("What time does it close?")
 
-    assert result is False
+    assert result == "RAG"
+
+
+@pytest.mark.asyncio
+async def test_needs_web_search_backward_compat():
+    """needs_web_search wrapper returns True only for WEB_SEARCH intent."""
+    with patch("server.services.web_search.classify_intent", new=AsyncMock(return_value="WEB_SEARCH")):
+        from server.services.web_search import needs_web_search
+        assert await needs_web_search("What time?") is True
+
+    with patch("server.services.web_search.classify_intent", new=AsyncMock(return_value="RAG")):
+        from server.services.web_search import needs_web_search
+        assert await needs_web_search("Who built it?") is False
 
 
 # ---------------------------------------------------------------------------
@@ -169,7 +213,7 @@ async def test_chat_search_augmented(client):
     """Time-sensitive query triggers web search; response includes web_search_used=True."""
     llm_reply = "The palace closes at 6 PM today (royal.khs.go.kr)."
 
-    with patch("server.routers.chat.needs_web_search", new=AsyncMock(return_value=True)), \
+    with patch("server.routers.chat.classify_intent", new=AsyncMock(return_value="WEB_SEARCH")), \
          patch("server.routers.chat.search_with_fallback", new=AsyncMock(return_value=_MOCK_TAVILY_RESULTS)), \
          patch("server.routers.chat.httpx.AsyncClient") as MockChatClient:
 

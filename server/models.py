@@ -169,6 +169,38 @@ class HandoffResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Activity Logging
+# ---------------------------------------------------------------------------
+
+class ActivityLogRequest(BaseModel):
+    """Request body for POST /activity/log"""
+    session_id: str
+    latitude: float
+    longitude: float
+    timestamp: str | None = Field(
+        None,
+        description="ISO 8601 timestamp. If omitted, server uses current time.",
+    )
+
+
+class ActivityLogResponse(BaseModel):
+    """Response from POST /activity/log"""
+    status: str = "logged"
+    session_id: str
+    matched_waypoint_id: str | None = None
+    matched_waypoint_name: str | None = None
+
+
+class ActivitySummaryResponse(BaseModel):
+    """Response from GET /activity/{session_id}/summary"""
+    session_id: str
+    total_logs: int
+    visited_waypoints: list[str]
+    summary_text: str
+    logs: list[dict]
+
+
+# ---------------------------------------------------------------------------
 # Session / Health
 # ---------------------------------------------------------------------------
 

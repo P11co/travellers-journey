@@ -175,3 +175,142 @@ async def test_chat_reuse_session(client):
         })
 
     assert resp2.json()["session_id"] == sid
+
+
+# ---------------------------------------------------------------------------
+# POST /chat — with activity logs injection
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_chat_with_activity_logs(client):
+    """Chat correctly includes activity logs context in the system prompt."""
+    session_id = "chat-activity-test"
+    mock_reply = "I see you visited the ticket booth earlier today."
+
+    # 1. Log simulated activity to populate database
+    await client.post("/activity/log", json={
+        "session_id": session_id,
+        "latitude": 37.57724,
+        "longitude": 126.97746,  # Ticket Booth
+    })
+
+    with patch("server.routers.chat.httpx.AsyncClient") as MockClient:
+        mock_instance = AsyncMock()
+        mock_instance.post.return_value = _make_mock_openrouter_response(mock_reply)
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_instance
+
+        # 2. Call chat
+        resp = await client.post("/chat", json={
+            "message": "Where should I go now?",
+            "session_id": session_id,
+        })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "debug_trace" in data
+    trace = data["debug_trace"]
+    assert "activity_context" in trace
+    assert "Ticket Booth" in trace["activity_context"]
+
+
+# ---------------------------------------------------------------------------
+# POST /chat — with map snapshot injection (Task 5)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_chat_with_map_snapshot(client):
+    """Chat endpoint fetches and includes map snapshot base64 image in LLM request when coords are supplied."""
+    session_id = "chat-map-test"
+    mock_reply = "Looking at the map, you are near Gwanghwamun gate."
+
+    with patch("server.routers.chat.httpx.AsyncClient") as MockClient:
+        mock_instance = AsyncMock()
+        mock_instance.post.return_value = _make_mock_openrouter_response(mock_reply)
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_instance
+
+        resp = await client.post("/chat", json={
+            "message": "Tell me what is around me.",
+            "session_id": session_id,
+            "latitude": 37.57602,
+            "longitude": 126.97685,
+        })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "debug_trace" in data
+    trace = data["debug_trace"]
+    
+    # Verify map snapshot was fetched and flagged as included
+    assert trace["map_snapshot_included"] is True
+    
+    # Verify the message structure sent to the LLM has multimodal content array
+    messages_sent = trace["messages_sent"]
+    user_msg = messages_sent[-1]
+    assert user_msg["role"] == "user"
+    assert isinstance(user_msg["content"], list)
+    assert user_msg["content"][0]["type"] == "text"
+    assert user_msg["content"][0]["text"] == "Tell me what is around me."
+    assert user_msg["content"][1]["type"] == "image_url"
+    assert "data:image/png;base64," in user_msg["content"][1]["image_url"]["url"]
+
+
+@pytest.mark.asyncio
+async def test_chat_kyobo_bookstore_with_map(client):
+    """
+    Test asking if Kyobo Bookstore exists near Gwanghwamun Station Exit 9.
+    Verify that when coordinates for Exit 9 are provided:
+    1. A map snapshot is generated and sent as a multimodal image payload.
+    2. When coordinates are omitted, no map snapshot is sent (text-only).
+    """
+    session_id = "kyobo-test-session"
+    mock_reply = "Yes, Kyobo Bookstore is located right next to Gwanghwamun Station Exit 9."
+    
+    # --- Case A: Coordinates provided (Static map image sent) ---
+    with patch("server.routers.chat.httpx.AsyncClient") as MockClient:
+        mock_instance = AsyncMock()
+        mock_instance.post.return_value = _make_mock_openrouter_response(mock_reply)
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_instance
+
+        resp = await client.post("/chat", json={
+            "message": "Does Kyobo Bookstore (교보문고) exist near Gwanghwamun Station Exit 9?",
+            "session_id": session_id,
+            "latitude": 37.57017,
+            "longitude": 126.97682,
+        })
+        
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["reply"] == mock_reply
+        assert data["debug_trace"]["map_snapshot_included"] is True
+        
+        # Verify the multimodal image payload was passed to the LLM Client request
+        user_msg = data["debug_trace"]["messages_sent"][-1]
+        assert isinstance(user_msg["content"], list)
+        assert any(item["type"] == "image_url" for item in user_msg["content"])
+
+    # --- Case B: No coordinates provided (No map image sent) ---
+    with patch("server.routers.chat.httpx.AsyncClient") as MockClient:
+        mock_instance = AsyncMock()
+        mock_instance.post.return_value = _make_mock_openrouter_response("I cannot see a map of your location, so I'm not sure.")
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_instance
+
+        resp_no_coords = await client.post("/chat", json={
+            "message": "Does Kyobo Bookstore (교보문고) exist near Gwanghwamun Station Exit 9?",
+            "session_id": session_id,
+        })
+        
+        assert resp_no_coords.status_code == 200
+        data_no_coords = resp_no_coords.json()
+        assert data_no_coords["debug_trace"]["map_snapshot_included"] is False
+        
+        # Verify only a single text string was passed (not a multimodal image list)
+        user_msg_no_coords = data_no_coords["debug_trace"]["messages_sent"][-1]
+        assert isinstance(user_msg_no_coords["content"], str)

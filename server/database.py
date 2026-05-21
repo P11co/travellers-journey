@@ -43,6 +43,16 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     content     TEXT NOT NULL,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS activity_logs (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id          TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    latitude            REAL NOT NULL,
+    longitude           REAL NOT NULL,
+    matched_waypoint_id TEXT,
+    map_snapshot_b64     TEXT,
+    timestamp           TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 
@@ -233,6 +243,82 @@ async def reorder_itinerary(session_id: str, new_order: list[int]) -> bool:
             )
         await db.commit()
         return True
+    finally:
+        await db.close()
+
+
+async def save_activity_log(
+    session_id: str,
+    latitude: float,
+    longitude: float,
+    matched_waypoint_id: str | None = None,
+    map_snapshot_b64: str | None = None,
+) -> None:
+    """Record a single GPS ping with optional waypoint match and map snapshot."""
+    db = await get_db()
+    try:
+        await db.execute(
+            """INSERT INTO activity_logs
+               (session_id, latitude, longitude, matched_waypoint_id, map_snapshot_b64)
+               VALUES (?, ?, ?, ?, ?)""",
+            (session_id, latitude, longitude, matched_waypoint_id, map_snapshot_b64),
+        )
+        await db.commit()
+    finally:
+        await db.close()
+
+
+async def get_activity_logs(session_id: str, limit: int = 50) -> list[dict]:
+    """Retrieve activity logs for a session, ordered chronologically."""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            """SELECT latitude, longitude, matched_waypoint_id,
+                      map_snapshot_b64, timestamp
+               FROM activity_logs
+               WHERE session_id = ?
+               ORDER BY id ASC
+               LIMIT ?""",
+            (session_id, limit),
+        )
+        rows = await cursor.fetchall()
+        return [
+            {
+                "latitude": row["latitude"],
+                "longitude": row["longitude"],
+                "matched_waypoint_id": row["matched_waypoint_id"],
+                "map_snapshot_b64": row["map_snapshot_b64"],
+                "timestamp": row["timestamp"],
+            }
+            for row in rows
+        ]
+    finally:
+        await db.close()
+
+
+async def get_latest_activity_log(session_id: str) -> dict | None:
+    """Retrieve the most recent activity log entry for a session."""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            """SELECT latitude, longitude, matched_waypoint_id,
+                      map_snapshot_b64, timestamp
+               FROM activity_logs
+               WHERE session_id = ?
+               ORDER BY id DESC
+               LIMIT 1""",
+            (session_id,),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        return {
+            "latitude": row["latitude"],
+            "longitude": row["longitude"],
+            "matched_waypoint_id": row["matched_waypoint_id"],
+            "map_snapshot_b64": row["map_snapshot_b64"],
+            "timestamp": row["timestamp"],
+        }
     finally:
         await db.close()
 
