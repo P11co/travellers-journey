@@ -1,0 +1,223 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>AR/Map Navigation View</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            custom: {
+              bg: '#0f0f13',
+              grid: '#1f1f23',
+              accent: '#5c77ff',
+              accentLight: '#8ca1ff',
+              accentDark: '#3b4ccb',
+              surface: '#18181b',
+              surfaceLight: '#27272a',
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+<style data-purpose="custom-utilities">
+    /* Subtle glowing effect for circles */
+    .glow-circle {
+      box-shadow: 0 0 40px rgba(92, 119, 255, 0.15);
+    }
+    
+    /* Grid background pattern */
+    .bg-grid-pattern {
+      background-image: 
+        linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px);
+      background-size: 50px 50px;
+    }
+
+    /* Soft inner glow for floating panels */
+    .panel-shadow {
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+
+    /* Animations */
+    @keyframes breathing-grid {
+      0%, 100% { opacity: 0.4; transform: scale(1); }
+      50% { opacity: 0.7; transform: scale(1.02); }
+    }
+
+    @keyframes radar-pulse {
+      0% { transform: scale(1); opacity: 0.6; }
+      100% { transform: scale(2.5); opacity: 0; }
+    }
+
+    @keyframes bobbing {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+
+    @keyframes slide-down-bounce {
+      0% { transform: translateY(-150%); opacity: 0; }
+      70% { transform: translateY(10%); opacity: 1; }
+      100% { transform: translateY(0); opacity: 1; }
+    }
+
+    @keyframes amber-pulse {
+      0%, 100% { border-color: rgba(255, 255, 255, 0.1); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); }
+      50% { border-color: rgba(251, 191, 36, 0.4); box-shadow: 0 8px 32px rgba(251, 191, 36, 0.15); }
+    }
+
+    .animate-breathing {
+      animation: breathing-grid 8s ease-in-out infinite;
+    }
+
+    .animate-radar::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 9999px;
+      border: 1px solid rgba(140, 161, 255, 0.5);
+      animation: radar-pulse 3s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+
+    .animate-bob {
+      animation: bobbing 4s ease-in-out infinite;
+    }
+
+    .animate-alert-entry {
+      animation: slide-down-bounce 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
+                 amber-pulse 3s ease-in-out infinite 1s;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .animate-breathing, .animate-radar::before, .animate-bob, .animate-alert-entry {
+        animation: none !important;
+      }
+      .animate-alert-entry {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+  </style>
+<style data-purpose="layout-fixes">
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      background-color: #0f0f13; /* Fallback */
+    }
+  </style>
+</head>
+<body class="bg-custom-bg text-white font-sans antialiased h-screen w-screen overflow-hidden relative font-medium">
+<!-- BEGIN: Map Background -->
+<div class="absolute inset-0 z-0 bg-custom-bg bg-grid-pattern opacity-60 flex items-center justify-center pointer-events-none animate-breathing" data-purpose="map-background">
+<!-- Decorative Circle Top Right -->
+<div class="absolute top-[-50px] right-[-100px] w-64 h-64 rounded-full border border-custom-accent/30 glow-circle"></div>
+<!-- Decorative Circle Mid Left -->
+<div class="absolute top-1/3 left-[-80px] w-56 h-56 rounded-full border border-custom-accent/30 glow-circle"></div>
+<!-- Decorative Circle Bottom Right -->
+<div class="absolute bottom-10 right-[-60px] w-48 h-48 rounded-full border border-custom-accent/30 glow-circle"></div>
+<!-- Perspective Grid Lines (Simulation) -->
+<svg class="absolute inset-0 w-full h-full opacity-20 pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+<line stroke="#5c77ff" stroke-dasharray="4 4" stroke-width="1" x1="0%" x2="100%" y1="20%" y2="40%"></line>
+<line stroke="#5c77ff" stroke-dasharray="4 4" stroke-width="1" x1="0%" x2="100%" y1="80%" y2="60%"></line>
+</svg>
+</div>
+<!-- END: Map Background -->
+<!-- BEGIN: Top Notification -->
+<div class="absolute top-12 left-4 right-4 z-20 flex justify-center opacity-0 animate-alert-entry" data-purpose="top-notification">
+<div class="w-full max-w-sm bg-custom-surface/90 backdrop-blur-md border border-white/10 rounded-2xl p-4 flex items-center gap-4 panel-shadow">
+<!-- Icon Container -->
+<div class="w-12 h-12 rounded-full bg-custom-accent/10 flex items-center justify-center flex-shrink-0 border border-custom-accent/20">
+<svg class="h-6 w-6 text-custom-accentLight" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round"></path>
+<path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</div>
+<!-- Text Content -->
+<div class="flex-1">
+<h2 class="text-sm font-semibold text-white tracking-wide">Watch your step</h2>
+<p class="text-xs text-gray-400 mt-0.5">Approaching uneven terrain.</p>
+</div>
+</div>
+</div>
+<!-- END: Top Notification -->
+<!-- BEGIN: Current Location Marker -->
+<div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col items-center animate-bob" data-purpose="location-marker">
+<!-- Pulsing Radar Circle -->
+<div class="relative w-20 h-20 flex items-center justify-center animate-radar">
+<div class="absolute inset-0 rounded-full border border-custom-accent/40 bg-custom-accent/5 glow-circle"></div>
+<!-- Pin Icon Container -->
+<div class="relative z-10 text-custom-accentLight drop-shadow-[0_0_10px_rgba(92,119,255,0.5)]">
+<svg class="h-8 w-8" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+<path clip-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" fill-rule="evenodd"></path>
+</svg>
+</div>
+</div>
+<!-- Label Pill -->
+<div class="mt-4 bg-black/60 backdrop-blur-sm border border-white/10 rounded-full px-4 py-1.5 flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-custom-accentLight animate-pulse"></div>
+<span class="text-[10px] font-bold tracking-wider text-gray-200 uppercase">Current Location</span>
+</div>
+</div>
+<!-- END: Current Location Marker -->
+<!-- BEGIN: Bottom Navigation Bar -->
+<div class="absolute bottom-8 left-4 right-4 z-30 flex justify-center" data-purpose="bottom-navigation">
+<nav class="w-full max-w-sm bg-custom-surface/95 backdrop-blur-xl border border-white/5 rounded-3xl h-20 flex items-center justify-around px-2 panel-shadow relative">
+<!-- Nav Item 1: Calendar/Events -->
+<button class="p-3 text-gray-400 hover:text-white transition-colors focus:outline-none flex flex-col items-center group active:scale-90" onclick="window.location.href='{{DATA:SCREEN:SCREEN_14}}'">
+<svg class="h-6 w-6 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</button>
+<!-- Nav Item 2: Main Action (Chat/Communicate) -->
+<div class="relative -top-3">
+<button class="w-16 h-16 bg-custom-accent rounded-full flex items-center justify-center text-white shadow-lg shadow-custom-accent/30 hover:bg-custom-accentLight transition-all focus:outline-none ring-4 ring-[#0f0f13] active:scale-95" onclick="window.location.href='{{DATA:SCREEN:SCREEN_48}}'">
+<svg class="h-8 w-8" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+<path clip-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" fill-rule="evenodd"></path>
+</svg>
+</button>
+</div>
+<!-- Nav Item 3: Settings -->
+<button class="p-3 text-gray-400 hover:text-white transition-colors focus:outline-none flex flex-col items-center group active:scale-90" onclick="window.location.href='{{DATA:SCREEN:SCREEN_10}}'">
+<svg class="h-6 w-6 group-hover:rotate-45 transition-transform" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-linecap="round" stroke-linejoin="round"></path>
+<path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</button>
+</nav>
+</div>
+<!-- END: Bottom Navigation Bar -->
+<script>
+  // Script to handle interactive micro-transitions if needed
+  document.addEventListener('DOMContentLoaded', () => {
+    // Add subtle hover/tilt effect to the notification card using JS for precision
+    const notification = document.querySelector('[data-purpose="top-notification"] > div');
+    
+    if (window.matchMedia('(prefers-reduced-motion: no-preference)').matches) {
+      notification.addEventListener('mousemove', (e) => {
+        const rect = notification.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        
+        const rotateX = (y - centerY) / 10;
+        const rotateY = (centerX - x) / 10;
+        
+        notification.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+      });
+      
+      notification.addEventListener('mouseleave', () => {
+        notification.style.transform = `perspective(1000px) rotateX(0deg) rotateY(0deg)`;
+      });
+    }
+  });
+</script>
+</body></html>

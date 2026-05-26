@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Current Itinerary</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<style data-purpose="custom-styles">
+    body {
+      background-color: #0f1014;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    
+    .timeline-line {
+      position: absolute;
+      left: 1.25rem;
+      top: 2rem;
+      bottom: 0;
+      width: 1px;
+      background-color: #2a2a2a;
+      z-index: 0;
+    }
+    
+    .timeline-icon {
+      position: relative;
+      z-index: 1;
+      width: 2.5rem;
+      height: 2.5rem;
+      border-radius: 9999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #1a1b1e;
+      border: 1px solid #2a2a2a;
+    }
+    
+    .timeline-icon-active {
+      background-color: #5c77ff;
+      border: none;
+    }
+
+    .card-bg {
+      background-color: #1a1b1e;
+      border: 1px solid #2a2a2a;
+    }
+    
+    .text-muted {
+      color: #9ca3af;
+    }
+
+    .bottom-nav {
+      background-color: rgba(26, 27, 30, 0.9);
+      backdrop-filter: blur(10px);
+    }
+  
+    .active-scale:active {
+        transform: scale(0.9);
+    }
+    .transition-transform {
+        transition: transform 0.1s ease;
+    }
+    </style>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><link class="" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/></head>
+<body class="antialiased pb-24">
+<!-- BEGIN: Header -->
+<header class="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+<div class="flex items-center gap-2">
+<svg class="w-6 h-6 text-[#5c77ff]" fill="currentColor" viewbox="0 0 24 24">
+<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"></path>
+</svg>
+<span class="text-xl font-bold tracking-tight">Buddy</span>
+</div>
+<div class="w-8 h-8 rounded-full bg-gray-800 overflow-hidden border border-gray-700">
+<img alt="User Profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAxZsY8UA-aP846TF_RUfnj7Yc5i5RktEqrb7kYyJ0DjBO6yLKt3Z82fd0GC-5AvBoXGvnRZg5Cm9BnIwYwPGMjWymEJiI_7XJ97jtdBy4fNGM_4wjC-wgfqiIv5bdnx0-Iw0jY9mwjPPKMZjwejZgIRnRomINr7mK6SI9Hl27cOeDbyRCKtIsptZ72t2r_h143PlIgkdrMLjQSjRoIS0BZbIrRl9DBatwrpCX_8Ym2mubr6ePUQ7pKcVUD8ueQQmympe7P7rQDS7IG"/>
+</div>
+</header>
+<!-- END: Header -->
+<!-- BEGIN: Main Content -->
+<main class="px-4 pt-6 pb-8">
+<h1 class="text-2xl font-bold mb-4">Current Itinerary</h1>
+<!-- Summary Card -->
+<div class="card-bg rounded-2xl p-4 mb-8">
+<div class="flex items-start gap-4 mb-3">
+<div class="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center shrink-0">
+<svg class="w-5 h-5 text-[#5c77ff]" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+<path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<div>
+<h2 class="font-bold text-lg leading-tight">Gyeongbokgung Palace</h2>
+<p class="text-muted text-sm">Seoul, South Korea</p>
+</div>
+</div>
+<div class="bg-gray-800 rounded-xl py-2 px-3 flex items-center gap-2 w-max">
+<svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span class="text-sm font-medium">8 Hours</span>
+</div>
+</div>
+<!-- Timeline Container -->
+<div class="relative pl-12 pr-2">
+<!-- Continuous line -->
+<div class="timeline-line"></div>
+<!-- Item 1 -->
+<div class="relative mb-8">
+<div class="absolute -left-12 top-0 timeline-icon timeline-icon-active">
+<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<div class="card-bg rounded-2xl overflow-hidden">
+<img alt="Gyeongbokgung Palace" class="w-full h-32 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCIOF0p6EFK2rto3QhYb6iS8ik_6LtjmrmKK6b_oJApYytSNgNnAD62wRUB0Q_3U_C39ii5j7VKvnNZ5OWBJ9X4Oe5HOHxjU3ychBMvS27aZG05F_A-lbIo5MppmAew5BRj1SlV1Bj-MBu15UIPF0_oz3unwIazTVDDhYz63DJ1xJGYjJB373R0Z8K4uap5sQAxHavpP70RcJq3YTsUnwj77lyMDl_FShWQsypiN4LJL47e8cu33o6Dah9O0DzJkjJ0FDLo5s02O7qT"/>
+<div class="p-4">
+<div class="flex justify-between items-start mb-1">
+<h3 class="font-bold">Gyeongbokgung Palace</h3>
+<span class="text-xs font-mono text-green-400">09:00 AM</span>
+</div>
+<p class="text-sm text-muted">Experience the grandeur of the main royal palace of the Joseon dynasty.</p>
+</div>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="relative mb-8">
+<div class="absolute -left-12 top-0 timeline-icon">
+<svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+<path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<div class="card-bg rounded-2xl p-4">
+<div class="flex justify-between items-start mb-2">
+<h3 class="font-bold">Bukchon Hanok Village</h3>
+<span class="text-xs font-mono text-gray-400">11:30 AM</span>
+</div>
+<p class="text-sm text-muted">Wander through hundreds of traditional houses, called hanok, that date back to the Joseon dynasty.</p>
+</div>
+</div>
+<!-- Item 3 -->
+<div class="relative mb-8">
+<div class="absolute -left-12 top-0 timeline-icon">
+<svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M12 6v6m0 0v6m0-6h6m-6 0H6" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<div class="card-bg rounded-2xl p-4">
+<div class="flex justify-between items-start mb-2">
+<h3 class="font-bold">Lunch in Insadong</h3>
+<span class="text-xs font-mono text-gray-400">01:30 PM</span>
+</div>
+<div class="flex gap-2 mb-2">
+<span class="text-[10px] font-bold px-2 py-1 rounded bg-green-900/30 text-green-400 border border-green-800">TOP CHOICE</span>
+<span class="text-[10px] font-bold px-2 py-1 rounded bg-gray-800 text-gray-300 border border-gray-700">TRADITIONAL</span>
+</div>
+<p class="text-sm text-muted">Enjoy authentic Korean cuisine in the heart of Seoul's traditional cultural district.</p>
+</div>
+</div>
+<!-- Item 4 -->
+<div class="relative mb-8">
+<div class="absolute -left-12 top-0 timeline-icon">
+<svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<div class="card-bg rounded-2xl overflow-hidden">
+<img alt="N Seoul Tower" class="w-full h-32 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCxwAkiizbDZmGJu-Whk-m0T-khcftLHkwric-DlUMgTI4z7uGTmbw_d5yUaoDAWNgzDv0DQ79UfrDKBLPF9WogEtUtMdsaK9cgm0bfHMbZItGcu0zMchfoTuUn_7Gv4QaERr_hCaVEiH8nL3lOwYP0vw6CCGMlCPCweyLEoCYQfflTyAX7bR4N68RKPF6swEmfewW6xEJ8tlsRb3Hdq8GZPr-2syllab4nEJnkeTEx9sJ3et3IEDsMjhdXD3cexKJOStQoMCbqOmjK"/>
+<div class="p-4">
+<div class="flex justify-between items-start mb-1">
+<h3 class="font-bold">N Seoul Tower</h3>
+<span class="text-xs font-mono text-gray-400">04:00 PM</span>
+</div>
+<p class="text-sm text-muted">Catch the sunset and panoramic city views from the highest point in Seoul.</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="mt-8 flex flex-col gap-3">
+<button class="w-full bg-[#5c77ff] hover:bg-[#4a63e6] text-white font-semibold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors" onclick="window.location.href='{{DATA:SCREEN:SCREEN_13}}'">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+        Edit Plan
+      </button>
+<button class="w-full bg-[#1a1b1e] text-red-500 font-semibold py-3 px-4 rounded-xl flex items-center justify-center gap-2 border border-red-900/50 hover:bg-red-950/30 transition-colors">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+        Scrap &amp; Restart
+      </button>
+</div>
+</main>
+<!-- END: Main Content -->
+<!-- BEGIN: Bottom Navigation -->
+<!-- END: Bottom Navigation -->
+<!-- BEGIN: Bottom Floating Navigation (3-Item) -->
+<div class="fixed bottom-6 left-0 w-full flex justify-center z-[70] px-4">
+<nav class="nav-pill flex items-center px-6 py-2 space-x-8 shadow-2xl relative bg-opacity-90 backdrop-blur-md" style="background-color: #1a1a1a; border: 1px solid #333; border-radius: 9999px;">
+<!-- Active State: Itinerary/Plan -->
+<button class="rounded-full p-3 shadow-[0_0_15px_rgba(92,119,255,0.5)] active-scale transition-transform" onclick="window.location.href='{{DATA:SCREEN:SCREEN_60}}'" style="background-color: rgb(92, 119, 255);">
+<svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+<!-- Chat Link -->
+<button class="text-gray-400 hover:text-white transition-colors active-scale transition-transform" onclick="window.location.href='{{DATA:SCREEN:SCREEN_61}}'">
+<svg class="h-6 w-6" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+<!-- Settings Link -->
+<button class="text-gray-400 hover:text-white transition-colors active-scale transition-transform" onclick="window.location.href='{{DATA:SCREEN:SCREEN_67}}'">
+<svg class="h-6 w-6" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+<path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+</nav>
+</div>
+<!-- END: Bottom Floating Navigation (3-Item) --></body></html>
