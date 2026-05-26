@@ -1,40 +1,50 @@
 import React from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
-  Image, 
-  Dimensions 
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Image
 } from 'react-native';
-import Svg, { Line, Circle, Path } from 'react-native-svg';
+import Svg, { Line, Path } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import useAppStore from '../../src/store';
 
-const { width: screenWidth } = Dimensions.get('window');
+export default function CurrentItineraryView({ navigation, route }) {
+  const insets = useSafeAreaInsets();
+  const itineraries = useAppStore((s) => s.itineraries);
+  const itineraryId = route?.params?.itineraryId;
+  const itinerary = itineraries.find((item) => item.id === itineraryId) || itineraries[itineraries.length - 1] || null;
 
-export default function CurrentItineraryView() {
+  const handleSavePlan = () => {
+    navigation.navigate('Home');
+  };
+
+  const handleGoBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate('Home');
+  };
+
   return (
     <View style={styles.container}>
-      
+      <View style={{ height: insets.top }} />
+
       {/* 1. FIXED CONTENT SYSTEM HEADER */}
       <View style={styles.header}>
-        <View style={styles.headerLeftRow}>
-          <Svg width="24" height="24" fill="#5c77ff" viewBox="0 0 24 24">
-            <Path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z" />
+        <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
+          <Svg width="18" height="18" fill="none" stroke="#a1a1aa" strokeWidth="2" viewBox="0 0 24 24">
+            <Path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </Svg>
-          <Text style={styles.headerBrandText}>Buddy</Text>
-        </View>
-        <View style={styles.avatarBorder}>
-          <Image 
-            source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100' }} 
-            style={styles.profileThumbnail} 
-          />
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* 2. CORE CONTENT SCROLL VIEW */}
-      <ScrollView 
-        style={styles.scrollArea} 
+      <ScrollView
+        style={styles.scrollArea}
         contentContainerStyle={styles.scrollPadding}
         showsVerticalScrollIndicator={false}
       >
@@ -50,22 +60,22 @@ export default function CurrentItineraryView() {
               </Svg>
             </View>
             <View>
-              <Text style={styles.summaryTitle}>Gyeongbokgung Palace</Text>
-              <Text style={styles.textMuted}>Seoul, South Korea</Text>
+              <Text style={styles.summaryTitle}>{itinerary?.name || 'Gyeongbokgung Palace Tour'}</Text>
+              <Text style={styles.textMuted}>{itinerary?.location || 'Gyeongbokgung Palace, Seoul'}</Text>
             </View>
           </View>
-          
+
           <View style={styles.timeTagBadge}>
             <Svg width="16" height="16" fill="none" stroke="#4ade80" strokeWidth="2" viewBox="0 0 24 24" style={styles.tagIconSpace}>
               <Path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </Svg>
-            <Text style={styles.timeBadgeText}>8 Hours</Text>
+            <Text style={styles.timeBadgeText}>{itinerary?.duration || '8 Hours'}</Text>
           </View>
         </View>
 
         {/* TIMELINE ARCHITECTURE WRAPPER */}
         <View style={styles.timelineWrapper}>
-          
+
           {/* Continuous Running Svg Line Component */}
           <Svg style={styles.absoluteTimelineLine} pointerEvents="none">
             <Line x1="20" y1="32" x2="20" y2="680" stroke="#2a2a2a" strokeWidth="1" />
@@ -79,9 +89,9 @@ export default function CurrentItineraryView() {
               </Svg>
             </View>
             <View style={[styles.cardBg, styles.overflowClipCard]}>
-              <Image 
-                source={{ uri: 'https://images.unsplash.com/photo-1540959733332-eab4deceeaf7?w=500' }} 
-                style={styles.cardHeroImage} 
+              <Image
+                source={{ uri: 'https://images.unsplash.com/photo-1540959733332-eab4deceeaf7?w=500' }}
+                style={styles.cardHeroImage}
               />
               <View style={styles.cardPaddingArea}>
                 <View style={styles.cardHeaderRow}>
@@ -142,9 +152,9 @@ export default function CurrentItineraryView() {
               </Svg>
             </View>
             <View style={[styles.cardBg, styles.overflowClipCard]}>
-              <Image 
-                source={{ uri: 'https://images.unsplash.com/photo-1578637387939-43c525550085?w=500' }} 
-                style={styles.cardHeroImage} 
+              <Image
+                source={{ uri: 'https://images.unsplash.com/photo-1578637387939-43c525550085?w=500' }}
+                style={styles.cardHeroImage}
               />
               <View style={styles.cardPaddingArea}>
                 <View style={styles.cardHeaderRow}>
@@ -158,52 +168,15 @@ export default function CurrentItineraryView() {
 
         </View>
 
-        {/* 3. TRIP INTERACTION SUB-BUTTON CONTROLS */}
-        <View style={styles.actionButtonGroupContainer}>
-          <TouchableOpacity style={styles.primaryActionButton} onPress={() => console.log('Edit tracking timeline context')}>
-            <Svg width="18" height="18" fill="none" stroke="#ffffff" strokeWidth="2" viewBox="0 0 24 24" style={styles.tagIconSpace}>
-              <Path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-            </Svg>
-            <Text style={styles.primaryButtonText}>Edit Plan</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.dangerSecondaryButton} onPress={() => console.log('Wipe out timeline schema configuration')}>
-            <Svg width="18" height="18" fill="none" stroke="#ef4444" strokeWidth="2" viewBox="0 0 24 24" style={styles.tagIconSpace}>
-              <Path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </Svg>
-            <Text style={styles.dangerButtonText}>Scrap & Restart</Text>
-          </TouchableOpacity>
-        </View>
-
       </ScrollView>
 
-      {/* 4. FLOATING CORE HORIZONTAL ROUTING TAB PILL */}
-      <View style={styles.floatingTabsWrapper}>
-        <View style={styles.navigationDockPill}>
-          
-          {/* Active Navigation: Timeline Link */}
-          <TouchableOpacity style={styles.tabBubbleActive} onPress={() => console.log('Stay Route screen_60')}>
-            <Svg width="24" height="24" fill="none" stroke="#ffffff" strokeWidth="2" viewBox="0 0 24 24">
-              <Path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
-            </Svg>
-          </TouchableOpacity>
-
-          {/* Link 2: Chat Overlay */}
-          <TouchableOpacity style={styles.tabButtonMuted} onPress={() => console.log('Route screen_61')}>
-            <Svg width="24" height="24" fill="none" stroke="#9ca3af" strokeWidth="2" viewBox="0 0 24 24">
-              <Path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" strokeLinecap="round" strokeLinejoin="round" />
-            </Svg>
-          </TouchableOpacity>
-
-          {/* Link 3: Setup Preferences */}
-          <TouchableOpacity style={styles.tabButtonMuted} onPress={() => console.log('Route screen_67')}>
-            <Svg width="24" height="24" fill="none" stroke="#9ca3af" strokeWidth="2" viewBox="0 0 24 24">
-              <Path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" strokeLinecap="round" strokeLinejoin="round" />
-              <Path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" strokeLinecap="round" strokeLinejoin="round" />
-            </Svg>
-          </TouchableOpacity>
-
-        </View>
+      <View style={[styles.bottomStickyActionTray, { paddingBottom: insets.bottom + 16 }]}>
+        <TouchableOpacity style={styles.primaryActionButton} onPress={handleSavePlan}>
+          <Svg width="18" height="18" fill="none" stroke="#ffffff" strokeWidth="2" viewBox="0 0 24 24" style={styles.tagIconSpace}>
+            <Path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </Svg>
+          <Text style={styles.primaryButtonText}>Understood, Save Plan</Text>
+        </TouchableOpacity>
       </View>
 
     </View>
@@ -218,34 +191,18 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'between',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderColor: '#1f2024',
   },
-  headerLeftRow: {
-    flexDirection: 'row',
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
-    gap: 8,
-  },
-  headerBrandText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#ffffff',
-    letterSpacing: -0.5,
-  },
-  avatarBorder: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#374151',
-  },
-  profileThumbnail: {
-    width: '100%',
-    height: '100%',
+    justifyContent: 'center',
   },
   scrollArea: {
     flex: 1,
@@ -253,7 +210,7 @@ const styles = StyleSheet.create({
   scrollPadding: {
     paddingHorizontal: 16,
     paddingTop: 24,
-    paddingBottom: 120,
+    paddingBottom: 132,
   },
   screenHeadline: {
     fontSize: 24,
@@ -415,10 +372,17 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
   },
-  actionButtonGroupContainer: {
-    marginTop: 16,
-    gap: 12,
-    width: '100%',
+  bottomStickyActionTray: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(15, 16, 20, 0.96)',
+    borderTopWidth: 1,
+    borderColor: '#2a2a2a',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    zIndex: 80,
   },
   primaryActionButton: {
     backgroundColor: '#5c77ff',
@@ -433,58 +397,5 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '600',
     fontSize: 16,
-  },
-  dangerSecondaryButton: {
-    backgroundColor: '#1a1b1e',
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.4)',
-    width: '100%',
-    paddingVertical: 14,
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dangerButtonText: {
-    color: '#ef4444',
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  floatingTabsWrapper: {
-    position: 'absolute',
-    bottom: 24,
-    left: 0,
-    right: 0,
-    zIndex: 70,
-    alignItems: 'center',
-    paddingHorizontal: 16,
-  },
-  navigationDockPill: {
-    backgroundColor: '#1a1a1a',
-    borderWidth: 1,
-    borderColor: '#333333',
-    borderRadius: 9999,
-    paddingHorizontal: 24,
-    paddingVertical: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 32,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 8,
-  },
-  tabButtonMuted: {
-    padding: 4,
-  },
-  tabBubbleActive: {
-    backgroundColor: '#5c77ff',
-    padding: 12,
-    borderRadius: 9999,
-    shadowColor: '#5c77ff',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 15,
   },
 });

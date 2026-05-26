@@ -1,20 +1,24 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
-import Svg, { Line, Path, Circle } from 'react-native-svg';
+import Svg, { Line, Path } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-export default function ARMapNavigationView() {
+export default function ARMapNavigationView({ navigation, showBottomNav = true }) {
+  const insets = useSafeAreaInsets();
+  const notificationTop = Math.max(92, insets.top + 42);
+
   return (
     <View style={styles.container}>
-      
+
       {/* 1. MAP BACKGROUND PATTERN (REPLACING WEB TAILWIND GRID) */}
       <View style={styles.backgroundContainer}>
         {/* Decorative Glowing Vector Circles */}
         <View style={[styles.glowCircle, styles.circleTopRight]} />
         <View style={[styles.glowCircle, styles.circleMidLeft]} />
         <View style={[styles.glowCircle, styles.circleBottomRight]} />
-        
+
         {/* Simulated Perspective Grid Lines via Mobile Svg */}
         <Svg style={styles.svgOverlay} pointerEvents="none">
           <Line x1="0%" y1="20%" x2="100%" y2="40%" stroke="#5c77ff" strokeWidth="1" strokeDasharray="4 4" opacity="0.2" />
@@ -23,7 +27,7 @@ export default function ARMapNavigationView() {
       </View>
 
       {/* 2. TOP ALERT NOTIFICATION */}
-      <View style={styles.topNotificationContainer}>
+      <View style={[styles.topNotificationContainer, { top: notificationTop }]}>
         <View style={styles.notificationPanel}>
           {/* Eye Icon Container */}
           <View style={styles.iconContainer}>
@@ -55,33 +59,39 @@ export default function ARMapNavigationView() {
       </View>
 
       {/* 4. BOTTOM ACTION HUD BAR */}
-      <View style={styles.bottomNavWrapper}>
-        <View style={styles.navBar}>
-          {/* Left Action: Calendar/Events Router */}
-          <TouchableOpacity style={styles.navButton} onPress={() => console.log('navigate to screen_14')}>
-            <Svg width="24" height="24" fill="none" stroke="#a1a1aa" strokeWidth="1.5" viewBox="0 0 24 24">
-              <Path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-            </Svg>
-          </TouchableOpacity>
+      {showBottomNav && (
+        <View style={styles.bottomNavWrapper}>
+          <View style={styles.navBar}>
+            {/* Left Action: Calendar/Events Router */}
+            <TouchableOpacity style={styles.navButton} onPress={() => navigation?.navigate('ConfirmItinerary')}>
+              <Svg width="24" height="24" fill="none" stroke="#a1a1aa" strokeWidth="1.5" viewBox="0 0 24 24">
+                <Path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </Svg>
+            </TouchableOpacity>
 
-          {/* Center Primary Action Bubble: Chat Router */}
-          <View style={styles.centerButtonContainer}>
-            <TouchableOpacity style={styles.primaryActionButton} onPress={() => console.log('navigate to screen_48')}>
-              <Svg width="32" height="32" fill="#ffffff" viewBox="0 0 20 20">
-                <Path fillRule="evenodd" clipRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" />
+            {/* Center Primary Action Bubble: Chat Router */}
+            <View style={styles.centerButtonContainer}>
+              <TouchableOpacity style={styles.primaryActionButton} onPress={() => navigation?.navigate('Chat')}>
+                <Svg width="32" height="32" fill="#ffffff" viewBox="0 0 20 20">
+                  <Path
+                    fillRule="evenodd"
+                    clipRule="evenodd"
+                    d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z"
+                  />
+                </Svg>
+              </TouchableOpacity>
+            </View>
+
+            {/* Right Action: Settings Router */}
+            <TouchableOpacity style={styles.navButton} onPress={() => navigation?.navigate('Settings')}>
+              <Svg width="24" height="24" fill="none" stroke="#a1a1aa" strokeWidth="1.5" viewBox="0 0 24 24">
+                <Path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <Path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </Svg>
             </TouchableOpacity>
           </View>
-
-          {/* Right Action: Settings Router */}
-          <TouchableOpacity style={styles.navButton} onPress={() => console.log('navigate to screen_10')}>
-            <Svg width="24" height="24" fill="none" stroke="#a1a1aa" strokeWidth="1.5" viewBox="0 0 24 24">
-              <Path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <Path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </Svg>
-          </TouchableOpacity>
         </View>
-      </View>
+      )}
 
     </View>
   );
@@ -129,7 +139,6 @@ const styles = StyleSheet.create({
   },
   topNotificationContainer: {
     position: 'absolute',
-    top: 48,
     left: 16,
     right: 16,
     zIndex: 20,

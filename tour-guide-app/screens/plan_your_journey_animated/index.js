@@ -1,32 +1,42 @@
-import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
-  Image, 
-  Dimensions 
+import React, { useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Image
 } from 'react-native';
-import Svg, { Path, Line, Rect } from 'react-native-svg';
+import Svg, { Path, Line } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import useAppStore from '../../src/store';
 
-const { width: screenWidth } = Dimensions.get('window');
+export default function PlanYourJourneyView({ navigation }) {
+  const insets = useSafeAreaInsets();
+  const scrollViewRef = useRef(null);
+  const draft = useAppStore((s) => s.draft);
+  const toggleDraftActivity = useAppStore((s) => s.toggleDraftActivity);
+  const finalizeDraft = useAppStore((s) => s.finalizeDraft);
 
-export default function PlanYourJourneyView() {
-  const [activities, setActivities] = useState({
-    mmca: false,
-    detailedPalace: true,
-    kyobo: false,
-    hanok: true,
-  });
+  const activities = draft.activities;
 
   const toggleActivity = (key) => {
-    setActivities(prev => ({ ...prev, [key]: !prev[key] }));
+    toggleDraftActivity(key);
+  };
+
+  const handleFinalizePlan = () => {
+    const itineraryId = finalizeDraft();
+    navigation.navigate('ConfirmItinerary', { itineraryId });
+  };
+
+  const handleGenerateItinerary = () => {
+    scrollViewRef.current?.scrollTo({ y: 680, animated: true });
   };
 
   return (
     <View style={styles.container}>
-      
+      <View style={{ height: insets.top }} />
+
       {/* 1. STICKY TOP APP HEADER */}
       <View style={styles.header}>
         <View style={styles.headerLeftRow}>
@@ -35,15 +45,17 @@ export default function PlanYourJourneyView() {
           </Svg>
           <Text style={styles.headerBrandText}>Buddy</Text>
         </View>
-        <TouchableOpacity style={styles.menuButton}>
+        <TouchableOpacity style={styles.menuButton} onPress={() => navigation.navigate('Settings')}>
           <Svg width="20" height="20" fill="none" stroke="#9ca3af" strokeWidth="2" viewBox="0 0 24 24">
-            <Path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+            <Path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <Path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </Svg>
         </TouchableOpacity>
       </View>
 
       {/* 2. CORE UTILITY FLOW WORKSPACE */}
-      <ScrollView 
+      <ScrollView
+        ref={scrollViewRef}
         style={styles.scrollContainer}
         contentContainerStyle={styles.scrollPadding}
         showsVerticalScrollIndicator={false}
@@ -58,12 +70,12 @@ export default function PlanYourJourneyView() {
 
         {/* PREFERENCES CONFIGURATION SELECT PANEL */}
         <View style={styles.sectionCard}>
-          <div style={styles.sectionHeaderRow}>
+          <View style={styles.sectionHeaderRow}>
             <Svg width="16" height="16" fill="none" stroke="#5c77ff" strokeWidth="2" viewBox="0 0 24 24" style={styles.inlineIconMargin}>
               <Path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
             </Svg>
             <Text style={styles.sectionTitle}>Preferences</Text>
-          </div>
+          </View>
 
           <View style={styles.formGroupSpacing}>
             <View>
@@ -86,18 +98,18 @@ export default function PlanYourJourneyView() {
 
         {/* PRIMARY LOCATION SELECT HIGHLIGHT */}
         <View style={styles.sectionContainerMargin}>
-          <div style={styles.sectionHeaderRow}>
+          <View style={styles.sectionHeaderRow}>
             <Svg width="16" height="16" fill="none" stroke="#5c77ff" strokeWidth="2" viewBox="0 0 24 24" style={styles.inlineIconMargin}>
               <Path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
               <Path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
             </Svg>
             <Text style={styles.sectionTitle}>Primary Location</Text>
-          </div>
+          </View>
 
           <View style={styles.parallaxCardWrapper}>
-            <Image 
-              source={{ uri: 'https://images.unsplash.com/photo-1540959733332-eab4deceeaf7?w=500' }} 
-              style={styles.parallaxHeroImage} 
+            <Image
+              source={{ uri: 'https://images.unsplash.com/photo-1540959733332-eab4deceeaf7?w=500' }}
+              style={styles.parallaxHeroImage}
             />
             <View style={styles.imageDimOverlay} />
             <View style={styles.parallaxCardTextOverlay}>
@@ -116,12 +128,12 @@ export default function PlanYourJourneyView() {
 
         {/* NEARBY ACTIVITIES SELECTION STACK */}
         <View style={styles.sectionContainerMargin}>
-          <div style={styles.sectionHeaderRow}>
+          <View style={styles.sectionHeaderRow}>
             <Svg width="16" height="16" fill="none" stroke="#5c77ff" strokeWidth="2" viewBox="0 0 24 24" style={styles.inlineIconMargin}>
               <Path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
             </Svg>
             <Text style={styles.sectionTitle}>Nearby Activities</Text>
-          </div>
+          </View>
 
           <View style={styles.activityListContainer}>
             {/* Activity Node 1 */}
@@ -182,7 +194,7 @@ export default function PlanYourJourneyView() {
           </View>
 
           {/* GENERATE RUN SHIMMER HUD ACTION BUTTON */}
-          <TouchableOpacity style={styles.sparkleGradientButton} onPress={() => console.log('Re-run generative optimizer map logic')}>
+          <TouchableOpacity style={styles.sparkleGradientButton} onPress={handleGenerateItinerary}>
             <Text style={styles.sparkleButtonText}>✨ Generate Itinerary</Text>
           </TouchableOpacity>
         </View>
@@ -301,38 +313,9 @@ export default function PlanYourJourneyView() {
       {/* 3. PERSISTENT LOWER HORIZONTAL FOOTER INTERACTION UTILITY DOCK */}
       <View style={styles.bottomStickyActionTray}>
         <View style={styles.bottomHorizontalDockAlignRow}>
-          <TouchableOpacity style={styles.saveDraftOutlineButton}>
-            <Text style={styles.saveDraftText}>Save Draft</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.finalizePrimaryActionButton} onPress={() => console.log('Deploy finalized route layout to server')}>
+          <TouchableOpacity style={styles.finalizePrimaryActionButton} onPress={handleFinalizePlan}>
             <Text style={styles.finalizeButtonText}>Finalize Plan</Text>
           </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* 4. OVERLAY CORE HORIZONTAL SYSTEM NAV PILL HUD */}
-      <View style={styles.overlayTabNavigatorContainer}>
-        <View style={styles.navigationDockPillBox}>
-          
-          <TouchableOpacity style={styles.tabBubbleActiveState} onPress={() => console.log('Stay Route screen_14')}>
-            <Svg width="24" height="24" fill="none" stroke="#ffffff" strokeWidth="2" viewBox="0 0 24 24">
-              <Path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
-            </Svg>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.tabButtonMuted} onPress={() => console.log('Route screen_11')}>
-            <Svg width="24" height="24" fill="none" stroke="#9ca3af" strokeWidth="2" viewBox="0 0 24 24">
-              <Path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" strokeLinecap="round" strokeLinejoin="round" />
-            </Svg>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.tabButtonMuted} onPress={() => console.log('Route screen_10')}>
-            <Svg width="24" height="24" fill="none" stroke="#9ca3af" strokeWidth="2" viewBox="0 0 24 24">
-              <Path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" strokeLinecap="round" strokeLinejoin="round" />
-              <Path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" strokeLinecap="round" strokeLinejoin="round" />
-            </Svg>
-          </TouchableOpacity>
-
         </View>
       </View>
 
@@ -353,7 +336,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'between',
+    justifyContent: 'space-between',
   },
   headerLeftRow: {
     flexDirection: 'row',
@@ -374,7 +357,7 @@ const styles = StyleSheet.create({
   scrollPadding: {
     paddingHorizontal: 16,
     paddingTop: 32,
-    paddingBottom: 140,
+    paddingBottom: 180,
   },
   heroBlock: {
     alignItems: 'center',
@@ -579,7 +562,7 @@ const styles = StyleSheet.create({
   routeSplitHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'start',
+    alignItems: 'flex-start',
     marginBottom: 32,
   },
   badgeLabelContainerAlign: {
@@ -687,7 +670,7 @@ const styles = StyleSheet.create({
   stopCardHeaderSplitRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'start',
+    alignItems: 'flex-start',
     marginBottom: 4,
   },
   stopNodeTitle: {
@@ -775,21 +758,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
   },
-  saveDraftOutlineButton: {
-    flex: 1,
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#374151',
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveDraftText: {
-    color: '#ffffff',
-    fontWeight: '500',
-    fontSize: 16,
-  },
   finalizePrimaryActionButton: {
     flex: 1,
     backgroundColor: '#5c77ff',
@@ -806,41 +774,5 @@ const styles = StyleSheet.create({
     color: '#131313',
     fontWeight: '700',
     fontSize: 16,
-  },
-  overlayTabNavigatorContainer: {
-    position: 'absolute',
-    bottom: 24,
-    left: 16,
-    right: 16,
-    zIndex: 60,
-    alignItems: 'center',
-  },
-  navigationDockPillBox: {
-    backgroundColor: '#1a1a1a',
-    borderWidth: 1,
-    borderColor: '#2a2a2a',
-    borderRadius: 9999,
-    paddingHorizontal: 24,
-    paddingVertical: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 32,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 8,
-  },
-  tabButtonMuted: {
-    padding: 4,
-  },
-  tabBubbleActiveState: {
-    backgroundColor: '#5c77ff',
-    padding: 12,
-    borderRadius: 9999,
-    shadowColor: '#5c77ff',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 15,
   },
 });

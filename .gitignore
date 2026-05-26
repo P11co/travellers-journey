@@ -27,3 +27,6 @@ Thumbs.db
 # vscode
 .vscode/
 
+data/test_reports/*
+tour-guide-app/node_modules/*
+tour-guide-app/node_modules/.package-lock.json

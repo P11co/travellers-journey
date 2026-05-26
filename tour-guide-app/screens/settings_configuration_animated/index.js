@@ -1,47 +1,50 @@
 import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
-  Switch, 
-  Image, 
-  Dimensions 
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Switch,
+  Dimensions
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: screenWidth } = Dimensions.get('window');
 
-export default function SettingsConfigurationView() {
+export default function SettingsConfigurationView({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [neuralProfile, setNeuralProfile] = useState('nova');
   const [bgSync, setBgSync] = useState(true);
   const [offlineCaching, setOfflineCaching] = useState(false);
   const [hotspotSuggestions, setHotspotSuggestions] = useState(false);
   const [renderingEngine, setRenderingEngine] = useState('obsidian');
 
+  const handleGoBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate('Home');
+  };
+
   return (
     <View style={styles.container}>
-      
+      <View style={{ height: insets.top }} />
+
       {/* 1. FIXED CONTENT TOP APPLICATION BAR */}
       <View style={styles.header}>
-        <View style={styles.headerLeftRow}>
-          <Svg width="24" height="24" fill="#5c77ff" viewBox="0 0 24 24">
-            <Path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z" />
+        <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
+          <Svg width="18" height="18" fill="none" stroke="#a1a1aa" strokeWidth="2" viewBox="0 0 24 24">
+            <Path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </Svg>
-          <Text style={styles.headerBrandText}>Buddy</Text>
-        </View>
-        <View style={styles.avatarRingFrame}>
-          <Image 
-            source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100' }} 
-            style={styles.profileAvatarThumbnail} 
-          />
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* 2. CORE INTERACTION SCROLL SYSTEM WORKSPACE */}
-      <ScrollView 
-        style={styles.scrollArea} 
+      <ScrollView
+        style={styles.scrollArea}
         contentContainerStyle={styles.scrollPadding}
         showsVerticalScrollIndicator={false}
       >
@@ -64,7 +67,7 @@ export default function SettingsConfigurationView() {
 
           <View style={styles.radioBlockClusterStack}>
             {/* Active Choice Card: Nova */}
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.radioSelectionCardBase, neuralProfile === 'nova' ? styles.radioCardActive : styles.radioCardMuted]}
               onPress={() => setNeuralProfile('nova')}
             >
@@ -84,7 +87,7 @@ export default function SettingsConfigurationView() {
             </TouchableOpacity>
 
             {/* Inactive Choice Card: Echo */}
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.radioSelectionCardBase, neuralProfile === 'echo' ? styles.radioCardActive : styles.radioCardMuted]}
               onPress={() => setNeuralProfile('echo')}
             >
@@ -128,9 +131,9 @@ export default function SettingsConfigurationView() {
                 <Text style={styles.toggleRowTitleHeader}>Background Sync</Text>
                 <Text style={styles.toggleRowSubtitleCaption}>Continuous location processing</Text>
               </View>
-              <Switch 
-                value={bgSync} 
-                onValueChange={(val) => setBgSync(val)} 
+              <Switch
+                value={bgSync}
+                onValueChange={(val) => setBgSync(val)}
                 trackColor={{ false: '#3f3f46', true: '#5c77ff' }}
                 thumbColor="#ffffff"
               />
@@ -142,9 +145,9 @@ export default function SettingsConfigurationView() {
                 <Text style={styles.toggleRowTitleHeader}>Offline Caching</Text>
                 <Text style={styles.toggleRowSubtitleCaption}>Store maps up to 2GB</Text>
               </View>
-              <Switch 
-                value={offlineCaching} 
-                onValueChange={(val) => setOfflineCaching(val)} 
+              <Switch
+                value={offlineCaching}
+                onValueChange={(val) => setOfflineCaching(val)}
                 trackColor={{ false: '#3f3f46', true: '#5c77ff' }}
                 thumbColor="#ffffff"
               />
@@ -156,9 +159,9 @@ export default function SettingsConfigurationView() {
                 <Text style={styles.toggleRowTitleHeader}>Hot-Spot Suggestions</Text>
                 <Text style={styles.toggleRowSubtitleCaption}>Receive real-time intelligence on high-activity areas.</Text>
               </View>
-              <Switch 
-                value={hotspotSuggestions} 
-                onValueChange={(val) => setHotspotSuggestions(val)} 
+              <Switch
+                value={hotspotSuggestions}
+                onValueChange={(val) => setHotspotSuggestions(val)}
                 trackColor={{ false: '#3f3f46', true: '#5c77ff' }}
                 thumbColor="#ffffff"
               />
@@ -215,7 +218,7 @@ export default function SettingsConfigurationView() {
 
           <View style={styles.segmentedControlGridCols3}>
             {/* Tab Section Item 1 */}
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.segmentBtnItem, renderingEngine === 'obsidian' ? styles.segmentBtnActive : styles.segmentBtnInactive]}
               onPress={() => setRenderingEngine('obsidian')}
             >
@@ -224,7 +227,7 @@ export default function SettingsConfigurationView() {
             </TouchableOpacity>
 
             {/* Tab Section Item 2 */}
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.segmentBtnItem, renderingEngine === 'satellite' ? styles.segmentBtnActive : styles.segmentBtnInactive]}
               onPress={() => setRenderingEngine('satellite')}
             >
@@ -233,7 +236,7 @@ export default function SettingsConfigurationView() {
             </TouchableOpacity>
 
             {/* Tab Section Item 3 */}
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.segmentBtnItem, renderingEngine === 'vector' ? styles.segmentBtnActive : styles.segmentBtnInactive]}
               onPress={() => setRenderingEngine('vector')}
             >
@@ -248,20 +251,20 @@ export default function SettingsConfigurationView() {
       {/* 3. OVERLAY LAYER CORE HORIZONTAL RUN FLOATING NAVIGATION DOCK PILL */}
       <View style={styles.floatingNavContainer}>
         <View style={styles.navDockPillLayoutRow}>
-          
-          <TouchableOpacity style={styles.tabMutedActionItem} onPress={() => window.location.href='{{DATA:SCREEN:SCREEN_14}}'}>
+
+          <TouchableOpacity style={styles.tabMutedActionItem} onPress={() => navigation.navigate('ConfirmItinerary')}>
             <Svg width="24" height="24" fill="none" stroke="#a1a1aa" strokeWidth="2" viewBox="0 0 24 24">
               <Path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
             </Svg>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.tabMutedActionItem} onPress={() => window.location.href='{{DATA:SCREEN:SCREEN_11}}'}>
+          <TouchableOpacity style={styles.tabMutedActionItem} onPress={() => navigation.navigate('Chat')}>
             <Svg width="24" height="24" fill="none" stroke="#a1a1aa" strokeWidth="2" viewBox="0 0 24 24">
               <Path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" strokeLinecap="round" strokeLinejoin="round" />
             </Svg>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.tabBubbleActiveIconWrapper} onPress={() => window.location.href='{{DATA:SCREEN:SCREEN_10}}'}>
+          <TouchableOpacity style={styles.tabBubbleActiveIconWrapper} onPress={() => navigation.navigate('Settings')}>
             <Svg width="24" height="24" fill="none" stroke="#ffffff" strokeWidth="2" viewBox="0 0 24 24">
               <Path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" strokeLinecap="round" strokeLinejoin="round" />
               <Path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" strokeLinecap="round" strokeLinejoin="round" />
@@ -283,34 +286,19 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'between',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderColor: '#27272A',
     backgroundColor: '#0F0F12',
   },
-  headerLeftRow: {
-    flexDirection: 'row',
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
-    gap: 8,
-  },
-  headerBrandText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#e4e4e7',
-  },
-  avatarRingFrame: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  profileAvatarThumbnail: {
-    width: '100%',
-    height: '100%',
+    justifyContent: 'center',
   },
   scrollArea: {
     flex: 1,
@@ -378,7 +366,7 @@ const styles = StyleSheet.create({
   radioSplitFlexRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'start',
+    alignItems: 'flex-start',
   },
   radioCardTextCoreArea: {
     flex: 1,
