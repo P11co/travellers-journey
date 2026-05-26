@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AI Chat Interface</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<style data-purpose="custom-styles">
+    body {
+        background-color: #0d0d0d;
+        color: #fff;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif
+    }
+    
+    /* Subtle glowing effect for circles */
+    .glow-circle {
+      box-shadow: 0 0 40px rgba(92, 119, 255, 0.15);
+    }
+    
+    /* Grid background pattern */
+    .bg-grid-pattern {
+      background-image: 
+        linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px);
+      background-size: 50px 50px;
+    }
+
+    .nav-pill {
+        background-color: #1a1a1a;
+        border: 1px solid #333;
+        border-radius: 9999px
+    }
+    .msg-buddy {
+        background-color: #1f1f1f;
+        border: 1px solid #333;
+        color: #e5e5e5
+    }
+    .msg-user {
+        background-color: #5c77ff;
+        color: #fff
+    }
+    .live-preview {
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+        border: 2px solid #5c77ff;
+        transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .live-preview.hidden-preview {
+        opacity: 0;
+        transform: translateY(20px) scale(0.95);
+        pointer-events: none;
+    }
+    .input-bar {
+        background-color: #0d0d0d;
+        border-top: 1px solid #333
+    }
+    .input-field {
+        background-color: #1a1a1a;
+        border: 1px solid #333
+    }
+    .action-sidebar {
+        background-color: #151515;
+        border-left: 1px solid #222;
+    }
+    .chat-scroll::-webkit-scrollbar {
+        width: 4px
+    }
+    .chat-scroll::-webkit-scrollbar-track {
+        background: transparent
+    }
+    .chat-scroll::-webkit-scrollbar-thumb {
+        background-color: #333;
+        border-radius: 20px
+    }
+
+    /* --- Animations --- */
+    @keyframes slideUpElastic {
+        0% { transform: translateY(100%); opacity: 0; }
+        60% { transform: translateY(-10px); opacity: 1; }
+        80% { transform: translateY(5px); }
+        100% { transform: translateY(0); }
+    }
+
+    @keyframes popIn {
+        0% { transform: scale(0.95); opacity: 0; }
+        100% { transform: scale(1); opacity: 1; }
+    }
+
+    @keyframes bounceVertical {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-4px); }
+    }
+
+    @keyframes scanline {
+        0% { transform: translateY(-100%); }
+        100% { transform: translateY(100%); }
+    }
+
+    .animate-entrance {
+        animation: slideUpElastic 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.1) forwards;
+    }
+
+    .chat-bubble-pop {
+        animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        opacity: 0;
+    }
+
+    .bounce-handle {
+        animation: bounceVertical 2s ease-in-out infinite;
+    }
+
+    .scan-line {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 2px;
+        background: linear-gradient(to right, transparent, rgba(92, 119, 255, 0.5), transparent);
+        box-shadow: 0 0 8px rgba(92, 119, 255, 0.8);
+        animation: scanline 3s linear infinite;
+        z-index: 15;
+    }
+
+    .active-scale:active {
+        transform: scale(0.9);
+    }
+    
+    .transition-transform {
+        transition: transform 0.1s ease;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .animate-entrance, .chat-bubble-pop, .bounce-handle, .scan-line {
+            animation: none !important;
+            opacity: 1 !important;
+            transform: none !important;
+        }
+    }
+</style>
+</head>
+<body class="h-screen w-full flex justify-center items-center bg-black overflow-hidden relative">
+<!-- Mobile Device Container -->
+<div class="w-full h-full max-w-[400px] max-h-[850px] relative flex flex-col shadow-2xl overflow-hidden md:rounded-[3rem] md:border-[8px] md:border-gray-900 bg-custom-bg">
+<div class="absolute inset-0 z-0 bg-custom-bg bg-grid-pattern opacity-60 flex items-center justify-center pointer-events-none" data-purpose="map-background">
+<div class="absolute top-[-50px] right-[-100px] w-64 h-64 rounded-full border border-custom-accent/30 glow-circle"></div>
+<div class="absolute top-1/3 left-[-80px] w-56 h-56 rounded-full border border-custom-accent/30 glow-circle"></div>
+<div class="absolute bottom-10 right-[-60px] w-48 h-48 rounded-full border border-custom-accent/30 glow-circle"></div>
+<svg class="absolute inset-0 w-full h-full opacity-20 pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+<line stroke="#5c77ff" stroke-dasharray="4 4" stroke-width="1" x1="0%" x2="100%" y1="20%" y2="40%"></line>
+<line stroke="#5c77ff" stroke-dasharray="4 4" stroke-width="1" x1="0%" x2="100%" y1="80%" y2="60%"></line>
+</svg>
+</div>
+<!-- BEGIN: Chat Interface Overlay Container -->
+<div class="flex-1 flex flex-col relative animate-entrance" style="height: 60%; position: absolute; bottom: 0; left: 0; width: 100%;">
+<!-- Swipe Bar & Navbar Hump Area -->
+<div class="relative z-50 flex flex-col items-center">
+<!-- Swipe Bar -->
+<div class="w-12 h-1.5 bg-gray-600 rounded-full mb-3 opacity-80 bounce-handle cursor-pointer" onclick="window.location.href='{{DATA:SCREEN:SCREEN_24}}'"></div>
+<!-- Navbar Hump -->
+<nav class="nav-pill flex items-center px-6 py-2 space-x-8 shadow-2xl mb-[-24px] relative z-50">
+<button class="text-gray-400 hover:text-white transition-colors active-scale transition-transform" onclick="window.location.href='{{DATA:SCREEN:SCREEN_14}}'">
+<svg class="h-6 w-6" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+<button class="rounded-full p-3 shadow-[0_0_15px_rgba(92,119,255,0.5)] active-scale transition-transform" onclick="window.location.href='{{DATA:SCREEN:SCREEN_11}}'" style="background-color: rgb(92, 119, 255);">
+<svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+<button class="text-gray-400 hover:text-white transition-colors active-scale transition-transform" onclick="window.location.href='{{DATA:SCREEN:SCREEN_10}}'">
+<svg class="h-6 w-6" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+<path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+</nav>
+</div>
+<!-- Main Content Area with Chat and Sidebar -->
+<div class="flex-1 bg-[#0d0d0d] bg-opacity-95 rounded-t-[2.5rem] flex overflow-hidden relative pb-[80px]">
+<!-- Scrollable Chat Area -->
+<div class="flex-1 overflow-y-auto chat-scroll px-4 pt-10 pb-20 space-y-6 relative">
+<!-- Timestamp -->
+<div class="text-center text-xs text-gray-500 font-medium chat-bubble-pop" style="animation-delay: 0.1s;">TODAY 14:32</div>
+<!-- Buddy Message 1 -->
+<div class="flex items-end space-x-2 chat-bubble-pop" style="animation-delay: 0.2s;">
+<div class="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center flex-shrink-0 border border-gray-700">
+<svg class="h-4 w-4" fill="currentColor" style="color: #5c77ff;" viewbox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+<path clip-rule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" fill-rule="evenodd"></path>
+</svg>
+</div>
+<div class="msg-buddy rounded-2xl rounded-bl-sm p-4 text-sm max-w-[80%] leading-relaxed shadow-sm">
+                    I noticed you're near the central district. The weather is clearing up. Want me to adjust the walking route to include the park?
+                </div>
+</div>
+<!-- User Message 1 -->
+<div class="flex flex-col items-end w-full chat-bubble-pop" style="animation-delay: 0.3s;">
+<div class="msg-user rounded-2xl rounded-br-sm p-4 text-sm max-w-[80%] leading-relaxed shadow-sm">
+                    Yes, let's do that. Is there a coffee shop on the way?
+                </div>
+</div>
+<!-- Buddy Message 2 -->
+<div class="flex flex-col space-y-1 w-full chat-bubble-pop" style="animation-delay: 0.4s;">
+<div class="flex items-end space-x-2">
+<div class="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center flex-shrink-0 border border-gray-700">
+<svg class="h-4 w-4" fill="currentColor" style="color: #5c77ff;" viewbox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+<path clip-rule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" fill-rule="evenodd"></path>
+</svg>
+</div>
+<div class="msg-buddy rounded-2xl rounded-bl-sm p-4 text-sm max-w-[80%] leading-relaxed shadow-sm">
+                        I can see you're currently in the Gangnam-daero area. Are you looking for the nearest subway station or a specific recommendation for dinner?
+                    </div>
+</div>
+<div class="text-[10px] text-gray-500 font-semibold uppercase tracking-wider ml-11">BUDDY • 14:02</div>
+</div>
+<!-- User Message 2 with Floating Live Preview -->
+<div class="flex flex-col items-end w-full relative chat-bubble-pop" style="animation-delay: 0.5s;">
+<!-- Floating Live Video Preview -->
+<div class="live-preview hidden-preview absolute -top-32 right-0 w-36 h-48 rounded-xl bg-gray-900 overflow-hidden z-10 flex flex-col" id="camera-viewfinder">
+<div class="absolute top-2 left-2 bg-black bg-opacity-60 px-2 py-0.5 rounded-full flex items-center space-x-1 z-20">
+<div class="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></div>
+<span class="text-[9px] font-bold text-white tracking-wider">LIVE</span>
+</div>
+<div class="scan-line"></div>
+<img alt="Live Street View" class="w-full h-full object-cover opacity-80" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBllltC9AnxYNQ2ruV_vSXtbC6KYCTJPcW0uPjG_exgwXwqwydFptOpxAi2G3_S1k5o2OkqiWmAFU6lnVa-wTDVUSc3TaygBQzHjeKR49KsMjj7AtmIWb1KmYPy_pkFMTy-n4dEZv1L1RgHScNd-q3OPyrCv1scPm8DOrAKVUWCfi5pePguSyWUPEcknYwsZNh7KlB-ctHakcIg75iVYe-6CH_GprEJfPDnX07eHUe7obvSyp7EG8B7CXBPtT13Ai1WKhZvMw8qNEeY"/>
+</div>
+<div class="msg-user rounded-2xl rounded-br-sm p-4 text-sm max-w-[80%] leading-relaxed shadow-sm pr-12 relative z-0">
+                    I'm looking for a highly-rated BBQ spot nearby. Can you show me the way?
+                </div>
+<div class="text-[10px] text-gray-500 font-semibold uppercase tracking-wider mt-1 mr-2">YOU • 14:03</div>
+</div>
+</div>
+<!-- Right Sidebar (Camera, Mic, Sound) -->
+<div class="w-14 action-sidebar flex flex-col items-center justify-end pt-10 space-y-8 z-40 pb-20">
+<div class="flex-1"></div>
+<button class="text-gray-500 hover:text-white transition-colors active-scale transition-transform" id="toggle-camera">
+<svg class="h-6 w-6" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+<path d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+<button class="text-gray-500 hover:text-white transition-colors active-scale transition-transform">
+<svg class="h-6 w-6" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+<button class="text-gray-500 hover:text-white transition-colors active-scale transition-transform">
+<svg class="h-6 w-6" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+<div class="flex-1"></div>
+</div>
+</div>
+</div>
+<!-- END: Chat Interface Overlay Container -->
+<!-- BEGIN: Bottom Input Bar -->
+<div class="input-bar absolute bottom-0 left-0 w-full p-4 pb-6 z-[60] flex items-center space-x-3">
+<div class="input-field flex-1 rounded-2xl flex items-center px-4 py-2.5">
+<button class="mr-3 active-scale transition-transform" style="color: rgb(92, 119, 255);">
+<svg class="h-5 w-5" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+<input class="flex-1 bg-transparent border-none text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-0 p-0 text-sm" placeholder="Ask AI..." type="text"/>
+<button class="ml-2 bg-gray-800 p-1.5 rounded-lg hover:bg-gray-700 transition-colors active-scale transition-transform" id="send-button">
+<svg class="h-4 w-4" fill="none" stroke="currentColor" style="color: #5c77ff;" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M5 10l7-7m0 0l7 7m-7-7v18" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+</div>
+<!-- Right Menu Button -->
+<button class="rounded-full p-3 shadow-md flex-shrink-0 text-gray-900 active-scale transition-transform" style="background-color: rgb(92, 119, 255);">
+<svg class="h-5 w-5" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+</svg>
+</button>
+</div>
+<!-- END: Bottom Input Bar -->
+</div>
+<script>
+    // Micro-interactions and triggers
+    document.addEventListener('DOMContentLoaded', () => {
+        const sendBtn = document.getElementById('send-button');
+        const cameraBtn = document.getElementById('toggle-camera');
+        const viewfinder = document.getElementById('camera-viewfinder');
+        
+        // Toggle camera viewfinder visibility
+        if (cameraBtn && viewfinder) {
+            cameraBtn.addEventListener('click', () => {
+                viewfinder.classList.toggle('hidden-preview');
+                
+                // Visual feedback for the button state
+                if (viewfinder.classList.contains('hidden-preview')) {
+                    cameraBtn.classList.remove('text-white');
+                    cameraBtn.classList.add('text-gray-500');
+                } else {
+                    cameraBtn.classList.add('text-white');
+                    cameraBtn.classList.remove('text-gray-500');
+                }
+            });
+        }
+        
+        // Ensuring interactions feel snappy
+        const buttons = document.querySelectorAll('.active-scale');
+        buttons.forEach(btn => {
+            btn.addEventListener('touchstart', () => {
+                btn.style.transform = 'scale(0.9)';
+            }, {passive: true});
+            btn.addEventListener('touchend', () => {
+                btn.style.transform = 'scale(1)';
+            }, {passive: true});
+        });
+    });
+</script>
+</body></html>

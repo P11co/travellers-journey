@@ -1,0 +1,421 @@
+<!DOCTYPE html><html class="bg-[#131313] text-gray-200 font-sans" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Plan Your Journey - Buddy</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<style>
+    /* Custom Scrollbar for nicer dark mode look */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #131313;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #333;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #555;
+    }
+    
+    .timeline-line {
+      position: absolute;
+      left: 1.25rem; /* 20px - matches w-10 center */
+      top: 2rem; /* Start below the first circle */
+      bottom: -1rem;
+      width: 1px;
+      background-color: #333;
+      z-index: 0;
+    }
+
+    /* Energy Shimmer Effect */
+    @keyframes energy-shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .energy-shimmer {
+      background: linear-gradient(90deg, #5c77ff 0%, #a5b4ff 50%, #5c77ff 100%);
+      background-size: 200% auto;
+      animation: energy-shimmer 3s linear infinite;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .energy-shimmer {
+        animation: none;
+      }
+    }
+
+    /* Checkmark Animation */
+    .checkmark-svg path {
+      stroke-dasharray: 20;
+      stroke-dashoffset: 20;
+      transition: stroke-dashoffset 0.3s ease-in-out;
+    }
+    input:checked + .custom-checkbox .checkmark-svg path {
+      stroke-dashoffset: 0;
+    }
+
+    /* Parallax Container */
+    .parallax-container {
+      perspective: 1000px;
+    }
+    .parallax-card {
+      transition: transform 0.1s ease-out;
+      transform-style: preserve-3d;
+    }
+    .parallax-bg {
+      transition: transform 0.1s ease-out;
+      transform: scale(1.1); /* Over-scale to prevent edges showing during parallax */
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .parallax-card, .parallax-bg {
+        transition: none !important;
+        transform: none !important;
+      }
+    }
+  </style>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="antialiased min-h-screen pb-24">
+<!-- BEGIN: Header -->
+<header class="sticky top-0 z-50 bg-[#131313]/90 backdrop-blur border-b border-gray-800 px-4 py-3 flex items-center justify-between">
+<div class="flex items-center gap-2 text-[#5c77ff] font-bold text-lg">
+<i class="fa-solid fa-robot"></i>
+<span class="">Buddy</span>
+</div>
+<button class="text-gray-400 hover:text-white p-2">
+<i class="fa-solid fa-bars"></i>
+</button>
+</header>
+<!-- END: Header -->
+<!-- BEGIN: MainContent -->
+<main class="px-4 pt-8 pb-4 max-w-md mx-auto">
+<!-- Hero Text -->
+<div class="text-center mb-10">
+<h1 class="text-3xl font-extrabold text-white mb-3 tracking-tight">Plan Your Journey</h1>
+<p class="text-gray-400 text-sm leading-relaxed px-2">Select your preferred destinations and customize your itinerary settings to generate a personalized route.</p>
+</div>
+<!-- BEGIN: PreferencesSection -->
+<section class="bg-[#1a1a1a] rounded-2xl p-5 mb-6 border border-gray-800">
+<div class="flex items-center gap-2 mb-5 text-white font-semibold">
+<i class="fa-solid fa-sliders text-[#5c77ff]"></i>
+<h2 class="">Preferences</h2>
+</div>
+<div class="space-y-4">
+<!-- Budget Level -->
+<div>
+<label class="block text-xs text-gray-400 mb-1.5">Budget Level</label>
+<div class="relative">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+<i class="fa-solid fa-money-bill-1-wave"></i>
+</div>
+<select class="block w-full pl-10 pr-10 py-2.5 bg-[#131313] border border-gray-700 rounded-xl text-white text-sm focus:ring-[#5c77ff] focus:border-[#5c77ff] appearance-none">
+<option>Standard</option>
+<option>Budget</option>
+<option>Luxury</option>
+</select>
+<div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-gray-400">
+<i class="fa-solid fa-chevron-down text-xs"></i>
+</div>
+</div>
+</div>
+<!-- Available Time -->
+<div>
+<label class="block text-xs text-gray-400 mb-1.5">Available Time</label>
+<div class="relative">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+<i class="fa-regular fa-clock"></i>
+</div>
+<select class="block w-full pl-10 pr-10 py-2.5 bg-[#131313] border border-gray-700 rounded-xl text-white text-sm focus:ring-[#5c77ff] focus:border-[#5c77ff] appearance-none">
+<option>Full Day (8 hrs)</option>
+<option>Half Day (4 hrs)</option>
+<option>Evening (3 hrs)</option>
+</select>
+<div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-gray-400">
+<i class="fa-solid fa-chevron-down text-xs"></i>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- END: PreferencesSection -->
+<!-- BEGIN: PrimaryLocationSection -->
+<section class="mb-6 parallax-container">
+<div class="flex items-center gap-2 mb-3 text-white font-semibold">
+<i class="fa-solid fa-location-dot text-[#5c77ff]"></i>
+<h2 class="">Primary Location</h2>
+</div>
+<div class="parallax-card relative rounded-2xl overflow-hidden border-2 border-[#5c77ff] shadow-[0_0_15px_rgba(92,119,255,0.3)]" id="heroCard">
+<img alt="Gyeongbokgung Palace" class="parallax-bg w-full h-32 object-cover opacity-60" id="heroBg" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCfHMAwZOn2u5L5xJz6KxG7jNrWykyTNyg83DHXAWGU-tPFqabLFpJ7TdFQN2m77z6wOewDOkdMItU4wwzR3LDg_nvHYMbYiONej0Pye2OhqXG4t0-eibD0fSqDEpa8fANisjsMz5ja4YpXt5N8-BzD0qtBK3-i1K7YDGguKbjAZ8rMH0Qb6LcWOFbuZTyKFAXPTtijPpkUqXc1xixU1q3nwII8sFvJwcdCD1_RvSQZk6-bp4Xh-LeJhRLoQWOWWvWRbcXdCVSjow58">
+<div class="absolute inset-0 bg-gradient-to-t from-[#131313] via-[#131313]/60 to-transparent"></div>
+<div class="absolute bottom-0 left-0 p-4 w-full">
+<div class="flex justify-between items-end">
+<div>
+<h3 class="text-xl font-bold text-white leading-tight">Gyeongbokgung<br>Palace</h3>
+<p class="text-[#5c77ff] text-xs mt-1">The Heart of Old Seoul</p>
+</div>
+<div class="bg-white rounded-full w-6 h-6 flex items-center justify-center shadow-lg">
+<i class="fa-solid fa-check text-[#5c77ff] text-xs"></i>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- END: PrimaryLocationSection -->
+<!-- BEGIN: NearbyActivitiesSection -->
+<section class="mb-8">
+<div class="flex items-center gap-2 mb-3 text-white font-semibold">
+<i class="fa-solid fa-compass text-[#5c77ff]"></i>
+<h2 class="">Nearby Activities</h2>
+</div>
+<div class="space-y-2">
+<!-- Activity 1 -->
+<label class="flex items-center justify-between p-3 bg-[#1a1a1a] border border-gray-800 rounded-xl cursor-pointer hover:border-gray-600 transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-[#2a2a2a] flex items-center justify-center text-[#5c77ff]">
+<i class="fa-solid fa-building-columns"></i>
+</div>
+<div>
+<div class="text-sm font-medium text-white">MMCA (Contemporary Art)</div>
+<div class="text-xs text-gray-500">Modern Art &amp; Design</div>
+</div>
+</div>
+<div class="relative w-5 h-5">
+<input class="sr-only" type="checkbox">
+<div class="custom-checkbox w-5 h-5 border-2 border-gray-700 rounded bg-[#131313] flex items-center justify-center transition-colors">
+<svg class="checkmark-svg w-3 h-3 text-[#5c77ff]" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+</div>
+</div>
+</label>
+<!-- Activity 2 -->
+<label class="flex items-center justify-between p-3 bg-[#1a1a1a] border border-gray-800 rounded-xl cursor-pointer hover:border-gray-600 transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-[#2a2a2a] flex items-center justify-center text-[#5c77ff]">
+<i class="fa-solid fa-map-location-dot"></i>
+</div>
+<div>
+<div class="text-sm font-medium text-white">Gyeongbokgung (Detailed Tour)</div>
+<div class="text-xs text-gray-500">Guided Palace History</div>
+</div>
+</div>
+<div class="relative w-5 h-5">
+<input checked="" class="sr-only" type="checkbox">
+<div class="custom-checkbox w-5 h-5 border-2 border-[#5c77ff] rounded bg-[#131313] flex items-center justify-center transition-colors">
+<svg class="checkmark-svg w-3 h-3 text-[#5c77ff]" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+</div>
+</div>
+</label>
+<!-- Activity 3 -->
+<label class="flex items-center justify-between p-3 bg-[#1a1a1a] border border-gray-800 rounded-xl cursor-pointer hover:border-gray-600 transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-[#2a2a2a] flex items-center justify-center text-[#5c77ff]">
+<i class="fa-solid fa-book-open"></i>
+</div>
+<div>
+<div class="text-sm font-medium text-white">Kyobo Bookstore</div>
+<div class="text-xs text-gray-500">Korea's Largest Bookstore</div>
+</div>
+</div>
+<div class="relative w-5 h-5">
+<input class="sr-only" type="checkbox">
+<div class="custom-checkbox w-5 h-5 border-2 border-gray-700 rounded bg-[#131313] flex items-center justify-center transition-colors">
+<svg class="checkmark-svg w-3 h-3 text-[#5c77ff]" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+</div>
+</div>
+</label>
+<!-- Activity 4 -->
+<label class="flex items-center justify-between p-3 bg-[#1a1a1a] border border-gray-800 rounded-xl cursor-pointer hover:border-gray-600 transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-[#2a2a2a] flex items-center justify-center text-[#5c77ff]">
+<i class="fa-solid fa-house-chimney-window"></i>
+</div>
+<div>
+<div class="text-sm font-medium text-white">Bukchon Hanok Village</div>
+<div class="text-xs text-gray-500">Traditional Korean Houses</div>
+</div>
+</div>
+<div class="relative w-5 h-5">
+<input checked="" class="sr-only" type="checkbox">
+<div class="custom-checkbox w-5 h-5 border-2 border-[#5c77ff] rounded bg-[#131313] flex items-center justify-center transition-colors">
+<svg class="checkmark-svg w-3 h-3 text-[#5c77ff]" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+</div>
+</div>
+</label>
+</div>
+<button class="w-full mt-4 energy-shimmer hover:opacity-90 text-gray-900 font-bold py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(92,119,255,0.3)] active:scale-95" onclick="window.location.href='{{DATA:SCREEN:SCREEN_14}}'">
+<i class="fa-solid fa-wand-magic-sparkles"></i>
+        Generate Itinerary
+      </button>
+</section>
+<!-- END: NearbyActivitiesSection -->
+<hr class="border-gray-800 my-8">
+<!-- BEGIN: GeneratedRouteSection -->
+<section>
+<div class="flex items-start justify-between mb-8">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<h2 class="text-2xl font-bold text-white">Generated<br>Route</h2>
+<span class="bg-[#064e3b] text-[#34d399] border border-[#047857] text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider self-start mt-1">AI<br>Optimized</span>
+</div>
+<p class="text-gray-500 text-xs">Drag handles to reorder your<br>schedule.</p>
+</div>
+<div class="text-right">
+<div class="text-xl font-bold text-white">8 Hours</div>
+<div class="text-gray-500 text-xs">Estimated<br>Duration</div>
+</div>
+</div>
+<div class="relative">
+<div class="timeline-line"></div>
+<div class="space-y-6 relative z-10">
+<!-- Stop 1 -->
+<div class="flex gap-4">
+<div class="w-10 h-10 rounded-full border-2 border-[#5c77ff] bg-[#131313] text-[#5c77ff] flex items-center justify-center font-bold text-sm shrink-0 z-10 relative mt-2 shadow-[0_0_10px_rgba(92,119,255,0.2)]">
+              01
+            </div>
+<div class="flex-1 bg-[#1a1a1a] border border-gray-800 rounded-xl p-4 flex gap-3 relative overflow-hidden group">
+<div class="text-gray-600 hover:text-gray-400 cursor-grab pt-1">
+<i class="fa-solid fa-grip-vertical"></i>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start mb-1">
+<h3 class="font-bold text-white leading-tight">Gyeongbokgung<br>Palace</h3>
+<div class="text-right text-[10px] text-gray-500 leading-tight">09:00<br>AM</div>
+</div>
+<p class="text-xs text-gray-400 mb-3 line-clamp-2">Start your day exploring the largest of the Five...</p>
+<div class="flex gap-2">
+<span class="text-[10px] bg-[#131313] border border-gray-700 px-2 py-1 rounded text-gray-300">2.5 hours</span>
+<span class="text-[10px] bg-[#131313] border border-gray-700 px-2 py-1 rounded text-gray-300">Walking</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Stop 2 -->
+<div class="flex gap-4">
+<div class="w-10 h-10 rounded-full border border-gray-600 bg-[#131313] text-gray-400 flex items-center justify-center font-bold text-sm shrink-0 z-10 relative mt-2">
+              02
+            </div>
+<div class="flex-1 bg-[#1a1a1a] border border-gray-800 rounded-xl p-4 flex gap-3 relative overflow-hidden group">
+<div class="text-gray-600 hover:text-gray-400 cursor-grab pt-1">
+<i class="fa-solid fa-grip-vertical"></i>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start mb-1">
+<h3 class="font-bold text-white leading-tight">Bukchon Hanok<br>Village</h3>
+<div class="text-right text-[10px] text-gray-500 leading-tight">11:45<br>AM</div>
+</div>
+<p class="text-xs text-gray-400 mb-3 line-clamp-2">A short walk from the palace. Wander through...</p>
+<div class="flex gap-2">
+<span class="text-[10px] bg-[#131313] border border-gray-700 px-2 py-1 rounded text-gray-300">1.5 hours</span>
+<span class="text-[10px] bg-[#131313] border border-gray-700 px-2 py-1 rounded text-gray-300">Photography</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Lunch Break -->
+<div class="flex gap-4 items-center">
+<div class="w-10 h-10 rounded-full border border-[#047857] bg-[#064e3b]/30 text-[#34d399] flex items-center justify-center text-sm shrink-0 z-10 relative">
+<i class="fa-solid fa-utensils"></i>
+</div>
+<div class="flex-1 border border-gray-800 rounded-xl p-3 flex justify-between items-center bg-[#131313]">
+<span class="text-sm text-gray-400">Lunch Break in<br>Insadong</span>
+<span class="text-[10px] text-gray-500 text-right leading-tight">13:15<br>PM</span>
+</div>
+</div>
+<!-- Stop 3 -->
+<div class="flex gap-4 pb-8">
+<div class="w-10 h-10 rounded-full border border-gray-600 bg-[#131313] text-gray-400 flex items-center justify-center font-bold text-sm shrink-0 z-10 relative mt-2">
+              03
+            </div>
+<div class="flex-1 bg-[#1a1a1a] border border-gray-800 rounded-xl p-4 flex gap-3 relative overflow-hidden group">
+<div class="text-gray-600 hover:text-gray-400 cursor-grab pt-1">
+<i class="fa-solid fa-grip-vertical"></i>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start mb-1">
+<h3 class="font-bold text-white leading-tight">N Seoul Tower</h3>
+<div class="text-right text-[10px] text-gray-500 leading-tight">15:00 PM</div>
+</div>
+<p class="text-xs text-gray-400 mb-3 line-clamp-2">Head up Namsan Mountain for panoramic...</p>
+<div class="flex gap-2">
+<span class="text-[10px] bg-[#131313] border border-gray-700 px-2 py-1 rounded text-gray-300">2 hours</span>
+<span class="text-[10px] bg-[#131313] border border-gray-700 px-2 py-1 rounded text-gray-300">Scenic</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- END: GeneratedRouteSection -->
+</main>
+<!-- END: MainContent -->
+<!-- BEGIN: BottomActionArea -->
+<div class="fixed bottom-0 left-0 w-full bg-[#131313]/95 backdrop-blur-md border-t border-gray-800 p-4 z-50">
+<div class="max-w-md mx-auto flex gap-3">
+<button class="flex-1 bg-transparent border border-gray-700 text-white font-medium py-3 px-4 rounded-xl hover:bg-gray-800 transition-colors">
+        Save Draft
+      </button>
+<button class="flex-1 bg-[#5c77ff] text-gray-900 font-bold py-3 px-4 rounded-xl hover:bg-[#4a64e6] transition-colors shadow-[0_0_15px_rgba(92,119,255,0.2)]" onclick="window.location.href='{{DATA:SCREEN:SCREEN_14}}'">
+        Finalize Plan
+      </button>
+</div>
+</div><nav class="fixed bottom-6 left-4 right-4 bg-[#1a1a1a]/90 backdrop-blur-md border border-gray-800 rounded-full flex justify-around items-center py-2 px-2 shadow-2xl z-[60]"><button class="p-3 bg-[#5c77ff] text-white rounded-full" onclick="window.location.href='{{DATA:SCREEN:SCREEN_14}}'"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button><button class="p-3 text-gray-400 hover:text-white transition-colors" onclick="window.location.href='{{DATA:SCREEN:SCREEN_11}}'"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button><button class="p-3 text-gray-400 hover:text-white transition-colors" onclick="window.location.href='{{DATA:SCREEN:SCREEN_10}}'"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button></nav>
+<!-- END: BottomActionArea -->
+<script>
+  // Parallax Logic
+  const heroCard = document.getElementById('heroCard');
+  const heroBg = document.getElementById('heroBg');
+
+  if (heroCard && heroBg && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    heroCard.addEventListener('mousemove', (e) => {
+      const rect = heroCard.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      
+      const rotateX = (y - centerY) / 20;
+      const rotateY = (centerX - x) / 20;
+      
+      // Card tilt
+      heroCard.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+      
+      // Subtle background shift (inverse direction)
+      const moveX = (x - centerX) / 15;
+      const moveY = (y - centerY) / 15;
+      heroBg.style.transform = `scale(1.1) translate(${moveX}px, ${moveY}px)`;
+    });
+
+    heroCard.addEventListener('mouseleave', () => {
+      heroCard.style.transform = 'rotateX(0deg) rotateY(0deg)';
+      heroBg.style.transform = 'scale(1.1) translate(0, 0)';
+    });
+
+    // Device orientation support for mobile
+    if (window.DeviceOrientationEvent) {
+      window.addEventListener('deviceorientation', (e) => {
+        const tiltX = Math.min(Math.max(e.beta, -30), 30) / 3;
+        const tiltY = Math.min(Math.max(e.gamma, -30), 30) / 3;
+        
+        heroCard.style.transform = `rotateX(${tiltX}deg) rotateY(${tiltY}deg)`;
+        heroBg.style.transform = `scale(1.1) translate(${tiltY * -1.5}px, ${tiltX * -1.5}px)`;
+      });
+    }
+  }
+
+  // Checkbox Drawing Interaction
+  document.querySelectorAll('label input[type="checkbox"]').forEach(checkbox => {
+    checkbox.addEventListener('change', (e) => {
+      const container = e.target.nextElementSibling;
+      if (e.target.checked) {
+        container.classList.add('border-[#5c77ff]');
+        container.classList.remove('border-gray-700');
+      } else {
+        container.classList.remove('border-[#5c77ff]');
+        container.classList.add('border-gray-700');
+      }
+    });
+  });
+</script>
+</body></html>
