@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from server.database import init_db
 from server.models import HealthResponse
-from server.routers import itinerary, chat, handoff
+from server.routers import itinerary, chat, handoff, activity
 
 
 # ---------------------------------------------------------------------------
@@ -54,6 +54,7 @@ app.add_middleware(
 app.include_router(itinerary.router)
 app.include_router(chat.router)
 app.include_router(handoff.router)
+app.include_router(activity.router)
 
 
 # ---------------------------------------------------------------------------

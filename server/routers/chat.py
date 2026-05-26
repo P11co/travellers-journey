@@ -48,14 +48,18 @@ from server.database import (
     create_session,
     get_session,
     get_chat_history,
-    save_chat_message
+    save_chat_message,
+    get_activity_logs,
 )
 from server.services.web_search import (
     needs_web_search,
+    classify_intent,
     search_with_fallback,
     format_search_results_for_prompt,
 )
 from server.services.rag import search_rag
+from server.services.map_snapshot import get_map_snapshot
+from server.services.geocoding import geocode_search, format_geocoding_for_prompt
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
@@ -213,8 +217,40 @@ def _build_context(wp: dict | None) -> str:
     return ctx
 
 
-def _strip_thinking(text: str) -> str:
+async def _build_activity_context(session_id: str) -> str:
+    """Build a brief activity summary for the system prompt."""
+    logs = await get_activity_logs(session_id, limit=20)
+    if not logs:
+        return ""
+
+    wp_names = {wp["id"]: wp["name"] for wp in WAYPOINTS}
+    visited = []
+    for log in logs:
+        wp_id = log.get("matched_waypoint_id")
+        if wp_id and (not visited or visited[-1]["id"] != wp_id):
+            visited.append({
+                "id": wp_id,
+                "name": wp_names.get(wp_id, wp_id),
+                "time": log["timestamp"]
+            })
+
+    if not visited:
+        return ""
+
+    lines = [f"- {v['name']} (at {v['time']})" for v in visited]
+    current = visited[-1]["name"]
+    return (
+        f"\n\n### ACTIVITY LOG (places the user has already visited today)\n"
+        + "\n".join(lines)
+        + f"\nThe user is currently near: {current}."
+        + "\nDo not re-suggest places they have already visited unless they ask."
+    )
+
+
+def _strip_thinking(text: str | None) -> str:
     """Remove <think>...</think> reasoning traces from model output (for TTS safety)."""
+    if not text:
+        return ""
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
 
@@ -256,14 +292,25 @@ async def _call_llm(
         **extra,
     }
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
+    try:
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            resp = await client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504,
+            detail=f"Request to {provider} LLM API timed out.",
+        )
+    except httpx.RequestError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to communicate with {provider} LLM API: {exc}",
         )
 
     if resp.status_code != 200:
@@ -272,7 +319,7 @@ async def _call_llm(
             detail=f"{provider} API returned {resp.status_code}: {resp.text[:300]}",
         )
 
-    raw = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+    raw = resp.json().get("choices", [{}])[0].get("message", {}).get("content") or ""
     return _strip_thinking(raw)
 
 
@@ -288,7 +335,7 @@ async def chat(req: ChatRequest):
     fetches results if so, and injects them into the LLM context.
     Supports model/provider override from the debug dashboard.
     """
-    provider = req.provider or "openrouter"
+    provider = req.provider or "nvidia"
     model = req.model_override or LLM_MODEL_ID
     api_ok = OPENROUTER_API_KEY if provider == "openrouter" else NVIDIA_API_KEY
     if not api_ok:
@@ -307,22 +354,44 @@ async def chat(req: ChatRequest):
     history = await get_chat_history(session_id, limit=6)
     last_ai_message = history[-1]["content"] if history and history[-1]["role"] == "assistant" else ""
 
-    # --- Task 3: LLM-based web search classification ---
+    # --- 4-Way Intent Classification ---
     search_block = ""
     search_used = False
+    geocode_block = ""
 
-    should_search = await needs_web_search(
+    intent = await classify_intent(
         user_message=req.message,
         last_ai_message=last_ai_message,
+        provider=provider,
+        model=model,
     )
+    print(f"🧠 Intent classification: {intent}")
 
-    if should_search:
+    if intent == "WEB_SEARCH":
         results = await search_with_fallback(req.message)
         if results:
             search_block = "\n\n" + format_search_results_for_prompt(results)
             search_used = True
+    elif intent == "MAP_GEOCODE":
+        # Geocode search — resolve specific place names to coordinates
+        lat = req.latitude
+        lng = req.longitude
+        if (lat is None or lng is None) and waypoint:
+            lat = waypoint["coordinates"]["latitude"]
+            lng = waypoint["coordinates"]["longitude"]
+        geo_results = await geocode_search(
+            query=req.message,
+            center_lng=lng,
+            center_lat=lat,
+        )
+        if geo_results:
+            geocode_block = "\n\n" + format_geocoding_for_prompt(geo_results, req.message)
+    elif intent == "MAP_STATIC":
+        # MAP_STATIC — no extra retrieval needed; the map snapshot image
+        # will be attached to the user message payload below.
+        pass
     else:
-        # Fallback to RAG
+        # RAG — default fallback for palace/history knowledge
         rag_context = await asyncio.to_thread(search_rag, req.message)
         if rag_context:
             search_block = f"\n\n{rag_context}"
@@ -330,16 +399,44 @@ async def chat(req: ChatRequest):
     # Temporal context
     temporal_context = await _get_live_environment()
 
-    # Build system prompt — append context + search results
+    # Build activity context (visited waypoints)
+    activity_context = await _build_activity_context(session_id)
+
+    # Build system prompt — append context + activity + search/geocode results
     full_system = (
         _SYSTEM_PROMPT.format(temporal_context=temporal_context)
         + f"\n\nCURRENT CONTEXT:\n{gps_context}"
+        + activity_context
         + f"{search_block}"
+        + f"{geocode_block}"
     )
+
+    # Resolve coordinates for map snapshot
+    lat = req.latitude
+    lng = req.longitude
+    if (lat is None or lng is None) and waypoint:
+        lat = waypoint["coordinates"]["latitude"]
+        lng = waypoint["coordinates"]["longitude"]
+
+    # Fetch map snapshot (for MAP_STATIC and MAP_GEOCODE intents, or whenever coords exist)
+    map_snapshot_b64 = None
+    if lat is not None and lng is not None:
+        map_snapshot_b64 = await get_map_snapshot(lat, lng)
+
+    # Build user message content (multimodal if map snapshot exists)
+    user_content = req.message
+    if map_snapshot_b64:
+        user_content = [
+            {"type": "text", "text": req.message},
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{map_snapshot_b64}"},
+            },
+        ]
 
     messages = [{"role": "system", "content": full_system}]
     messages.extend(history)
-    messages.append({"role": "user", "content": req.message})
+    messages.append({"role": "user", "content": user_content})
 
     reply = await _call_llm(
         messages=messages,
@@ -356,10 +453,13 @@ async def chat(req: ChatRequest):
     action = "OPEN_NAVER_MAP" if "naver map" in reply.lower() else None
 
     debug_trace = {
-        "should_search": should_search,
+        "intent": intent,
+        "should_search": intent == "WEB_SEARCH",
         "gps_context": gps_context,
-        "search_block": search_block.strip(),
+        "activity_context": activity_context,
+        "search_block": (search_block + geocode_block).strip(),
         "full_prompt": full_system,
+        "map_snapshot_included": map_snapshot_b64 is not None,
         "messages_sent": messages,
     }
 
