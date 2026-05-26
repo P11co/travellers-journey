@@ -1,437 +1,846 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  ScrollView, 
+  TouchableOpacity, 
+  Image, 
+  Dimensions 
+} from 'react-native';
+import Svg, { Path, Line, Rect } from 'react-native-svg';
 
-export default function RenderedScreen() {
-  return (
-    <ScrollView style={styles.container}>
-<!DOCTYPE html><html class="bg-[#131313] text-gray-200 font-sans" lang="en"><head>
-<meta charset="utf-8">
-<meta content="width=device-width, initial-scale=1.0" name="viewport">
-<title>Plan Your Journey - Buddy</title>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<style>
-    /* Custom Scrollbar for nicer dark mode look */
-    ::-webkit-scrollbar {
-      width: 6px;
-    }
-    ::-webkit-scrollbar-track {
-      background: #131313;
-    }
-    ::-webkit-scrollbar-thumb {
-      background: #333;
-      border-radius: 3px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-      background: #555;
-    }
-    
-    .timeline-line {
-      position: absolute;
-      left: 1.25rem; /* 20px - matches w-10 center */
-      top: 2rem; /* Start below the first circle */
-      bottom: -1rem;
-      width: 1px;
-      background-color: #333;
-      z-index: 0;
-    }
+const { width: screenWidth } = Dimensions.get('window');
 
-    /* Energy Shimmer Effect */
-    @keyframes energy-shimmer {
-      0% { background-position: -200% 0; }
-      100% { background-position: 200% 0; }
-    }
-    .energy-shimmer {
-      background: linear-gradient(90deg, #5c77ff 0%, #a5b4ff 50%, #5c77ff 100%);
-      background-size: 200% auto;
-      animation: energy-shimmer 3s linear infinite;
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .energy-shimmer {
-        animation: none;
-      }
-    }
-
-    /* Checkmark Animation */
-    .checkmark-svg path {
-      stroke-dasharray: 20;
-      stroke-dashoffset: 20;
-      transition: stroke-dashoffset 0.3s ease-in-out;
-    }
-    input:checked + .custom-checkbox .checkmark-svg path {
-      stroke-dashoffset: 0;
-    }
-
-    /* Parallax Container */
-    .parallax-container {
-      perspective: 1000px;
-    }
-    .parallax-card {
-      transition: transform 0.1s ease-out;
-      transform-style: preserve-3d;
-    }
-    .parallax-bg {
-      transition: transform 0.1s ease-out;
-      transform: scale(1.1); /* Over-scale to prevent edges showing during parallax */
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .parallax-card, .parallax-bg {
-        transition: none !important;
-        transform: none !important;
-      }
-    }
-  </style>
-<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-</head>
-<body class="antialiased min-h-screen pb-24">
-<!-- BEGIN: Header -->
-<header class="sticky top-0 z-50 bg-[#131313]/90 backdrop-blur border-b border-gray-800 px-4 py-3 flex items-center justify-between">
-<View>
-<i class="fa-solid fa-robot"></i>
-<span class="">Buddy</span>
-</View>
-<TouchableOpacity>
-<i class="fa-solid fa-bars"></i>
-</TouchableOpacity>
-</header>
-<!-- END: Header -->
-<!-- BEGIN: MainContent -->
-<main class="px-4 pt-8 pb-4 max-w-md mx-auto">
-<!-- Hero Text -->
-<View>
-<Text>Plan Your Journey</Text>
-<Text>Select your preferred destinations and customize your itinerary settings to generate a personalized route.</Text>
-</View>
-<!-- BEGIN: PreferencesSection -->
-<section class="bg-[#1a1a1a] rounded-2xl p-5 mb-6 border border-gray-800">
-<View>
-<i class="fa-solid fa-sliders text-[#5c77ff]"></i>
-<Text>Preferences</Text>
-</View>
-<View>
-<!-- Budget Level -->
-<View>
-<label class="block text-xs text-gray-400 mb-1.5">Budget Level</label>
-<View>
-<View>
-<i class="fa-solid fa-money-bill-1-wave"></i>
-</View>
-<select class="block w-full pl-10 pr-10 py-2.5 bg-[#131313] border border-gray-700 rounded-xl text-white text-sm focus:ring-[#5c77ff] focus:border-[#5c77ff] appearance-none">
-<option>Standard</option>
-<option>Budget</option>
-<option>Luxury</option>
-</select>
-<View>
-<i class="fa-solid fa-chevron-down text-xs"></i>
-</View>
-</View>
-</View>
-<!-- Available Time -->
-<View>
-<label class="block text-xs text-gray-400 mb-1.5">Available Time</label>
-<View>
-<View>
-<i class="fa-regular fa-clock"></i>
-</View>
-<select class="block w-full pl-10 pr-10 py-2.5 bg-[#131313] border border-gray-700 rounded-xl text-white text-sm focus:ring-[#5c77ff] focus:border-[#5c77ff] appearance-none">
-<option>Full Day (8 hrs)</option>
-<option>Half Day (4 hrs)</option>
-<option>Evening (3 hrs)</option>
-</select>
-<View>
-<i class="fa-solid fa-chevron-down text-xs"></i>
-</View>
-</View>
-</View>
-</View>
-</section>
-<!-- END: PreferencesSection -->
-<!-- BEGIN: PrimaryLocationSection -->
-<section class="mb-6 parallax-container">
-<View>
-<i class="fa-solid fa-location-dot text-[#5c77ff]"></i>
-<Text>Primary Location</Text>
-</View>
-<View>
-<img alt="Gyeongbokgung Palace" class="parallax-bg w-full h-32 object-cover opacity-60" id="heroBg" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCfHMAwZOn2u5L5xJz6KxG7jNrWykyTNyg83DHXAWGU-tPFqabLFpJ7TdFQN2m77z6wOewDOkdMItU4wwzR3LDg_nvHYMbYiONej0Pye2OhqXG4t0-eibD0fSqDEpa8fANisjsMz5ja4YpXt5N8-BzD0qtBK3-i1K7YDGguKbjAZ8rMH0Qb6LcWOFbuZTyKFAXPTtijPpkUqXc1xixU1q3nwII8sFvJwcdCD1_RvSQZk6-bp4Xh-LeJhRLoQWOWWvWRbcXdCVSjow58">
-<View></View>
-<View>
-<View>
-<View>
-<Text>Gyeongbokgung<br>Palace</Text>
-<Text>The Heart of Old Seoul</Text>
-</View>
-<View>
-<i class="fa-solid fa-check text-[#5c77ff] text-xs"></i>
-</View>
-</View>
-</View>
-</View>
-</section>
-<!-- END: PrimaryLocationSection -->
-<!-- BEGIN: NearbyActivitiesSection -->
-<section class="mb-8">
-<View>
-<i class="fa-solid fa-compass text-[#5c77ff]"></i>
-<Text>Nearby Activities</Text>
-</View>
-<View>
-<!-- Activity 1 -->
-<label class="flex items-center justify-between p-3 bg-[#1a1a1a] border border-gray-800 rounded-xl cursor-pointer hover:border-gray-600 transition-colors">
-<View>
-<View>
-<i class="fa-solid fa-building-columns"></i>
-</View>
-<View>
-<View>MMCA (Contemporary Art)</View>
-<View>Modern Art &amp; Design</View>
-</View>
-</View>
-<View>
-<input class="sr-only" type="checkbox">
-<View>
-<svg class="checkmark-svg w-3 h-3 text-[#5c77ff]" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><Text></path></svg>
-</View>
-</View>
-</label>
-<!-- Activity 2 -->
-<label class="flex items-center justify-between p-3 bg-[#1a1a1a] border border-gray-800 rounded-xl cursor-pointer hover:border-gray-600 transition-colors">
-<View>
-<View>
-<i class="fa-solid fa-map-location-dot"></i>
-</View>
-<View>
-<View>Gyeongbokgung (Detailed Tour)</View>
-<View>Guided Palace History</View>
-</View>
-</View>
-<View>
-<input checked="" class="sr-only" type="checkbox">
-<View>
-<svg class="checkmark-svg w-3 h-3 text-[#5c77ff]" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><Text></path></svg>
-</View>
-</View>
-</label>
-<!-- Activity 3 -->
-<label class="flex items-center justify-between p-3 bg-[#1a1a1a] border border-gray-800 rounded-xl cursor-pointer hover:border-gray-600 transition-colors">
-<View>
-<View>
-<i class="fa-solid fa-book-open"></i>
-</View>
-<View>
-<View>Kyobo Bookstore</View>
-<View>Korea's Largest Bookstore</View>
-</View>
-</View>
-<View>
-<input class="sr-only" type="checkbox">
-<View>
-<svg class="checkmark-svg w-3 h-3 text-[#5c77ff]" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><Text></path></svg>
-</View>
-</View>
-</label>
-<!-- Activity 4 -->
-<label class="flex items-center justify-between p-3 bg-[#1a1a1a] border border-gray-800 rounded-xl cursor-pointer hover:border-gray-600 transition-colors">
-<View>
-<View>
-<i class="fa-solid fa-house-chimney-window"></i>
-</View>
-<View>
-<View>Bukchon Hanok Village</View>
-<View>Traditional Korean Houses</View>
-</View>
-</View>
-<View>
-<input checked="" class="sr-only" type="checkbox">
-<View>
-<svg class="checkmark-svg w-3 h-3 text-[#5c77ff]" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><Text></path></svg>
-</View>
-</View>
-</label>
-</View>
-<TouchableOpacity>
-<i class="fa-solid fa-wand-magic-sparkles"></i>
-        Generate Itinerary
-      </TouchableOpacity>
-</section>
-<!-- END: NearbyActivitiesSection -->
-<hr class="border-gray-800 my-8">
-<!-- BEGIN: GeneratedRouteSection -->
-<section>
-<View>
-<View>
-<View>
-<Text>Generated<br>Route</Text>
-<span class="bg-[#064e3b] text-[#34d399] border border-[#047857] text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider self-start mt-1">AI<br>Optimized</span>
-</View>
-<Text>Drag handles to reorder your<br>schedule.</Text>
-</View>
-<View>
-<View>8 Hours</View>
-<View>Estimated<br>Duration</View>
-</View>
-</View>
-<View>
-<View></View>
-<View>
-<!-- Stop 1 -->
-<View>
-<View>
-              01
-            </View>
-<View>
-<View>
-<i class="fa-solid fa-grip-vertical"></i>
-</View>
-<View>
-<View>
-<Text>Gyeongbokgung<br>Palace</Text>
-<View>09:00<br>AM</View>
-</View>
-<Text>Start your day exploring the largest of the Five...</Text>
-<View>
-<span class="text-[10px] bg-[#131313] border border-gray-700 px-2 py-1 rounded text-gray-300">2.5 hours</span>
-<span class="text-[10px] bg-[#131313] border border-gray-700 px-2 py-1 rounded text-gray-300">Walking</span>
-</View>
-</View>
-</View>
-</View>
-<!-- Stop 2 -->
-<View>
-<View>
-              02
-            </View>
-<View>
-<View>
-<i class="fa-solid fa-grip-vertical"></i>
-</View>
-<View>
-<View>
-<Text>Bukchon Hanok<br>Village</Text>
-<View>11:45<br>AM</View>
-</View>
-<Text>A short walk from the palace. Wander through...</Text>
-<View>
-<span class="text-[10px] bg-[#131313] border border-gray-700 px-2 py-1 rounded text-gray-300">1.5 hours</span>
-<span class="text-[10px] bg-[#131313] border border-gray-700 px-2 py-1 rounded text-gray-300">Photography</span>
-</View>
-</View>
-</View>
-</View>
-<!-- Lunch Break -->
-<View>
-<View>
-<i class="fa-solid fa-utensils"></i>
-</View>
-<View>
-<span class="text-sm text-gray-400">Lunch Break in<br>Insadong</span>
-<span class="text-[10px] text-gray-500 text-right leading-tight">13:15<br>PM</span>
-</View>
-</View>
-<!-- Stop 3 -->
-<View>
-<View>
-              03
-            </View>
-<View>
-<View>
-<i class="fa-solid fa-grip-vertical"></i>
-</View>
-<View>
-<View>
-<Text>N Seoul Tower</Text>
-<View>15:00 PM</View>
-</View>
-<Text>Head up Namsan Mountain for panoramic...</Text>
-<View>
-<span class="text-[10px] bg-[#131313] border border-gray-700 px-2 py-1 rounded text-gray-300">2 hours</span>
-<span class="text-[10px] bg-[#131313] border border-gray-700 px-2 py-1 rounded text-gray-300">Scenic</span>
-</View>
-</View>
-</View>
-</View>
-</View>
-</View>
-</section>
-<!-- END: GeneratedRouteSection -->
-</main>
-<!-- END: MainContent -->
-<!-- BEGIN: BottomActionArea -->
-<View>
-<View>
-<TouchableOpacity>
-        Save Draft
-      </TouchableOpacity>
-<TouchableOpacity>
-        Finalize Plan
-      </TouchableOpacity>
-</View>
-</View><nav class="fixed bottom-6 left-4 right-4 bg-[#1a1a1a]/90 backdrop-blur-md border border-gray-800 rounded-full flex justify-around items-center py-2 px-2 shadow-2xl z-[60]"><TouchableOpacity><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><Text></path></svg></TouchableOpacity><TouchableOpacity><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><Text></path></svg></TouchableOpacity><TouchableOpacity><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><Text></path><Text></path></svg></TouchableOpacity></nav>
-<!-- END: BottomActionArea -->
-<script>
-  // Parallax Logic
-  const heroCard = document.getElementById('heroCard');
-  const heroBg = document.getElementById('heroBg');
-
-  if (heroCard && heroBg && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    heroCard.addEventListener('mousemove', (e) => {
-      const rect = heroCard.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      
-      const centerX = rect.width / 2;
-      const centerY = rect.height / 2;
-      
-      const rotateX = (y - centerY) / 20;
-      const rotateY = (centerX - x) / 20;
-      
-      // Card tilt
-      heroCard.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
-      
-      // Subtle background shift (inverse direction)
-      const moveX = (x - centerX) / 15;
-      const moveY = (y - centerY) / 15;
-      heroBg.style.transform = `scale(1.1) translate(${moveX}px, ${moveY}px)`;
-    });
-
-    heroCard.addEventListener('mouseleave', () => {
-      heroCard.style.transform = 'rotateX(0deg) rotateY(0deg)';
-      heroBg.style.transform = 'scale(1.1) translate(0, 0)';
-    });
-
-    // Device orientation support for mobile
-    if (window.DeviceOrientationEvent) {
-      window.addEventListener('deviceorientation', (e) => {
-        const tiltX = Math.min(Math.max(e.beta, -30), 30) / 3;
-        const tiltY = Math.min(Math.max(e.gamma, -30), 30) / 3;
-        
-        heroCard.style.transform = `rotateX(${tiltX}deg) rotateY(${tiltY}deg)`;
-        heroBg.style.transform = `scale(1.1) translate(${tiltY * -1.5}px, ${tiltX * -1.5}px)`;
-      });
-    }
-  }
-
-  // Checkbox Drawing Interaction
-  document.querySelectorAll('label input[type="checkbox"]').forEach(checkbox => {
-    checkbox.addEventListener('change', (e) => {
-      const container = e.target.nextElementSibling;
-      if (e.target.checked) {
-        container.classList.add('border-[#5c77ff]');
-        container.classList.remove('border-gray-700');
-      } else {
-        container.classList.remove('border-[#5c77ff]');
-        container.classList.add('border-gray-700');
-      }
-    });
+export default function PlanYourJourneyView() {
+  const [activities, setActivities] = useState({
+    mmca: false,
+    detailedPalace: true,
+    kyobo: false,
+    hanok: true,
   });
-</script>
-</body></html>    </ScrollView>
+
+  const toggleActivity = (key) => {
+    setActivities(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  return (
+    <View style={styles.container}>
+      
+      {/* 1. STICKY TOP APP HEADER */}
+      <View style={styles.header}>
+        <View style={styles.headerLeftRow}>
+          <Svg width="18" height="18" fill="none" stroke="#5c77ff" strokeWidth="2" viewBox="0 0 24 24">
+            <Path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+          </Svg>
+          <Text style={styles.headerBrandText}>Buddy</Text>
+        </View>
+        <TouchableOpacity style={styles.menuButton}>
+          <Svg width="20" height="20" fill="none" stroke="#9ca3af" strokeWidth="2" viewBox="0 0 24 24">
+            <Path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </Svg>
+        </TouchableOpacity>
+      </View>
+
+      {/* 2. CORE UTILITY FLOW WORKSPACE */}
+      <ScrollView 
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollPadding}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Title Hero Block */}
+        <View style={styles.heroBlock}>
+          <Text style={styles.mainHeadline}>Plan Your Journey</Text>
+          <Text style={styles.heroSubtitle}>
+            Select your preferred destinations and customize your itinerary settings to generate a personalized route.
+          </Text>
+        </View>
+
+        {/* PREFERENCES CONFIGURATION SELECT PANEL */}
+        <View style={styles.sectionCard}>
+          <div style={styles.sectionHeaderRow}>
+            <Svg width="16" height="16" fill="none" stroke="#5c77ff" strokeWidth="2" viewBox="0 0 24 24" style={styles.inlineIconMargin}>
+              <Path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+            </Svg>
+            <Text style={styles.sectionTitle}>Preferences</Text>
+          </div>
+
+          <View style={styles.formGroupSpacing}>
+            <View>
+              <Text style={styles.fieldLabel}>Budget Level</Text>
+              <TouchableOpacity style={styles.customSelectTrigger}>
+                <Text style={styles.selectText}>Standard</Text>
+                <Text style={styles.dropdownCarat}>▼</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View>
+              <Text style={styles.fieldLabel}>Available Time</Text>
+              <TouchableOpacity style={styles.customSelectTrigger}>
+                <Text style={styles.selectText}>Full Day (8 hrs)</Text>
+                <Text style={styles.dropdownCarat}>▼</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        {/* PRIMARY LOCATION SELECT HIGHLIGHT */}
+        <View style={styles.sectionContainerMargin}>
+          <div style={styles.sectionHeaderRow}>
+            <Svg width="16" height="16" fill="none" stroke="#5c77ff" strokeWidth="2" viewBox="0 0 24 24" style={styles.inlineIconMargin}>
+              <Path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <Path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </Svg>
+            <Text style={styles.sectionTitle}>Primary Location</Text>
+          </div>
+
+          <View style={styles.parallaxCardWrapper}>
+            <Image 
+              source={{ uri: 'https://images.unsplash.com/photo-1540959733332-eab4deceeaf7?w=500' }} 
+              style={styles.parallaxHeroImage} 
+            />
+            <View style={styles.imageDimOverlay} />
+            <View style={styles.parallaxCardTextOverlay}>
+              <View style={styles.flexSplitRow}>
+                <View>
+                  <Text style={styles.parallaxCardHeadline}>Gyeongbokgung Palace</Text>
+                  <Text style={styles.parallaxAccentSubtext}>The Heart of Old Seoul</Text>
+                </View>
+                <View style={styles.whiteCheckCircle}>
+                  <Text style={styles.blueCheckChar}>✓</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* NEARBY ACTIVITIES SELECTION STACK */}
+        <View style={styles.sectionContainerMargin}>
+          <div style={styles.sectionHeaderRow}>
+            <Svg width="16" height="16" fill="none" stroke="#5c77ff" strokeWidth="2" viewBox="0 0 24 24" style={styles.inlineIconMargin}>
+              <Path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+            </Svg>
+            <Text style={styles.sectionTitle}>Nearby Activities</Text>
+          </div>
+
+          <View style={styles.activityListContainer}>
+            {/* Activity Node 1 */}
+            <TouchableOpacity style={styles.activityRowCard} onPress={() => toggleActivity('mmca')}>
+              <View style={styles.activityCardLeftInfo}>
+                <View style={styles.activityIconBox} />
+                <View>
+                  <Text style={styles.activityMainTitleText}>MMCA (Contemporary Art)</Text>
+                  <Text style={styles.activityCategoryText}>Modern Art & Design</Text>
+                </View>
+              </View>
+              <View style={[styles.nativeCheckboxOutline, activities.mmca && styles.checkboxActiveState]}>
+                {activities.mmca && <Text style={styles.checkboxCheckSymbol}>✓</Text>}
+              </View>
+            </TouchableOpacity>
+
+            {/* Activity Node 2 */}
+            <TouchableOpacity style={styles.activityRowCard} onPress={() => toggleActivity('detailedPalace')}>
+              <View style={styles.activityCardLeftInfo}>
+                <View style={styles.activityIconBox} />
+                <View>
+                  <Text style={styles.activityMainTitleText}>Gyeongbokgung (Detailed Tour)</Text>
+                  <Text style={styles.activityCategoryText}>Guided Palace History</Text>
+                </View>
+              </View>
+              <View style={[styles.nativeCheckboxOutline, activities.detailedPalace && styles.checkboxActiveState]}>
+                {activities.detailedPalace && <Text style={styles.checkboxCheckSymbol}>✓</Text>}
+              </View>
+            </TouchableOpacity>
+
+            {/* Activity Node 3 */}
+            <TouchableOpacity style={styles.activityRowCard} onPress={() => toggleActivity('kyobo')}>
+              <View style={styles.activityCardLeftInfo}>
+                <View style={styles.activityIconBox} />
+                <View>
+                  <Text style={styles.activityMainTitleText}>Kyobo Bookstore</Text>
+                  <Text style={styles.activityCategoryText}>Korea's Largest Bookstore</Text>
+                </View>
+              </View>
+              <View style={[styles.nativeCheckboxOutline, activities.kyobo && styles.checkboxActiveState]}>
+                {activities.kyobo && <Text style={styles.checkboxCheckSymbol}>✓</Text>}
+              </View>
+            </TouchableOpacity>
+
+            {/* Activity Node 4 */}
+            <TouchableOpacity style={styles.activityRowCard} onPress={() => toggleActivity('hanok')}>
+              <View style={styles.activityCardLeftInfo}>
+                <View style={styles.activityIconBox} />
+                <View>
+                  <Text style={styles.activityMainTitleText}>Bukchon Hanok Village</Text>
+                  <Text style={styles.activityCategoryText}>Traditional Korean Houses</Text>
+                </View>
+              </View>
+              <View style={[styles.nativeCheckboxOutline, activities.hanok && styles.checkboxActiveState]}>
+                {activities.hanok && <Text style={styles.checkboxCheckSymbol}>✓</Text>}
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          {/* GENERATE RUN SHIMMER HUD ACTION BUTTON */}
+          <TouchableOpacity style={styles.sparkleGradientButton} onPress={() => console.log('Re-run generative optimizer map logic')}>
+            <Text style={styles.sparkleButtonText}>✨ Generate Itinerary</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.dividerLine} />
+
+        {/* GENERATED ROUTE REAL-TIME PREVIEW TILES */}
+        <View style={styles.sectionContainerMargin}>
+          <View style={styles.routeSplitHeaderRow}>
+            <View>
+              <View style={styles.badgeLabelContainerAlign}>
+                <Text style={styles.routeHeadlineText}>Generated Route</Text>
+                <View style={styles.aiBadgeTag}>
+                  <Text style={styles.aiBadgeText}>AI OPTIMIZED</Text>
+                </View>
+              </View>
+              <Text style={styles.dragSubtextHelper}>Drag handles to reorder your schedule.</Text>
+            </View>
+            <View style={styles.rightAlignSummaryBlock}>
+              <Text style={styles.durationSummaryText}>8 Hours</Text>
+              <Text style={styles.dragSubtextHelper}>Estimated Duration</Text>
+            </View>
+          </View>
+
+          <View style={styles.timelineStructuralTrack}>
+            {/* Svg Timeline Line Tracker Overlay */}
+            <Svg style={styles.absoluteTimelineLineSegment} pointerEvents="none">
+              <Line x1="20" y1="20" x2="20" y2="340" stroke="#333333" strokeWidth="1" />
+            </Svg>
+
+            {/* Stops Preview Card Step 1 */}
+            <View style={styles.stopsTimelineRow}>
+              <View style={[styles.circleNodeCountElement, styles.activeBorderHighlightCircle]}>
+                <Text style={styles.nodeCountActiveText}>01</Text>
+              </View>
+              <View style={styles.stopInfoDataCard}>
+                <View style={styles.gripDragButtonLeft}>
+                  <Text style={styles.gripIconText}>⋮⋮</Text>
+                </View>
+                <View style={styles.stopInfoCardCoreBody}>
+                  <View style={styles.stopCardHeaderSplitRow}>
+                    <Text style={styles.stopNodeTitle}>Gyeongbokgung Palace</Text>
+                    <Text style={styles.stopNodeTimeLabel}>09:00 AM</Text>
+                  </View>
+                  <Text style={styles.stopCardTextExcerpt}>Start your day exploring the largest of the Five...</Text>
+                  <View style={styles.tagPillsContainerCluster}>
+                    <View style={styles.interiorCardTagPill}><Text style={styles.interiorPillText}>2.5 hours</Text></View>
+                    <View style={styles.interiorCardTagPill}><Text style={styles.interiorPillText}>Walking</Text></View>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {/* Stops Preview Card Step 2 */}
+            <View style={styles.stopsTimelineRow}>
+              <View style={styles.circleNodeCountElement}>
+                <Text style={styles.nodeCountMutedText}>02</Text>
+              </View>
+              <View style={styles.stopInfoDataCard}>
+                <View style={styles.gripDragButtonLeft}>
+                  <Text style={styles.gripIconText}>⋮⋮</Text>
+                </View>
+                <View style={styles.stopInfoCardCoreBody}>
+                  <View style={styles.stopCardHeaderSplitRow}>
+                    <Text style={styles.stopNodeTitle}>Bukchon Hanok Village</Text>
+                    <Text style={styles.stopNodeTimeLabel}>11:45 AM</Text>
+                  </View>
+                  <Text style={styles.stopCardTextExcerpt}>A short walk from the palace. Wander through...</Text>
+                  <View style={styles.tagPillsContainerCluster}>
+                    <View style={styles.interiorCardTagPill}><Text style={styles.interiorPillText}>1.5 hours</Text></View>
+                    <View style={styles.interiorCardTagPill}><Text style={styles.interiorPillText}>Photography</Text></View>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {/* Stops Preview Intercept Lunch Panel */}
+            <View style={styles.stopsTimelineRow}>
+              <View style={styles.lunchIconCircleNodeElement}>
+                <Text style={styles.lunchIconChar}>🍴</Text>
+              </View>
+              <View style={styles.lunchSegmentBannerBox}>
+                <Text style={styles.lunchBannerMainText}>Lunch Break in Insadong</Text>
+                <Text style={styles.lunchBannerTimeText}>13:15 PM</Text>
+              </View>
+            </View>
+
+            {/* Stops Preview Card Step 3 */}
+            <View style={styles.stopsTimelineRow}>
+              <View style={styles.circleNodeCountElement}>
+                <Text style={styles.nodeCountMutedText}>03</Text>
+              </View>
+              <View style={styles.stopInfoDataCard}>
+                <View style={styles.gripDragButtonLeft}>
+                  <Text style={styles.gripIconText}>⋮⋮</Text>
+                </View>
+                <View style={styles.stopInfoCardCoreBody}>
+                  <View style={styles.stopCardHeaderSplitRow}>
+                    <Text style={styles.stopNodeTitle}>N Seoul Tower</Text>
+                    <Text style={styles.stopNodeTimeLabel}>15:00 PM</Text>
+                  </View>
+                  <Text style={styles.stopCardTextExcerpt}>Head up Namsan Mountain for panoramic...</Text>
+                  <View style={styles.tagPillsContainerCluster}>
+                    <View style={styles.interiorCardTagPill}><Text style={styles.interiorPillText}>2 hours</Text></View>
+                    <View style={styles.interiorCardTagPill}><Text style={styles.interiorPillText}>Scenic</Text></View>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+          </View>
+        </View>
+
+      </ScrollView>
+
+      {/* 3. PERSISTENT LOWER HORIZONTAL FOOTER INTERACTION UTILITY DOCK */}
+      <View style={styles.bottomStickyActionTray}>
+        <View style={styles.bottomHorizontalDockAlignRow}>
+          <TouchableOpacity style={styles.saveDraftOutlineButton}>
+            <Text style={styles.saveDraftText}>Save Draft</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.finalizePrimaryActionButton} onPress={() => console.log('Deploy finalized route layout to server')}>
+            <Text style={styles.finalizeButtonText}>Finalize Plan</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* 4. OVERLAY CORE HORIZONTAL SYSTEM NAV PILL HUD */}
+      <View style={styles.overlayTabNavigatorContainer}>
+        <View style={styles.navigationDockPillBox}>
+          
+          <TouchableOpacity style={styles.tabBubbleActiveState} onPress={() => console.log('Stay Route screen_14')}>
+            <Svg width="24" height="24" fill="none" stroke="#ffffff" strokeWidth="2" viewBox="0 0 24 24">
+              <Path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
+            </Svg>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.tabButtonMuted} onPress={() => console.log('Route screen_11')}>
+            <Svg width="24" height="24" fill="none" stroke="#9ca3af" strokeWidth="2" viewBox="0 0 24 24">
+              <Path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" strokeLinecap="round" strokeLinejoin="round" />
+            </Svg>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.tabButtonMuted} onPress={() => console.log('Route screen_10')}>
+            <Svg width="24" height="24" fill="none" stroke="#9ca3af" strokeWidth="2" viewBox="0 0 24 24">
+              <Path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" strokeLinecap="round" strokeLinejoin="round" />
+              <Path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" strokeLinecap="round" strokeLinejoin="round" />
+            </Svg>
+          </TouchableOpacity>
+
+        </View>
+      </View>
+
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0b0b0f',
+    backgroundColor: '#131313',
+  },
+  header: {
+    backgroundColor: 'rgba(19, 19, 19, 0.9)',
+    borderBottomWidth: 1,
+    borderColor: '#1f2937',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'between',
+  },
+  headerLeftRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerBrandText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#5c77ff',
+  },
+  menuButton: {
+    padding: 8,
+  },
+  scrollContainer: {
+    flex: 1,
+  },
+  scrollPadding: {
+    paddingHorizontal: 16,
+    paddingTop: 32,
+    paddingBottom: 140,
+  },
+  heroBlock: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  mainHeadline: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: '#ffffff',
+    letterSpacing: -0.5,
+    marginBottom: 12,
+  },
+  heroSubtitle: {
+    fontSize: 14,
+    color: '#9ca3af',
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: 8,
+  },
+  sectionCard: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    marginBottom: 24,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  inlineIconMargin: {
+    marginRight: 8,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  formGroupSpacing: {
+    gap: 16,
+  },
+  fieldLabel: {
+    fontSize: 12,
+    color: '#9ca3af',
+    marginBottom: 6,
+  },
+  customSelectTrigger: {
+    backgroundColor: '#131313',
+    borderWidth: 1,
+    borderColor: '#374151',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  selectText: {
+    color: '#ffffff',
+    fontSize: 14,
+  },
+  dropdownCarat: {
+    color: '#9ca3af',
+    fontSize: 10,
+  },
+  sectionContainerMargin: {
+    marginBottom: 24,
+  },
+  parallaxCardWrapper: {
+    position: 'relative',
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#5c77ff',
+    height: 128,
+    shadowColor: '#5c77ff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+  },
+  parallaxHeroImage: {
+    width: '100%',
+    height: '100%',
+    opacity: 0.6,
+  },
+  imageDimOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(19, 19, 19, 0.4)',
+  },
+  parallaxCardTextOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     padding: 16,
+  },
+  flexSplitRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  parallaxCardHeadline: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#ffffff',
+    lineHeight: 24,
+  },
+  parallaxAccentSubtext: {
+    fontSize: 12,
+    color: '#5c77ff',
+    marginTop: 4,
+  },
+  whiteCheckCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  blueCheckChar: {
+    color: '#5c77ff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  activityListContainer: {
+    gap: 8,
+  },
+  activityRowCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    borderRadius: 16,
+    padding: 12,
+  },
+  activityCardLeftInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  activityIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: '#2a2a2a',
+  },
+  activityMainTitleText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#ffffff',
+  },
+  activityCategoryText: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  nativeCheckboxOutline: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#374151',
+    backgroundColor: '#131313',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxActiveState: {
+    borderColor: '#5c77ff',
+  },
+  checkboxCheckSymbol: {
+    color: '#5c77ff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  sparkleGradientButton: {
+    backgroundColor: '#5c77ff',
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    shadowColor: '#5c77ff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 15,
+  },
+  sparkleButtonText: {
+    color: '#131313',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  dividerLine: {
+    height: 1,
+    backgroundColor: '#2a2a2a',
+    marginVertical: 32,
+  },
+  routeSplitHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'start',
+    marginBottom: 32,
+  },
+  badgeLabelContainerAlign: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  routeHeadlineText: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#ffffff',
+    lineHeight: 28,
+  },
+  aiBadgeTag: {
+    backgroundColor: 'rgba(6, 78, 59, 0.4)',
+    borderColor: '#047857',
+    borderWidth: 1,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  aiBadgeText: {
+    color: '#34d399',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  dragSubtextHelper: {
+    fontSize: 12,
+    color: '#6b7280',
+    lineHeight: 16,
+    marginTop: 4,
+  },
+  rightAlignSummaryBlock: {
+    alignItems: 'flex-end',
+  },
+  durationSummaryText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  timelineStructuralTrack: {
+    position: 'relative',
+    paddingLeft: 40,
+  },
+  absoluteTimelineLineSegment: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
+  },
+  stopsTimelineRow: {
+    flexDirection: 'row',
+    position: 'relative',
+    marginBottom: 24,
+    width: '100%',
+  },
+  circleNodeCountElement: {
+    position: 'absolute',
+    left: -40,
+    top: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#4b5563',
+    backgroundColor: '#131313',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  activeBorderHighlightCircle: {
+    borderColor: '#5c77ff',
+    shadowColor: '#5c77ff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  nodeCountActiveText: {
+    color: '#5c77ff',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  nodeCountMutedText: {
+    color: '#9ca3af',
+    fontSize: 14,
+  },
+  stopInfoDataCard: {
+    flex: 1,
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'row',
+    gap: 12,
+  },
+  gripDragButtonLeft: {
+    paddingTop: 2,
+  },
+  gripIconText: {
+    color: '#4b5563',
+    fontSize: 16,
+  },
+  stopInfoCardCoreBody: {
+    flex: 1,
+  },
+  stopCardHeaderSplitRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'start',
+    marginBottom: 4,
+  },
+  stopNodeTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ffffff',
+    flex: 1,
+    paddingRight: 8,
+  },
+  stopNodeTimeLabel: {
+    fontSize: 11,
+    color: '#6b7280',
+    textAlign: 'right',
+  },
+  stopCardTextExcerpt: {
+    fontSize: 13,
+    color: '#9ca3af',
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  tagPillsContainerCluster: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  interiorCardTagPill: {
+    backgroundColor: '#131313',
+    borderColor: '#374151',
+    borderWidth: 1,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  interiorPillText: {
+    color: '#d1d5db',
+    fontSize: 10,
+  },
+  lunchIconCircleNodeElement: {
+    position: 'absolute',
+    left: -40,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#047857',
+    backgroundColor: 'rgba(6, 78, 59, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  lunchIconChar: {
+    fontSize: 14,
+  },
+  lunchSegmentBannerBox: {
+    flex: 1,
+    backgroundColor: '#131313',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    borderRadius: 16,
+    padding: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  lunchBannerMainText: {
+    fontSize: 14,
+    color: '#9ca3af',
+  },
+  lunchBannerTimeText: {
+    fontSize: 11,
+    color: '#6b7280',
+  },
+  bottomStickyActionTray: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(19, 19, 19, 0.95)',
+    borderTopWidth: 1,
+    borderColor: '#2a2a2a',
+    padding: 16,
+    paddingBottom: 24,
+    zIndex: 50,
+  },
+  bottomHorizontalDockAlignRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  saveDraftOutlineButton: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#374151',
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveDraftText: {
+    color: '#ffffff',
+    fontWeight: '500',
+    fontSize: 16,
+  },
+  finalizePrimaryActionButton: {
+    flex: 1,
+    backgroundColor: '#5c77ff',
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#5c77ff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.2,
+    shadowRadius: 15,
+  },
+  finalizeButtonText: {
+    color: '#131313',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  overlayTabNavigatorContainer: {
+    position: 'absolute',
+    bottom: 24,
+    left: 16,
+    right: 16,
+    zIndex: 60,
+    alignItems: 'center',
+  },
+  navigationDockPillBox: {
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    borderRadius: 9999,
+    paddingHorizontal: 24,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 32,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  tabButtonMuted: {
+    padding: 4,
+  },
+  tabBubbleActiveState: {
+    backgroundColor: '#5c77ff',
+    padding: 12,
+    borderRadius: 9999,
+    shadowColor: '#5c77ff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 15,
   },
 });

@@ -1,239 +1,273 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import Svg, { Line, Path, Circle } from 'react-native-svg';
 
-export default function RenderedScreen() {
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+
+export default function ARMapNavigationView() {
   return (
-    <ScrollView style={styles.container}>
-<!DOCTYPE html><html lang="en"><head>
-<meta charset="utf-8">
-<meta content="width=device-width, initial-scale=1.0" name="viewport">
-<title>AR/Map Navigation View</title>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            custom: {
-              bg: '#0f0f13',
-              grid: '#1f1f23',
-              accent: '#5c77ff',
-              accentLight: '#8ca1ff',
-              accentDark: '#3b4ccb',
-              surface: '#18181b',
-              surfaceLight: '#27272a',
-            }
-          },
-          fontFamily: {
-            sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
-          }
-        }
-      }
-    }
-  </script>
-<style data-purpose="custom-utilities">
-    /* Subtle glowing effect for circles */
-    .glow-circle {
-      box-shadow: 0 0 40px rgba(92, 119, 255, 0.15);
-    }
-    
-    /* Grid background pattern */
-    .bg-grid-pattern {
-      background-image: 
-        linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px);
-      background-size: 50px 50px;
-    }
-
-    /* Soft inner glow for floating panels */
-    .panel-shadow {
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-    }
-
-    /* Animations */
-    @keyframes breathing-grid {
-      0%, 100% { opacity: 0.4; transform: scale(1); }
-      50% { opacity: 0.7; transform: scale(1.02); }
-    }
-
-    @keyframes radar-pulse {
-      0% { transform: scale(1); opacity: 0.6; }
-      100% { transform: scale(2.5); opacity: 0; }
-    }
-
-    @keyframes bobbing {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-8px); }
-    }
-
-    @keyframes slide-down-bounce {
-      0% { transform: translateY(-150%); opacity: 0; }
-      70% { transform: translateY(10%); opacity: 1; }
-      100% { transform: translateY(0); opacity: 1; }
-    }
-
-    @keyframes amber-pulse {
-      0%, 100% { border-color: rgba(255, 255, 255, 0.1); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); }
-      50% { border-color: rgba(251, 191, 36, 0.4); box-shadow: 0 8px 32px rgba(251, 191, 36, 0.15); }
-    }
-
-    .animate-breathing {
-      animation: breathing-grid 8s ease-in-out infinite;
-    }
-
-    .animate-radar::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      border-radius: 9999px;
-      border: 1px solid rgba(140, 161, 255, 0.5);
-      animation: radar-pulse 3s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
-    }
-
-    .animate-bob {
-      animation: bobbing 4s ease-in-out infinite;
-    }
-
-    .animate-alert-entry {
-      animation: slide-down-bounce 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
-                 amber-pulse 3s ease-in-out infinite 1s;
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .animate-breathing, .animate-radar::before, .animate-bob, .animate-alert-entry {
-        animation: none !important;
-      }
-      .animate-alert-entry {
-        transform: translateY(0);
-        opacity: 1;
-      }
-    }
-  </style>
-<style data-purpose="layout-fixes">
-    body, html {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      overflow: hidden;
-      background-color: #0f0f13; /* Fallback */
-    }
-  </style>
-</head>
-<body class="bg-custom-bg text-white font-sans antialiased h-screen w-screen overflow-hidden relative font-medium">
-<!-- BEGIN: Map Background -->
-<View>
-<!-- Decorative Circle Top Right -->
-<View></View>
-<!-- Decorative Circle Mid Left -->
-<View></View>
-<!-- Decorative Circle Bottom Right -->
-<View></View>
-<!-- Perspective Grid Lines (Simulation) -->
-<svg class="absolute inset-0 w-full h-full opacity-20 pointer-events-none" xmlns="http://www.w3.org/2000/svg">
-<line stroke="#5c77ff" stroke-dasharray="4 4" stroke-width="1" x1="0%" x2="100%" y1="20%" y2="40%"></line>
-<line stroke="#5c77ff" stroke-dasharray="4 4" stroke-width="1" x1="0%" x2="100%" y1="80%" y2="60%"></line>
-</svg>
-</View>
-<!-- END: Map Background -->
-<!-- BEGIN: Top Notification -->
-<View>
-<View>
-<!-- Icon Container -->
-<View>
-<svg class="h-6 w-6 text-custom-accentLight" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-<Text></path>
-</svg>
-</View>
-<!-- Text Content -->
-<View>
-<Text>Watch your step</Text>
-<Text>Approaching uneven terrain.</Text>
-</View>
-</View>
-</View>
-<!-- END: Top Notification -->
-<!-- BEGIN: Current Location Marker -->
-<View>
-<!-- Pulsing Radar Circle -->
-<View>
-<View></View>
-<!-- Pin Icon Container -->
-<View>
-<svg class="h-8 w-8" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-</View>
-</View>
-<!-- Label Pill -->
-<View>
-<View></View>
-<span class="text-[10px] font-bold tracking-wider text-gray-200 uppercase">Current Location</span>
-</View>
-</View>
-<!-- END: Current Location Marker -->
-<!-- BEGIN: Bottom Navigation Bar -->
-<View>
-<nav class="w-full max-w-sm bg-custom-surface/95 backdrop-blur-xl border border-white/5 rounded-3xl h-20 flex items-center justify-around px-2 panel-shadow relative">
-<!-- Nav Item 1: Calendar/Events -->
-<TouchableOpacity>
-<svg class="h-6 w-6 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-</TouchableOpacity>
-<!-- Nav Item 2: Main Action (Chat/Communicate) -->
-<View>
-<TouchableOpacity>
-<svg class="h-8 w-8" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-</TouchableOpacity>
-</View>
-<!-- Nav Item 3: Settings -->
-<TouchableOpacity>
-<svg class="h-6 w-6 group-hover:rotate-45 transition-transform" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-<Text></path>
-</svg>
-</TouchableOpacity>
-</nav>
-</View>
-<!-- END: Bottom Navigation Bar -->
-<script>
-  // Script to handle interactive micro-transitions if needed
-  document.addEventListener('DOMContentLoaded', () => {
-    // Add subtle hover/tilt effect to the notification card using JS for precision
-    const notification = document.querySelector('[data-purpose="top-notification"] > div');
-    
-    if (window.matchMedia('(prefers-reduced-motion: no-preference)').matches) {
-      notification.addEventListener('mousemove', (e) => {
-        const rect = notification.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        
-        const centerX = rect.width / 2;
-        const centerY = rect.height / 2;
-        
-        const rotateX = (y - centerY) / 10;
-        const rotateY = (centerX - x) / 10;
-        
-        notification.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
-      });
+    <View style={styles.container}>
       
-      notification.addEventListener('mouseleave', () => {
-        notification.style.transform = `perspective(1000px) rotateX(0deg) rotateY(0deg)`;
-      });
-    }
-  });
-</script>
-</body></html>    </ScrollView>
+      {/* 1. MAP BACKGROUND PATTERN (REPLACING WEB TAILWIND GRID) */}
+      <View style={styles.backgroundContainer}>
+        {/* Decorative Glowing Vector Circles */}
+        <View style={[styles.glowCircle, styles.circleTopRight]} />
+        <View style={[styles.glowCircle, styles.circleMidLeft]} />
+        <View style={[styles.glowCircle, styles.circleBottomRight]} />
+        
+        {/* Simulated Perspective Grid Lines via Mobile Svg */}
+        <Svg style={styles.svgOverlay} pointerEvents="none">
+          <Line x1="0%" y1="20%" x2="100%" y2="40%" stroke="#5c77ff" strokeWidth="1" strokeDasharray="4 4" opacity="0.2" />
+          <Line x1="0%" y1="80%" x2="100%" y2="60%" stroke="#5c77ff" strokeWidth="1" strokeDasharray="4 4" opacity="0.2" />
+        </Svg>
+      </View>
+
+      {/* 2. TOP ALERT NOTIFICATION */}
+      <View style={styles.topNotificationContainer}>
+        <View style={styles.notificationPanel}>
+          {/* Eye Icon Container */}
+          <View style={styles.iconContainer}>
+            <Svg width="24" height="24" fill="none" stroke="#8ca1ff" strokeWidth="1.5" viewBox="0 0 24 24">
+              <Path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <Path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </Svg>
+          </View>
+          {/* Text Descriptions */}
+          <View style={styles.textContainer}>
+            <Text style={styles.notificationTitle}>Watch your step</Text>
+            <Text style={styles.notificationSubtitle}>Approaching uneven terrain.</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* 3. CURRENT LOCATION RADAR MARKER */}
+      <View style={styles.markerContainer}>
+        <View style={styles.radarRing}>
+          <Svg width="32" height="32" viewBox="0 0 20 20" fill="#8ca1ff" style={styles.pinShadow}>
+            <Path fillRule="evenodd" clipRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" />
+          </Svg>
+        </View>
+        {/* Label Location Pill */}
+        <View style={styles.labelPill}>
+          <View style={styles.pulseDot} />
+          <Text style={styles.pillText}>CURRENT LOCATION</Text>
+        </View>
+      </View>
+
+      {/* 4. BOTTOM ACTION HUD BAR */}
+      <View style={styles.bottomNavWrapper}>
+        <View style={styles.navBar}>
+          {/* Left Action: Calendar/Events Router */}
+          <TouchableOpacity style={styles.navButton} onPress={() => console.log('navigate to screen_14')}>
+            <Svg width="24" height="24" fill="none" stroke="#a1a1aa" strokeWidth="1.5" viewBox="0 0 24 24">
+              <Path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+            </Svg>
+          </TouchableOpacity>
+
+          {/* Center Primary Action Bubble: Chat Router */}
+          <View style={styles.centerButtonContainer}>
+            <TouchableOpacity style={styles.primaryActionButton} onPress={() => console.log('navigate to screen_48')}>
+              <Svg width="32" height="32" fill="#ffffff" viewBox="0 0 20 20">
+                <Path fillRule="evenodd" clipRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" />
+              </Svg>
+            </TouchableOpacity>
+          </View>
+
+          {/* Right Action: Settings Router */}
+          <TouchableOpacity style={styles.navButton} onPress={() => console.log('navigate to screen_10')}>
+            <Svg width="24" height="24" fill="none" stroke="#a1a1aa" strokeWidth="1.5" viewBox="0 0 24 24">
+              <Path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <Path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </Svg>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0b0b0f',
+    backgroundColor: '#0f0f13',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backgroundContainer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
+    opacity: 0.6,
+  },
+  svgOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  glowCircle: {
+    position: 'absolute',
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: 'rgba(92, 119, 255, 0.3)',
+    backgroundColor: 'transparent',
+  },
+  circleTopRight: {
+    top: -50,
+    right: -100,
+    width: 256,
+    height: 256,
+  },
+  circleMidLeft: {
+    top: '33%',
+    left: -80,
+    width: 224,
+    height: 224,
+  },
+  circleBottomRight: {
+    bottom: 40,
+    right: -60,
+    width: 192,
+    height: 192,
+  },
+  topNotificationContainer: {
+    position: 'absolute',
+    top: 48,
+    left: 16,
+    right: 16,
+    zIndex: 20,
+    alignItems: 'center',
+  },
+  notificationPanel: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: 'rgba(24, 24, 27, 0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 16,
     padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 32,
+    elevation: 8,
+  },
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(92, 119, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(92, 119, 255, 0.2)',
+  },
+  textContainer: {
+    flex: 1,
+    marginLeft: 16,
+  },
+  notificationTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ffffff',
+    letterSpacing: 0.2,
+  },
+  notificationSubtitle: {
+    fontSize: 12,
+    color: '#a1a1aa',
+    marginTop: 2,
+  },
+  markerContainer: {
+    position: 'absolute',
+    top: screenHeight / 2 - 60,
+    zIndex: 10,
+    alignItems: 'center',
+  },
+  radarRing: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 1,
+    borderColor: 'rgba(92, 119, 255, 0.4)',
+    backgroundColor: 'rgba(92, 119, 255, 0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pinShadow: {
+    shadowColor: '#5c77ff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+  },
+  labelPill: {
+    marginTop: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 9999,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 40,
+    backgroundColor: '#8ca1ff',
+    marginRight: 8,
+  },
+  pillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#e4e4e7',
+    letterSpacing: 1,
+  },
+  bottomNavWrapper: {
+    position: 'absolute',
+    bottom: 32,
+    left: 16,
+    right: 16,
+    zIndex: 30,
+    alignItems: 'center',
+  },
+  navBar: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: 'rgba(24, 24, 27, 0.95)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 24,
+    height: 80,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingHorizontal: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 32,
+    elevation: 10,
+  },
+  navButton: {
+    padding: 12,
+  },
+  centerButtonContainer: {
+    position: 'relative',
+    top: -12,
+  },
+  primaryActionButton: {
+    width: 64,
+    height: 64,
+    backgroundColor: '#5c77ff',
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#5c77ff',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 4,
+    borderColor: '#0f0f13',
   },
 });

@@ -1,331 +1,501 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  ScrollView, 
+  TextInput, 
+  TouchableOpacity, 
+  Image, 
+  Dimensions 
+} from 'react-native';
+import Svg, { Line, Path } from 'react-native-svg';
 
-export default function RenderedScreen() {
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+
+export default function BuddyAIChatOverlay() {
+  const [cameraVisible, setCameraVisible] = useState(false);
+
   return (
-    <ScrollView style={styles.container}>
-<!DOCTYPE html>
-
-<html lang="en"><head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>AI Chat Interface</title>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<style data-purpose="custom-styles">
-    body {
-        background-color: #0d0d0d;
-        color: #fff;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif
-    }
-    
-    /* Subtle glowing effect for circles */
-    .glow-circle {
-      box-shadow: 0 0 40px rgba(92, 119, 255, 0.15);
-    }
-    
-    /* Grid background pattern */
-    .bg-grid-pattern {
-      background-image: 
-        linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px);
-      background-size: 50px 50px;
-    }
-
-    .nav-pill {
-        background-color: #1a1a1a;
-        border: 1px solid #333;
-        border-radius: 9999px
-    }
-    .msg-buddy {
-        background-color: #1f1f1f;
-        border: 1px solid #333;
-        color: #e5e5e5
-    }
-    .msg-user {
-        background-color: #5c77ff;
-        color: #fff
-    }
-    .live-preview {
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
-        border: 2px solid #5c77ff;
-        transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-    .live-preview.hidden-preview {
-        opacity: 0;
-        transform: translateY(20px) scale(0.95);
-        pointer-events: none;
-    }
-    .input-bar {
-        background-color: #0d0d0d;
-        border-top: 1px solid #333
-    }
-    .input-field {
-        background-color: #1a1a1a;
-        border: 1px solid #333
-    }
-    .action-sidebar {
-        background-color: #151515;
-        border-left: 1px solid #222;
-    }
-    .chat-scroll::-webkit-scrollbar {
-        width: 4px
-    }
-    .chat-scroll::-webkit-scrollbar-track {
-        background: transparent
-    }
-    .chat-scroll::-webkit-scrollbar-thumb {
-        background-color: #333;
-        border-radius: 20px
-    }
-
-    /* --- Animations --- */
-    @keyframes slideUpElastic {
-        0% { transform: translateY(100%); opacity: 0; }
-        60% { transform: translateY(-10px); opacity: 1; }
-        80% { transform: translateY(5px); }
-        100% { transform: translateY(0); }
-    }
-
-    @keyframes popIn {
-        0% { transform: scale(0.95); opacity: 0; }
-        100% { transform: scale(1); opacity: 1; }
-    }
-
-    @keyframes bounceVertical {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-4px); }
-    }
-
-    @keyframes scanline {
-        0% { transform: translateY(-100%); }
-        100% { transform: translateY(100%); }
-    }
-
-    .animate-entrance {
-        animation: slideUpElastic 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.1) forwards;
-    }
-
-    .chat-bubble-pop {
-        animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-        opacity: 0;
-    }
-
-    .bounce-handle {
-        animation: bounceVertical 2s ease-in-out infinite;
-    }
-
-    .scan-line {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 2px;
-        background: linear-gradient(to right, transparent, rgba(92, 119, 255, 0.5), transparent);
-        box-shadow: 0 0 8px rgba(92, 119, 255, 0.8);
-        animation: scanline 3s linear infinite;
-        z-index: 15;
-    }
-
-    .active-scale:active {
-        transform: scale(0.9);
-    }
-    
-    .transition-transform {
-        transition: transform 0.1s ease;
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-        .animate-entrance, .chat-bubble-pop, .bounce-handle, .scan-line {
-            animation: none !important;
-            opacity: 1 !important;
-            transform: none !important;
-        }
-    }
-</style>
-</head>
-<body class="h-screen w-full flex justify-center items-center bg-black overflow-hidden relative">
-<!-- Mobile Device Container -->
-<View>
-<View>
-<View></View>
-<View></View>
-<View></View>
-<svg class="absolute inset-0 w-full h-full opacity-20 pointer-events-none" xmlns="http://www.w3.org/2000/svg">
-<line stroke="#5c77ff" stroke-dasharray="4 4" stroke-width="1" x1="0%" x2="100%" y1="20%" y2="40%"></line>
-<line stroke="#5c77ff" stroke-dasharray="4 4" stroke-width="1" x1="0%" x2="100%" y1="80%" y2="60%"></line>
-</svg>
-</View>
-<!-- BEGIN: Chat Interface Overlay Container -->
-<View>
-<!-- Swipe Bar & Navbar Hump Area -->
-<View>
-<!-- Swipe Bar -->
-<View></View>
-<!-- Navbar Hump -->
-<nav class="nav-pill flex items-center px-6 py-2 space-x-8 shadow-2xl mb-[-24px] relative z-50">
-<TouchableOpacity>
-<svg class="h-6 w-6" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-</TouchableOpacity>
-<TouchableOpacity>
-<svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-</TouchableOpacity>
-<TouchableOpacity>
-<svg class="h-6 w-6" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-<Text></path>
-</svg>
-</TouchableOpacity>
-</nav>
-</View>
-<!-- Main Content Area with Chat and Sidebar -->
-<View>
-<!-- Scrollable Chat Area -->
-<View>
-<!-- Timestamp -->
-<View>TODAY 14:32</View>
-<!-- Buddy Message 1 -->
-<View>
-<View>
-<svg class="h-4 w-4" fill="currentColor" style="color: #5c77ff;" viewbox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-</View>
-<View>
-                    I noticed you're near the central district. The weather is clearing up. Want me to adjust the walking route to include the park?
-                </View>
-</View>
-<!-- User Message 1 -->
-<View>
-<View>
-                    Yes, let's do that. Is there a coffee shop on the way?
-                </View>
-</View>
-<!-- Buddy Message 2 -->
-<View>
-<View>
-<View>
-<svg class="h-4 w-4" fill="currentColor" style="color: #5c77ff;" viewbox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-</View>
-<View>
-                        I can see you're currently in the Gangnam-daero area. Are you looking for the nearest subway station or a specific recommendation for dinner?
-                    </View>
-</View>
-<View>BUDDY • 14:02</View>
-</View>
-<!-- User Message 2 with Floating Live Preview -->
-<View>
-<!-- Floating Live Video Preview -->
-<View>
-<View>
-<View></View>
-<span class="text-[9px] font-bold text-white tracking-wider">LIVE</span>
-</View>
-<View></View>
-<img alt="Live Street View" class="w-full h-full object-cover opacity-80" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBllltC9AnxYNQ2ruV_vSXtbC6KYCTJPcW0uPjG_exgwXwqwydFptOpxAi2G3_S1k5o2OkqiWmAFU6lnVa-wTDVUSc3TaygBQzHjeKR49KsMjj7AtmIWb1KmYPy_pkFMTy-n4dEZv1L1RgHScNd-q3OPyrCv1scPm8DOrAKVUWCfi5pePguSyWUPEcknYwsZNh7KlB-ctHakcIg75iVYe-6CH_GprEJfPDnX07eHUe7obvSyp7EG8B7CXBPtT13Ai1WKhZvMw8qNEeY"/>
-</View>
-<View>
-                    I'm looking for a highly-rated BBQ spot nearby. Can you show me the way?
-                </View>
-<View>YOU • 14:03</View>
-</View>
-</View>
-<!-- Right Sidebar (Camera, Mic, Sound) -->
-<View>
-<View></View>
-<TouchableOpacity>
-<svg class="h-6 w-6" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-<Text></path>
-</svg>
-</TouchableOpacity>
-<TouchableOpacity>
-<svg class="h-6 w-6" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-</TouchableOpacity>
-<TouchableOpacity>
-<svg class="h-6 w-6" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-</TouchableOpacity>
-<View></View>
-</View>
-</View>
-</View>
-<!-- END: Chat Interface Overlay Container -->
-<!-- BEGIN: Bottom Input Bar -->
-<View>
-<View>
-<TouchableOpacity>
-<svg class="h-5 w-5" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-</TouchableOpacity>
-<input class="flex-1 bg-transparent border-none text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-0 p-0 text-sm" placeholder="Ask AI..." type="text"/>
-<TouchableOpacity>
-<svg class="h-4 w-4" fill="none" stroke="currentColor" style="color: #5c77ff;" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-</TouchableOpacity>
-</View>
-<!-- Right Menu Button -->
-<TouchableOpacity>
-<svg class="h-5 w-5" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-</TouchableOpacity>
-</View>
-<!-- END: Bottom Input Bar -->
-</View>
-<script>
-    // Micro-interactions and triggers
-    document.addEventListener('DOMContentLoaded', () => {
-        const sendBtn = document.getElementById('send-button');
-        const cameraBtn = document.getElementById('toggle-camera');
-        const viewfinder = document.getElementById('camera-viewfinder');
+    <View style={styles.deviceContainer}>
+      
+      {/* 1. IMMERSIVE MAP & BACKGROUND VECTOR LAYERS */}
+      <View style={styles.backgroundContainer}>
+        <View style={[styles.glowCircle, styles.circleTopRight]} />
+        <View style={[styles.glowCircle, styles.circleMidLeft]} />
+        <View style={[styles.glowCircle, styles.circleBottomRight]} />
         
-        // Toggle camera viewfinder visibility
-        if (cameraBtn && viewfinder) {
-            cameraBtn.addEventListener('click', () => {
-                viewfinder.classList.toggle('hidden-preview');
+        <Svg style={styles.svgFill} pointerEvents="none">
+          <Line x1="0%" y1="20%" x2="100%" y2="40%" stroke="#5c77ff" strokeWidth="1" strokeDasharray="4 4" opacity="0.2" />
+          <Line x1="0%" y1="80%" x2="100%" y2="60%" stroke="#5c77ff" strokeWidth="1" strokeDasharray="4 4" opacity="0.2" />
+        </Svg>
+      </View>
+
+      {/* 2. CHAT OVERLAY INTERFACE SHEET (BOTTOM 60% SEGMENTATION) */}
+      <View style={styles.sheetContainer}>
+        
+        {/* Swipe Handle Indicator Header */}
+        <View style={styles.headerDraggerArea}>
+          <View style={styles.swipeHandlePill} />
+          
+          {/* Integrated Horizontal Action Navigation Bar */}
+          <View style={styles.navBarPill}>
+            <TouchableOpacity style={styles.pillActionItem} onPress={() => console.log('Route to screen_14')}>
+              <Svg width="24" height="24" fill="none" stroke="#a1a1aa" strokeWidth="2" viewBox="0 0 24 24">
+                <Path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.centerPillIndicator} onPress={() => console.log('Route to screen_11')}>
+              <Svg width="24" height="24" fill="none" stroke="#ffffff" strokeWidth="2" viewBox="0 0 24 24">
+                <Path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.pillActionItem} onPress={() => console.log('Route to screen_10')}>
+              <Svg width="24" height="24" fill="none" stroke="#a1a1aa" strokeWidth="2" viewBox="0 0 24 24">
+                <Path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" strokeLinecap="round" strokeLinejoin="round" />
+                <Path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Content Shell Intersects System (Chat Row Splitter) */}
+        <View style={styles.horizontalSplitterFrame}>
+          
+          {/* Scrollable Chat Message Stack */}
+          <ScrollView 
+            style={styles.chatScrollArea} 
+            contentContainerStyle={styles.scrollContentLayout}
+            showsVerticalScrollIndicator={false}
+          >
+            <Text style={styles.timeLabel}>TODAY 14:32</Text>
+
+            {/* Buddy Message Unit 1 */}
+            <View style={styles.buddyMessageBlock}>
+              <View style={styles.avatarIconWrapper}>
+                <Svg width="16" height="16" fill="#5c77ff" viewBox="0 0 20 20">
+                  <Path fillRule="evenodd" clipRule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" />
+                </Svg>
+              </View>
+              <View style={styles.msgBuddyPill}>
+                <Text style={styles.msgBuddyText}>
+                  I noticed you're near the central district. The weather is clearing up. Want me to adjust the walking route to include the park?
+                </Text>
+              </View>
+            </View>
+
+            {/* User Message Unit 1 */}
+            <View style={styles.userMessageBlock}>
+              <View style={styles.msgUserPill}>
+                <Text style={styles.msgUserText}>
+                  Yes, let's do that. Is there a coffee shop on the way?
+                </Text>
+              </View>
+            </View>
+
+            {/* Buddy Message Unit 2 */}
+            <View style={styles.buddyMessageBlockWithSubtext}>
+              <View style={styles.buddyMessageBlock}>
+                <View style={styles.avatarIconWrapper}>
+                  <Svg width="16" height="16" fill="#5c77ff" viewBox="0 0 20 20">
+                    <Path fillRule="evenodd" clipRule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" />
+                  </Svg>
+                </View>
+                <View style={styles.msgBuddyPill}>
+                  <Text style={styles.msgBuddyText}>
+                    I can see you're currently in the Gangnam-daero area. Are you looking for the nearest subway station or a specific recommendation for dinner?
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.leftLabelSubtext}>BUDDY • 14:02</Text>
+            </View>
+
+            {/* User Message Unit 2 with Floating Camera Viewfinder Intersection */}
+            <View style={styles.userMessageBlockWithSubtext}>
+              <View style={styles.userMessageBlock}>
                 
-                // Visual feedback for the button state
-                if (viewfinder.classList.contains('hidden-preview')) {
-                    cameraBtn.classList.remove('text-white');
-                    cameraBtn.classList.add('text-gray-500');
-                } else {
-                    cameraBtn.classList.add('text-white');
-                    cameraBtn.classList.remove('text-gray-500');
-                }
-            });
-        }
+                {/* FLOATING CAMERA VIEWFINDER OVERLAY DOCK */}
+                {cameraVisible && (
+                  <View style={styles.floatingCameraPortal}>
+                    <View style={styles.liveIndicatorBadge}>
+                      <View style={styles.redPulseDot} />
+                      <Text style={styles.liveText}>LIVE</Text>
+                    </View>
+                    <View style={styles.scanlineLaserVertical} />
+                    <Image 
+                      source={{ uri: 'https://images.unsplash.com/photo-1540959733332-eab4deceeaf7?w=400' }} 
+                      style={styles.imageAssetFill} 
+                    />
+                  </View>
+                )}
+
+                <View style={[styles.msgUserPill, cameraVisible && styles.adjustedPaddingRight]}>
+                  <Text style={styles.msgUserText}>
+                    I'm looking for a highly-rated BBQ spot nearby. Can you show me the way?
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.rightLabelSubtext}>YOU • 14:03</Text>
+            </View>
+
+          </ScrollView>
+
+          {/* Right Modular Activity Controls HUD Sidebar Bar */}
+          <View style={styles.rightActionSidebar}>
+            <View style={styles.flexSpacer} />
+            
+            <TouchableOpacity 
+              style={styles.sidebarButton} 
+              onPress={() => setCameraVisible(!cameraVisible)}
+            >
+              <Svg width="24" height="24" fill="none" stroke={cameraVisible ? "#ffffff" : "#6b7280"} strokeWidth="2" viewBox="0 0 24 24">
+                <Path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <Path d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </Svg>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.sidebarButton}>
+              <Svg width="24" height="24" fill="none" stroke="#6b7280" strokeWidth="2" viewBox="0 0 24 24">
+                <Path d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+              </Svg>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.sidebarButton}>
+              <Svg width="24" height="24" fill="none" stroke="#6b7280" strokeWidth="2" viewBox="0 0 24 24">
+                <Path d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+              </Svg>
+            </TouchableOpacity>
+            
+            <View style={styles.flexSpacer} />
+          </View>
+        </View>
+
+      </View>
+
+      {/* 3. FIXED BOTTOM CONTEXT INPUT ARCHITECTURE */}
+      <View style={styles.inputDockContainer}>
+        <View style={styles.inputFrameRow}>
+          <TouchableOpacity style={styles.pillAttachmentButton}>
+            <Svg width="20" height="20" fill="none" stroke="#5c77ff" strokeWidth="2" viewBox="0 0 24 24">
+              <Path d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+            </Svg>
+          </TouchableOpacity>
+          
+          <TextInput 
+            style={styles.textInputArea} 
+            placeholder="Ask AI..." 
+            placeholderTextColor="#6b7280"
+            editable={true}
+          />
+          
+          <TouchableOpacity style={styles.sendActionButton}>
+            <Svg width="16" height="16" fill="none" stroke="#5c77ff" strokeWidth="2" viewBox="0 0 24 24">
+              <Path d="M5 10l7-7m0 0l7 7m-7-7v18" />
+            </Svg>
+          </TouchableOpacity>
+        </View>
         
-        // Ensuring interactions feel snappy
-        const buttons = document.querySelectorAll('.active-scale');
-        buttons.forEach(btn => {
-            btn.addEventListener('touchstart', () => {
-                btn.style.transform = 'scale(0.9)';
-            }, {passive: true});
-            btn.addEventListener('touchend', () => {
-                btn.style.transform = 'scale(1)';
-            }, {passive: true});
-        });
-    });
-</script>
-</body></html>    </ScrollView>
+        <TouchableOpacity style={styles.contextSystemMenuLauncher}>
+          <Svg width="20" height="20" fill="none" stroke="#ffffff" strokeWidth="2.5" viewBox="0 0 24 24">
+            <Path d="M4 6h16M4 12h16M4 18h16" />
+          </Svg>
+        </TouchableOpacity>
+      </View>
+
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  deviceContainer: {
     flex: 1,
-    backgroundColor: '#0b0b0f',
+    backgroundColor: '#0d0d0d',
+  },
+  backgroundContainer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
+    opacity: 0.6,
+  },
+  svgFill: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  glowCircle: {
+    position: 'absolute',
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: 'rgba(92, 119, 255, 0.3)',
+  },
+  circleTopRight: { top: -50, right: -100, width: 256, height: 256 },
+  circleMidLeft: { top: '33%', left: -80, width: 224, height: 224 },
+  circleBottomRight: { bottom: 40, right: -60, width: 192, height: 192 },
+  sheetContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: screenHeight * 0.65, 
+    backgroundColor: 'rgba(13, 13, 13, 0.95)',
+    borderTopLeftRadius: 40,
+    borderTopRightRadius: 40,
+    zIndex: 10,
+    overflow: 'hidden',
+  },
+  headerDraggerArea: {
+    width: '100%',
+    alignItems: 'center',
+    paddingTop: 12,
+    zIndex: 50,
+  },
+  swipeHandlePill: {
+    width: 48,
+    height: 6,
+    backgroundColor: '#4b5563',
+    borderRadius: 3,
+    opacity: 0.8,
+    marginBottom: 12,
+  },
+  navBarPill: {
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: '#333333',
+    borderRadius: 9999,
+    paddingHorizontal: 24,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 32,
+    marginBottom: -24,
+    position: 'relative',
+    zIndex: 55,
+  },
+  pillActionItem: {
+    padding: 4,
+  },
+  centerPillIndicator: {
+    backgroundColor: '#5c77ff',
+    padding: 12,
+    borderRadius: 9999,
+    shadowColor: '#5c77ff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 15,
+  },
+  horizontalSplitterFrame: {
+    flex: 1,
+    flexDirection: 'row',
+    paddingBottom: 80, 
+  },
+  chatScrollArea: {
+    flex: 1,
+  },
+  scrollContentLayout: {
+    paddingTop: 40,
+    paddingHorizontal: 16,
+    paddingBottom: 32,
+  },
+  timeLabel: {
+    textAlign: 'center',
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '500',
+    marginBottom: 24,
+  },
+  buddyMessageBlock: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    marginBottom: 16,
+    width: '100%',
+  },
+  buddyMessageBlockWithSubtext: {
+    flexDirection: 'column',
+    marginBottom: 24,
+  },
+  avatarIconWrapper: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1f1f1f',
+    borderWidth: 1,
+    borderColor: '#374151',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  msgBuddyPill: {
+    backgroundColor: '#1f1f1f',
+    borderWidth: 1,
+    borderColor: '#333333',
+    borderRadius: 20,
+    borderBottomLeftRadius: 4,
     padding: 16,
+    maxWidth: '80%',
+  },
+  msgBuddyText: {
+    color: '#e5e5e5',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  userMessageBlock: {
+    alignItems: 'flex-end',
+    width: '100%',
+    marginBottom: 4,
+    position: 'relative',
+  },
+  userMessageBlockWithSubtext: {
+    flexDirection: 'column',
+    marginBottom: 24,
+  },
+  msgUserPill: {
+    backgroundColor: '#5c77ff',
+    borderRadius: 20,
+    borderBottomRightRadius: 4,
+    padding: 16,
+    maxWidth: '80%',
+  },
+  adjustedPaddingRight: {
+    marginRight: 40, 
+  },
+  msgUserText: {
+    color: '#ffffff',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  leftLabelSubtext: {
+    fontSize: 10,
+    color: '#5c77ff',
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    marginLeft: 40,
+  },
+  rightLabelSubtext: {
+    fontSize: 10,
+    color: '#6b7280',
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    alignSelf: 'flex-end',
+    marginRight: 8,
+    marginTop: 4,
+  },
+  floatingCameraPortal: {
+    position: 'absolute',
+    top: -140,
+    right: 0,
+    width: 144,
+    height: 192,
+    borderRadius: 16,
+    backgroundColor: '#111827',
+    borderWidth: 2,
+    borderColor: '#5c77ff',
+    overflow: 'hidden',
+    zIndex: 40,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 25,
+  },
+  liveIndicatorBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 9999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 50,
+  },
+  redPulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#ef4444',
+    marginRight: 4,
+  },
+  liveText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  scanlineLaserVertical: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    backgroundColor: 'rgba(92, 119, 255, 0.5)',
+    zIndex: 45,
+  },
+  imageAssetFill: {
+    width: '100%',
+    height: '100%',
+    opacity: 0.8,
+  },
+  rightActionSidebar: {
+    width: 56,
+    backgroundColor: '#151515',
+    borderLeftWidth: 1,
+    borderColor: '#222222',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 32,
+  },
+  sidebarButton: {
+    padding: 4,
+  },
+  flexSpacer: {
+    flex: 1,
+  },
+  inputDockContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#0d0d0d',
+    borderTopWidth: 1,
+    borderColor: '#333333',
+    padding: 16,
+    paddingBottom: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    zIndex: 60,
+  },
+  inputFrameRow: {
+    flex: 1,
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: '#333333',
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  pillAttachmentButton: {
+    marginRight: 12,
+  },
+  textInputArea: {
+    flex: 1,
+    color: '#d1d5db',
+    fontSize: 14,
+    padding: 0,
+  },
+  sendActionButton: {
+    marginLeft: 8,
+    backgroundColor: '#1f1f1f',
+    padding: 6,
+    borderRadius: 8,
+  },
+  contextSystemMenuLauncher: {
+    borderRadius: 9999,
+    padding: 12,
+    backgroundColor: '#5c77ff',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

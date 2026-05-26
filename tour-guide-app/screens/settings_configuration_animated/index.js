@@ -1,409 +1,546 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  ScrollView, 
+  TouchableOpacity, 
+  Switch, 
+  Image, 
+  Dimensions 
+} from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 
-export default function RenderedScreen() {
+const { width: screenWidth } = Dimensions.get('window');
+
+export default function SettingsConfigurationView() {
+  const [neuralProfile, setNeuralProfile] = useState('nova');
+  const [bgSync, setBgSync] = useState(true);
+  const [offlineCaching, setOfflineCaching] = useState(false);
+  const [hotspotSuggestions, setHotspotSuggestions] = useState(false);
+  const [renderingEngine, setRenderingEngine] = useState('obsidian');
+
   return (
-    <ScrollView style={styles.container}>
-<!DOCTYPE html><html lang="en"><head>
-<meta charset="utf-8">
-<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
-<title>Configuration</title>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            app: {
-              bg: '#0F0F12',
-              card: '#161618',
-              cardborder: '#27272A',
-              text: '#E4E4E7',
-              muted: '#A1A1AA',
-              accent: '#5c77ff',
-              accentbg: 'rgba(92, 119, 255, 0.1)',
-              togglebg: '#3F3F46',
-              toggleactive: '#5c77ff',
-            }
-          },
-          fontFamily: {
-            sans: ['Inter', 'system-ui', 'sans-serif'],
-            mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', "Liberation Mono", "Courier New", 'monospace'],
-          }
-        }
-      }
-    }
-  </script>
-<style data-purpose="custom-utilities">
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    
-    body {
-      background-color: #0F0F12;
-      color: #E4E4E7;
-      font-family: 'Inter', sans-serif;
-      -webkit-font-smoothing: antialiased;
-    }
+    <View style={styles.container}>
+      
+      {/* 1. FIXED CONTENT TOP APPLICATION BAR */}
+      <View style={styles.header}>
+        <View style={styles.headerLeftRow}>
+          <Svg width="24" height="24" fill="#5c77ff" viewBox="0 0 24 24">
+            <Path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z" />
+          </Svg>
+          <Text style={styles.headerBrandText}>Buddy</Text>
+        </View>
+        <View style={styles.avatarRingFrame}>
+          <Image 
+            source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100' }} 
+            style={styles.profileAvatarThumbnail} 
+          />
+        </View>
+      </View>
 
-    /* Custom scrollbar hide for cleaner look if needed */
-    ::-webkit-scrollbar {
-      display: none;
-    }
-    
-    /* Toggle Switch Styles */
-    .toggle-checkbox:checked {
-      right: 0;
-      border-color: #5c77ff;
-    }
-    .toggle-checkbox:checked + .toggle-label {
-      background-color: #5c77ff;
-    }
-    .toggle-checkbox {
-      right: 0;
-      z-index: 1;
-      border-color: #e2e8f0;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-    .toggle-label {
-      width: 2.25rem;
-      height: 1.25rem;
-      background-color: #3F3F46;
-      border-radius: 9999px;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-    .toggle-knob {
-      width: 1rem;
-      height: 1rem;
-      background-color: white;
-      border-radius: 50%;
-      position: absolute;
-      top: 0.125rem;
-      left: 0.125rem;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-    .toggle-checkbox:checked + .toggle-label .toggle-knob {
-      transform: translateX(1rem);
-    }
+      {/* 2. CORE INTERACTION SCROLL SYSTEM WORKSPACE */}
+      <ScrollView 
+        style={styles.scrollArea} 
+        contentContainerStyle={styles.scrollPadding}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Screen Identity Intro */}
+        <View style={styles.headlineGroupSection}>
+          <Text style={styles.screenHeadlineText}>Configuration</Text>
+          <Text style={styles.screenSubtextHelper}>Manage developer preferences, data telemetry, and core settings.</Text>
+        </View>
 
-    /* Entrance Animations */
-    @keyframes fadeInUp {
-      from {
-        opacity: 0;
-        transform: translateY(10px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
+        {/* NEURAL SYNTHESIS RADIO CARD SELECT SECTION */}
+        <View style={styles.sectionContainerCard}>
+          <View style={styles.sectionTitleHeaderRow}>
+            <View style={styles.iconWrapperBoxMuted}>
+              <Svg width="20" height="20" fill="none" stroke="#5c77ff" strokeWidth="2" viewBox="0 0 24 24">
+                <Path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </Svg>
+            </View>
+            <Text style={styles.sectionHeadlineTitle}>Neural Synthesis Profile</Text>
+          </View>
 
-    .reveal-section {
-      opacity: 0;
-      animation: fadeInUp 0.5s ease-out forwards;
-    }
+          <View style={styles.radioBlockClusterStack}>
+            {/* Active Choice Card: Nova */}
+            <TouchableOpacity 
+              style={[styles.radioSelectionCardBase, neuralProfile === 'nova' ? styles.radioCardActive : styles.radioCardMuted]}
+              onPress={() => setNeuralProfile('nova')}
+            >
+              <View style={styles.radioSplitFlexRow}>
+                <View style={styles.radioCardTextCoreArea}>
+                  <Text style={styles.radioCardTitleMain}>Nova (Default)</Text>
+                  <Text style={styles.radioCardDescriptionLabel}>Energetic, clear, slightly robotic undertone. Optimized for navigation.</Text>
+                </View>
+                {neuralProfile === 'nova' && (
+                  <View style={styles.activeCheckBadgeAnchor}>
+                    <Svg width="20" height="20" fill="#5c77ff" viewBox="0 0 20 20">
+                      <Path fillRule="evenodd" clipRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" />
+                    </Svg>
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
 
-    /* Shimmer Effect for Profile Header */
-    @keyframes shimmer {
-      0% { background-position: -200% 0; }
-      100% { background-position: 200% 0; }
-    }
-    .shimmer-text {
-      background: linear-gradient(90deg, #E4E4E7 0%, #5c77ff 50%, #E4E4E7 100%);
-      background-size: 200% auto;
-      color: transparent;
-      -webkit-background-clip: text;
-      background-clip: text;
-      animation: shimmer 4s linear infinite;
-    }
+            {/* Inactive Choice Card: Echo */}
+            <TouchableOpacity 
+              style={[styles.radioSelectionCardBase, neuralProfile === 'echo' ? styles.radioCardActive : styles.radioCardMuted]}
+              onPress={() => setNeuralProfile('echo')}
+            >
+              <View style={styles.radioSplitFlexRow}>
+                <View style={styles.radioCardTextCoreArea}>
+                  <Text style={styles.radioCardTitleMain}>Echo (Beta)</Text>
+                  <Text style={styles.radioCardDescriptionLabel}>Deep, resonant, calm. Requires persistent network connection.</Text>
+                </View>
+                {neuralProfile === 'echo' && (
+                  <View style={styles.activeCheckBadgeAnchor}>
+                    <Svg width="20" height="20" fill="#5c77ff" viewBox="0 0 20 20">
+                      <Path fillRule="evenodd" clipRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" />
+                    </Svg>
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+          </View>
 
-    /* Neon Glow Pulse */
-    @keyframes neonPulse {
-      0% { box-shadow: 0 0 5px rgba(92, 119, 255, 0.2); }
-      50% { box-shadow: 0 0 15px rgba(92, 119, 255, 0.5); }
-      100% { box-shadow: 0 0 5px rgba(92, 119, 255, 0.2); }
-    }
-    .active-glow {
-      animation: neonPulse 2s ease-in-out infinite;
-    }
+          <View style={styles.sectionCardLowerMetadataRow}>
+            <Text style={styles.monoVersionText}>Model version: v2.4.1-stable</Text>
+            <TouchableOpacity><Text style={styles.accentTriggerTextAction}>Test Output</Text></TouchableOpacity>
+          </View>
+        </View>
 
-    @media (prefers-reduced-motion: reduce) {
-      .reveal-section {
-        animation: none;
-        opacity: 1;
-      }
-      .shimmer-text {
-        animation: none;
-        color: #E4E4E7;
-      }
-      .active-glow {
-        animation: none;
-      }
-      .toggle-checkbox, .toggle-label, .toggle-knob {
-        transition: none;
-      }
-    }
-  </style>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" data-snapdom="injected-import"></head>
-<body class="bg-app-bg text-app-text min-h-screen pb-24 font-sans">
-<!-- BEGIN: Top Navigation Bar -->
-<header class="flex items-center justify-between px-4 py-4 border-b border-app-cardborder sticky top-0 bg-app-bg/90 backdrop-blur z-10">
-<View>
-<!-- App Icon Placeholder -->
-<svg class="w-6 h-6 text-app-accent" fill="currentColor" viewBox="0 0 24 24">
-<Text></path>
-</svg>
-<span class="text-xl font-bold">Buddy</span>
-</View>
-<!-- User Profile Avatar -->
-<View>
-<img alt="User Avatar" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBKBAt7TXxUG-gNFs1E4UY_7pFcaCA4rDTamyde8Va1LS5gCzveKv4wRRLjBj1HXDuQviGTK8Nwfsv8DwF9a3iKVJ4b2fZgJcAHxEZvUY9tgLwVcT2P40P8Qb-m4e6d3VdpKnhF6ZVrXJ0kFH5E2I4zf2O1hgQqVMy0O9lsSX8XYEG-F-wQ63C9-PBu61fIwfOBeHrWcZqh57VbcjLL-pPSPEwfw3Roi-lmlMjtkDHYqRhzgiv93VS33JuHQ1N4EWz1XWnKrhBGnTvu">
-</View>
-</header>
-<!-- END: Top Navigation Bar -->
-<main class="px-4 pt-6 pb-8 space-y-6">
-<!-- BEGIN: Header Section -->
-<section class="reveal-section" style="animation-delay: 0.1s">
-<Text>Configuration</Text>
-<Text>Manage developer preferences, data telemetry, and core settings.</Text>
-</section>
-<!-- END: Header Section -->
-<!-- BEGIN: Neural Synthesis Profile Section -->
-<section class="bg-app-card border border-app-cardborder rounded-2xl p-5 reveal-section" style="animation-delay: 0.2s">
-<View>
-<View>
-<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-</View>
-<Text>Neural Synthesis Profile</Text>
-</View>
-<View>
-<!-- Selected Option -->
-<label class="block relative rounded-xl border border-app-accent bg-app-accentbg p-4 cursor-pointer transition-all active:scale-[0.98]">
-<input checked="" class="sr-only" name="neural_profile" type="radio" value="nova">
-<View>
-<View>
-<View>Nova (Default)</View>
-<View>Energetic, clear, slightly robotic undertone. Optimized for navigation.</View>
-</View>
-<View>
-<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-<Text></path>
-</svg>
-</View>
-</View>
-</label>
-<!-- Unselected Option -->
-<label class="block relative rounded-xl border border-app-cardborder bg-app-bg p-4 cursor-pointer hover:border-app-muted/50 transition-all active:scale-[0.98]">
-<input class="sr-only" name="neural_profile" type="radio" value="echo">
-<View>
-<View>
-<View>Echo (Beta)</View>
-<View>Deep, resonant, calm. Requires persistent network connection.</View>
-</View>
-</View>
-</label>
-</View>
-<View>
-<View>Model version: v2.4.1-stable</View>
-<TouchableOpacity>Test Output</TouchableOpacity>
-</View>
-</section>
-<!-- END: Neural Synthesis Profile Section -->
-<!-- BEGIN: Telemetry & Sync Section -->
-<section class="bg-app-card border border-app-cardborder rounded-2xl p-5 reveal-section" style="animation-delay: 0.3s">
-<View>
-<View>
-<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-</View>
-<Text>Telemetry &amp; Sync</Text>
-</View>
-<View>
-<!-- Toggle Item 1 -->
-<View>
-<View>
-<View>Background Sync</View>
-<View>Continuous location processing</View>
-</View>
-<View>
-<input checked="" class="toggle-checkbox absolute block w-4 h-4 rounded-full bg-white border-4 appearance-none cursor-pointer opacity-0" id="toggle_bg_sync" name="toggle_bg_sync" type="checkbox">
-<label class="toggle-label block overflow-hidden h-5 rounded-full cursor-pointer relative" for="toggle_bg_sync">
-<span class="toggle-knob"></span>
-</label>
-</View>
-</View>
-<!-- Toggle Item 2 -->
-<View>
-<View>
-<View>Offline Caching</View>
-<View>Store maps up to 2GB</View>
-</View>
-<View>
-<input class="toggle-checkbox absolute block w-4 h-4 rounded-full bg-white border-4 appearance-none cursor-pointer opacity-0" id="toggle_offline" name="toggle_offline" type="checkbox">
-<label class="toggle-label block overflow-hidden h-5 rounded-full bg-app-togglebg cursor-pointer relative" for="toggle_offline">
-<span class="toggle-knob"></span>
-</label>
-</View>
-</View>
-<!-- Toggle Item 3 -->
-<View>
-<View>
-<View>Hot-Spot Suggestions</View>
-<View>Receive real-time intelligence on high-activity areas.</View>
-</View>
-<View>
-<input class="toggle-checkbox absolute block w-4 h-4 rounded-full bg-white border-4 appearance-none cursor-pointer opacity-0" id="toggle_hotspot" name="toggle_hotspot" type="checkbox">
-<label class="toggle-label block overflow-hidden h-5 rounded-full bg-app-togglebg cursor-pointer relative" for="toggle_hotspot">
-<span class="toggle-knob"></span>
-</label>
-</View>
-</View>
-</View>
-</section>
-<!-- END: Telemetry & Sync Section -->
-<!-- BEGIN: Privacy Protocols Section -->
-<section class="bg-app-card border border-app-cardborder rounded-2xl p-5 reveal-section" style="animation-delay: 0.4s">
-<View>
-<View>
-<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-</View>
-<Text>Privacy Protocols</Text>
-</View>
-<View>
-<!-- Action Button 1 -->
-<TouchableOpacity>
-<View>
-<svg class="w-5 h-5 text-app-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-<span class="font-medium text-white">Clear Routing History</span>
-</View>
-<svg class="w-5 h-5 text-app-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-</TouchableOpacity>
-<!-- Action Button 2 -->
-<TouchableOpacity>
-<View>
-<svg class="w-5 h-5 text-app-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-<Text></path>
-</svg>
-<span class="font-medium text-white">Manage Voice Recordings</span>
-</View>
-<svg class="w-5 h-5 text-app-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-</TouchableOpacity>
-</View>
-</section>
-<!-- END: Privacy Protocols Section -->
-<!-- BEGIN: Rendering Engine Section -->
-<section class="bg-app-card border border-app-cardborder rounded-2xl p-5 mb-8 reveal-section" style="animation-delay: 0.5s">
-<View>
-<View>
-<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-</View>
-<Text>Rendering Engine</Text>
-</View>
-<!-- Segmented Control -->
-<View>
-<TouchableOpacity>
-<svg class="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-<span class="text-sm font-medium">Obsidian</span>
-</TouchableOpacity>
-<TouchableOpacity>
-<svg class="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-<span class="text-sm font-medium">Satellite</span>
-</TouchableOpacity>
-<TouchableOpacity>
-<svg class="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-<span class="text-sm font-medium">Vector Wire</span>
-</TouchableOpacity>
-</View>
-</section>
-<!-- END: Rendering Engine Section -->
-</main>
-<!-- BEGIN: Bottom Floating Navigation -->
-<nav class="fixed bottom-6 left-4 right-4 bg-app-card/90 backdrop-blur-md border border-app-cardborder rounded-full flex justify-around items-center py-2 px-2 shadow-2xl reveal-section" style="animation-delay: 0.6s">
-<TouchableOpacity>
-<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-</TouchableOpacity>
-<TouchableOpacity>
-<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-</svg>
-</TouchableOpacity>
-<TouchableOpacity>
-<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<Text></path>
-<Text></path>
-</svg>
-</TouchableOpacity>
-</nav>
-<!-- END: Bottom Floating Navigation -->
-<script>
-  // Script to handle interactive states if needed beyond pure CSS
-  document.addEventListener('DOMContentLoaded', () => {
-    // Neural Profile Selection interaction
-    const profileRadios = document.querySelectorAll('input[name="neural_profile"]');
-    profileRadios.forEach(radio => {
-      radio.addEventListener('change', (e) => {
-        const labels = document.querySelectorAll('input[name="neural_profile"] + div').forEach(div => {
-          div.parentElement.classList.remove('border-app-accent', 'bg-app-accentbg');
-          div.parentElement.classList.add('border-app-cardborder', 'bg-app-bg');
-          const checkIcon = div.querySelector('.text-app-accent');
-          if (checkIcon) checkIcon.remove();
-        });
-        
-        if (e.target.checked) {
-          const parent = e.target.parentElement;
-          parent.classList.add('border-app-accent', 'bg-app-accentbg');
-          parent.classList.remove('border-app-cardborder', 'bg-app-bg');
+        {/* TELEMETRY ENGINE SYNC PREFERENCES (TOGGLE LIST) */}
+        <View style={styles.sectionContainerCard}>
+          <View style={styles.sectionTitleHeaderRow}>
+            <View style={styles.iconWrapperBoxMuted}>
+              <Svg width="20" height="20" fill="none" stroke="#ffffff" strokeWidth="2" viewBox="0 0 24 24">
+                <Path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </Svg>
+            </View>
+            <Text style={styles.sectionHeadlineTitle}>Telemetry & Sync</Text>
+          </View>
+
+          <View style={styles.toggleClusterContainerList}>
+            {/* Switch Input Row 1 */}
+            <View style={styles.toggleActionRowLine}>
+              <View style={styles.toggleRowTextLeftDesc}>
+                <Text style={styles.toggleRowTitleHeader}>Background Sync</Text>
+                <Text style={styles.toggleRowSubtitleCaption}>Continuous location processing</Text>
+              </View>
+              <Switch 
+                value={bgSync} 
+                onValueChange={(val) => setBgSync(val)} 
+                trackColor={{ false: '#3f3f46', true: '#5c77ff' }}
+                thumbColor="#ffffff"
+              />
+            </View>
+
+            {/* Switch Input Row 2 */}
+            <View style={styles.toggleActionRowLine}>
+              <View style={styles.toggleRowTextLeftDesc}>
+                <Text style={styles.toggleRowTitleHeader}>Offline Caching</Text>
+                <Text style={styles.toggleRowSubtitleCaption}>Store maps up to 2GB</Text>
+              </View>
+              <Switch 
+                value={offlineCaching} 
+                onValueChange={(val) => setOfflineCaching(val)} 
+                trackColor={{ false: '#3f3f46', true: '#5c77ff' }}
+                thumbColor="#ffffff"
+              />
+            </View>
+
+            {/* Switch Input Row 3 */}
+            <View style={styles.toggleActionRowLine}>
+              <View style={styles.toggleRowTextLeftDesc}>
+                <Text style={styles.toggleRowTitleHeader}>Hot-Spot Suggestions</Text>
+                <Text style={styles.toggleRowSubtitleCaption}>Receive real-time intelligence on high-activity areas.</Text>
+              </View>
+              <Switch 
+                value={hotspotSuggestions} 
+                onValueChange={(val) => setHotspotSuggestions(val)} 
+                trackColor={{ false: '#3f3f46', true: '#5c77ff' }}
+                thumbColor="#ffffff"
+              />
+            </View>
+          </View>
+        </View>
+
+        {/* PRIVACY SAFETY BUTTON PROTOCOLS */}
+        <View style={styles.sectionContainerCard}>
+          <View style={styles.sectionTitleHeaderRow}>
+            <View style={styles.iconWrapperBoxMuted}>
+              <Svg width="20" height="20" fill="none" stroke="#f87171" strokeWidth="2" viewBox="0 0 24 24">
+                <Path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </Svg>
+            </View>
+            <Text style={styles.sectionHeadlineTitle}>Privacy Protocols</Text>
+          </View>
+
+          <View style={styles.linkButtonStackGroup}>
+            {/* Action Action Trigger 1 */}
+            <TouchableOpacity style={styles.rowLinkCardContainer} onPress={() => console.log('Trigger clear pipeline data index')}>
+              <View style={styles.rowLinkLeftContentGroup}>
+                <Svg width="20" height="20" fill="none" stroke="#a1a1aa" strokeWidth="2" viewBox="0 0 24 24" style={styles.inlineIconSpace}>
+                  <Path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </Svg>
+                <Text style={styles.rowLinkMainTextTitle}>Clear Routing History</Text>
+              </View>
+              <Text style={styles.chevronArrowIndicatorChar}>❯</Text>
+            </TouchableOpacity>
+
+            {/* Action Action Trigger 2 */}
+            <TouchableOpacity style={styles.rowLinkCardContainer} onPress={() => console.log('Trigger manifest data portal adjustment')}>
+              <View style={styles.rowLinkLeftContentGroup}>
+                <Svg width="20" height="20" fill="none" stroke="#a1a1aa" strokeWidth="2" viewBox="0 0 24 24" style={styles.inlineIconSpace}>
+                  <Path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                </Svg>
+                <Text style={styles.rowLinkMainTextTitle}>Manage Voice Recordings</Text>
+              </View>
+              <Text style={styles.chevronArrowIndicatorChar}>❯</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* RENDERING MATRIX GRAPHICS SELECTOR BAR (SEGMENTED GRID MATRIX) */}
+        <View style={styles.sectionContainerCard}>
+          <View style={styles.sectionTitleHeaderRow}>
+            <View style={styles.iconWrapperBoxMuted}>
+              <Svg width="20" height="20" fill="none" stroke="#34d399" strokeWidth="2" viewBox="0 0 24 24">
+                <Path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+              </Svg>
+            </View>
+            <Text style={styles.sectionHeadlineTitle}>Rendering Engine</Text>
+          </View>
+
+          <View style={styles.segmentedControlGridCols3}>
+            {/* Tab Section Item 1 */}
+            <TouchableOpacity 
+              style={[styles.segmentBtnItem, renderingEngine === 'obsidian' ? styles.segmentBtnActive : styles.segmentBtnInactive]}
+              onPress={() => setRenderingEngine('obsidian')}
+            >
+              <Text style={styles.segmentIconCharEmoji}>🌑</Text>
+              <Text style={[styles.segmentButtonTextLabel, renderingEngine === 'obsidian' ? styles.textActiveLabel : styles.textMutedLabel]}>Obsidian</Text>
+            </TouchableOpacity>
+
+            {/* Tab Section Item 2 */}
+            <TouchableOpacity 
+              style={[styles.segmentBtnItem, renderingEngine === 'satellite' ? styles.segmentBtnActive : styles.segmentBtnInactive]}
+              onPress={() => setRenderingEngine('satellite')}
+            >
+              <Text style={styles.segmentIconCharEmoji}>🛰️</Text>
+              <Text style={[styles.segmentButtonTextLabel, renderingEngine === 'satellite' ? styles.textActiveLabel : styles.textMutedLabel]}>Satellite</Text>
+            </TouchableOpacity>
+
+            {/* Tab Section Item 3 */}
+            <TouchableOpacity 
+              style={[styles.segmentBtnItem, renderingEngine === 'vector' ? styles.segmentBtnActive : styles.segmentBtnInactive]}
+              onPress={() => setRenderingEngine('vector')}
+            >
+              <Text style={styles.segmentIconCharEmoji}>🕸️</Text>
+              <Text style={[styles.segmentButtonTextLabel, renderingEngine === 'vector' ? styles.textActiveLabel : styles.textMutedLabel]}>Vector Wire</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+      </ScrollView>
+
+      {/* 3. OVERLAY LAYER CORE HORIZONTAL RUN FLOATING NAVIGATION DOCK PILL */}
+      <View style={styles.floatingNavContainer}>
+        <View style={styles.navDockPillLayoutRow}>
           
-          const iconContainer = document.createElement('div');
-          iconContainer.className = 'text-app-accent flex-shrink-0 mt-0.5';
-          iconContainer.innerHTML = `<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><Text></path></svg>`;
-          parent.querySelector('.flex.justify-between').appendChild(iconContainer);
-        }
-      });
-    });
+          <TouchableOpacity style={styles.tabMutedActionItem} onPress={() => window.location.href='{{DATA:SCREEN:SCREEN_14}}'}>
+            <Svg width="24" height="24" fill="none" stroke="#a1a1aa" strokeWidth="2" viewBox="0 0 24 24">
+              <Path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
+            </Svg>
+          </TouchableOpacity>
 
-    // Rendering Engine Selection
-    const engineButtons = document.querySelectorAll('.grid-cols-3 button');
-    engineButtons.forEach(btn => {
-      btn.addEventListener('click', () => {
-        engineButtons.forEach(b => {
-          b.classList.remove('border-app-accent', 'bg-app-accentbg', 'text-app-accent', 'active-glow');
-          b.classList.add('border-app-cardborder', 'bg-app-bg', 'text-app-muted');
-        });
-        btn.classList.add('border-app-accent', 'bg-app-accentbg', 'text-app-accent', 'active-glow');
-        btn.classList.remove('border-app-cardborder', 'bg-app-bg', 'text-app-muted');
-      });
-    });
-  });
-</script>
-</body></html>    </ScrollView>
+          <TouchableOpacity style={styles.tabMutedActionItem} onPress={() => window.location.href='{{DATA:SCREEN:SCREEN_11}}'}>
+            <Svg width="24" height="24" fill="none" stroke="#a1a1aa" strokeWidth="2" viewBox="0 0 24 24">
+              <Path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" strokeLinecap="round" strokeLinejoin="round" />
+            </Svg>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.tabBubbleActiveIconWrapper} onPress={() => window.location.href='{{DATA:SCREEN:SCREEN_10}}'}>
+            <Svg width="24" height="24" fill="none" stroke="#ffffff" strokeWidth="2" viewBox="0 0 24 24">
+              <Path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" strokeLinecap="round" strokeLinejoin="round" />
+              <Path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" strokeLinecap="round" strokeLinejoin="round" />
+            </Svg>
+          </TouchableOpacity>
+
+        </View>
+      </View>
+
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0b0b0f',
+    backgroundColor: '#0F0F12',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'between',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderColor: '#27272A',
+    backgroundColor: '#0F0F12',
+  },
+  headerLeftRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerBrandText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#e4e4e7',
+  },
+  avatarRingFrame: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  profileAvatarThumbnail: {
+    width: '100%',
+    height: '100%',
+  },
+  scrollArea: {
+    flex: 1,
+  },
+  scrollPadding: {
+    paddingHorizontal: 16,
+    paddingTop: 24,
+    paddingBottom: 120,
+  },
+  headlineGroupSection: {
+    marginBottom: 24,
+  },
+  screenHeadlineText: {
+    fontSize: 30,
+    fontWeight: '700',
+    color: '#e4e4e7',
+    letterSpacing: -0.5,
+    marginBottom: 8,
+  },
+  screenSubtextHelper: {
+    fontSize: 14,
+    color: '#a1a1aa',
+    lineHeight: 20,
+  },
+  sectionContainerCard: {
+    backgroundColor: '#161618',
+    borderWidth: 1,
+    borderColor: '#27272A',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 24,
+  },
+  sectionTitleHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  iconWrapperBoxMuted: {
+    backgroundColor: '#27272A',
+    borderRadius: 8,
+    padding: 8,
+    marginRight: 12,
+  },
+  sectionHeadlineTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#e4e4e7',
+  },
+  radioBlockClusterStack: {
+    gap: 12,
+  },
+  radioSelectionCardBase: {
+    borderRadius: 12,
     padding: 16,
+    borderWidth: 1,
+  },
+  radioCardActive: {
+    borderColor: '#5c77ff',
+    backgroundColor: 'rgba(92, 119, 255, 0.1)',
+  },
+  radioCardMuted: {
+    borderColor: '#27272A',
+    backgroundColor: '#0F0F12',
+  },
+  radioSplitFlexRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'start',
+  },
+  radioCardTextCoreArea: {
+    flex: 1,
+    paddingRight: 16,
+  },
+  radioCardTitleMain: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#ffffff',
+    marginBottom: 4,
+  },
+  radioCardDescriptionLabel: {
+    fontSize: 14,
+    color: '#a1a1aa',
+    lineHeight: 20,
+  },
+  activeCheckBadgeAnchor: {
+    marginTop: 2,
+  },
+  sectionCardLowerMetadataRow: {
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderColor: '#27272A',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  monoVersionText: {
+    fontSize: 12,
+    fontFamily: 'Courier',
+    color: '#a1a1aa',
+  },
+  accentTriggerTextAction: {
+    color: '#5c77ff',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  toggleClusterContainerList: {
+    gap: 20,
+  },
+  toggleActionRowLine: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  toggleRowTextLeftDesc: {
+    flex: 1,
+    paddingRight: 16,
+  },
+  toggleRowTitleHeader: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#ffffff',
+  },
+  toggleRowSubtitleCaption: {
+    fontSize: 14,
+    color: '#a1a1aa',
+    marginTop: 2,
+  },
+  linkButtonStackGroup: {
+    gap: 12,
+  },
+  rowLinkCardContainer: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#27272A',
+    backgroundColor: '#0F0F12',
+  },
+  rowLinkLeftContentGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  inlineIconSpace: {
+    marginRight: 12,
+  },
+  rowLinkMainTextTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#ffffff',
+  },
+  chevronArrowIndicatorChar: {
+    color: '#a1a1aa',
+    fontSize: 12,
+  },
+  segmentedControlGridCols3: {
+    flexDirection: 'row',
+    gap: 8,
+    width: '100%',
+  },
+  segmentBtnItem: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  segmentBtnActive: {
+    borderColor: '#5c77ff',
+    backgroundColor: 'rgba(92, 119, 255, 0.1)',
+  },
+  segmentBtnInactive: {
+    borderColor: '#27272A',
+    backgroundColor: '#0F0F12',
+  },
+  segmentIconCharEmoji: {
+    fontSize: 18,
+    marginBottom: 4,
+  },
+  segmentButtonTextLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  textActiveLabel: {
+    color: '#5c77ff',
+  },
+  textMutedLabel: {
+    color: '#a1a1aa',
+  },
+  floatingNavContainer: {
+    position: 'absolute',
+    bottom: 24,
+    left: 16,
+    right: 16,
+    zIndex: 60,
+    alignItems: 'center',
+  },
+  navDockPillLayoutRow: {
+    backgroundColor: 'rgba(22, 22, 24, 0.9)',
+    borderWidth: 1,
+    borderColor: '#27272A',
+    borderRadius: 9999,
+    paddingHorizontal: 24,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 32,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  tabMutedActionItem: {
+    padding: 4,
+  },
+  tabBubbleActiveIconWrapper: {
+    backgroundColor: '#5c77ff',
+    padding: 12,
+    borderRadius: 9999,
+    shadowColor: '#5c77ff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 15,
   },
 });
