@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   View,
   Text,
   TouchableOpacity,
@@ -7,15 +8,96 @@ import {
   TextInput,
   StyleSheet,
   Dimensions,
-  Image
+  Image,
+  Linking
 } from 'react-native';
 import Svg, { Path, Line } from 'react-native-svg';
+import useAppStore from '../../src/store';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 export default function AIChatInterface({ navigation }) {
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [cameraVisible, setCameraVisible] = useState(false);
+  const [inputText, setInputText] = useState('');
+  const scrollViewRef = useRef(null);
+  const chatMessages = useAppStore((s) => s.chatMessages);
+  const isChatLoading = useAppStore((s) => s.isChatLoading);
+  const sendMessage = useAppStore((s) => s.sendMessage);
+
+  const handleSend = async () => {
+    const text = inputText.trim();
+    if (!text || isChatLoading) return;
+    setInputText('');
+    try {
+      await sendMessage(text);
+    } catch {
+      // Store renders a friendly failure message.
+    }
+  };
+
+  const handleOpenNaver = async (payload) => {
+    if (!payload) return;
+
+    try {
+      if (payload.naver_app_url) {
+        await Linking.openURL(payload.naver_app_url);
+        return;
+      }
+    } catch {
+      // Fall back to the web URL below.
+    }
+
+    if (payload.naver_web_url) {
+      await Linking.openURL(payload.naver_web_url);
+    }
+  };
+
+  const formatTimestamp = (value) => {
+    const date = value ? new Date(value) : new Date();
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const renderMessage = (message) => {
+    if (message.role === 'user') {
+      return (
+        <View key={message.id} style={styles.userMessageRow}>
+          <View style={styles.msgUserPill}>
+            <Text style={styles.msgTextUser}>{message.content}</Text>
+            {message.attachmentType === 'image' && (
+              <Text style={styles.userAttachmentText}>Photo attached</Text>
+            )}
+          </View>
+          <Text style={styles.timestampSubtextRight}>YOU • {formatTimestamp(message.timestamp)}</Text>
+        </View>
+      );
+    }
+
+    return (
+      <View key={message.id} style={styles.buddyMessageRow}>
+        <View style={styles.avatarContainer}>
+          <Svg width="16" height="16" fill="#5c77ff" viewBox="0 0 20 20">
+            <Path fillRule="evenodd" clipRule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" />
+          </Svg>
+        </View>
+        <View style={styles.msgBuddyPillContainer}>
+          <View style={[styles.msgBuddyPill, message.isError && styles.errorBubble]}>
+            <Text style={styles.msgTextBuddy}>{message.content}</Text>
+            {message.action === 'OPEN_NAVER_MAP' && message.actionPayload && (
+              <TouchableOpacity style={styles.naverButton} onPress={() => handleOpenNaver(message.actionPayload)}>
+                <Svg width="18" height="18" fill="#ffffff" viewBox="0 0 24 24" style={styles.naverIcon}>
+                  <Path d="M12 2L4.5 20.29L5.21 21L12 18L18.79 21L19.5 20.29L12 2Z" />
+                </Svg>
+                <Text style={styles.naverButtonText}>Open in Naver</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <Text style={styles.timestampSubtextLeft}>BUDDY • {formatTimestamp(message.timestamp)}</Text>
+        </View>
+      </View>
+    );
+  };
 
   return (
     <View style={styles.deviceWrapper}>
@@ -71,69 +153,24 @@ export default function AIChatInterface({ navigation }) {
 
       {/* 3. SCROLLABLE CORE CHAT WINDOW */}
       <ScrollView
+        ref={scrollViewRef}
         style={styles.chatScrollContainer}
         contentContainerStyle={styles.chatContentPadding}
         showsVerticalScrollIndicator={false}
+        onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
       >
-        <Text style={styles.dateStamp}>TODAY 14:32</Text>
-
-        {/* Buddy Message Block 1 */}
-        <View style={styles.buddyMessageRow}>
-          <View style={styles.avatarContainer}>
-            <Svg width="16" height="16" fill="#5c77ff" viewBox="0 0 20 20">
-              <Path fillRule="evenodd" clipRule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" />
-            </Svg>
-          </View>
-          <View style={styles.msgBuddyPill}>
-            <Text style={styles.msgTextBuddy}>
-              I noticed you're near the central district. The weather is clearing up. Want me to adjust the walking route to include the park?
-            </Text>
-          </View>
-        </View>
-
-        {/* User Message Block 1 */}
-        <View style={styles.userMessageRow}>
-          <View style={styles.msgUserPill}>
-            <Text style={styles.msgTextUser}>
-              Yes, let's do that. Is there a coffee shop on the way?
-            </Text>
-          </View>
-        </View>
-
-        {/* Buddy Message Block 2 (with Naver Link Action Button) */}
-        <View style={styles.buddyMessageRow}>
-          <View style={styles.avatarContainer}>
-            <Svg width="16" height="16" fill="#5c77ff" viewBox="0 0 20 20">
-              <Path fillRule="evenodd" clipRule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" />
-            </Svg>
-          </View>
-          <View style={styles.msgBuddyPillContainer}>
-            <View style={styles.msgBuddyPill}>
-              <Text style={styles.msgTextBuddy}>
-                Certainly! "Yukjeon Sikdang" is just 300 meters away and is famous for its premium pork. I've prepared the navigation for you.
-              </Text>
-
-              {/* INTERACTIVE NAVER DEEP LINK ACTION BUTTON */}
-              <TouchableOpacity style={styles.naverButton} onPress={() => console.log('Deep-link to Naver Map')}>
-                <Svg width="18" height="18" fill="#ffffff" viewBox="0 0 24 24" style={styles.naverIcon}>
-                  <Path d="M12 2L4.5 20.29L5.21 21L12 18L18.79 21L19.5 20.29L12 2Z" />
-                </Svg>
-                <Text style={styles.naverButtonText}>Open in Naver</Text>
-              </TouchableOpacity>
+        <Text style={styles.dateStamp}>TODAY</Text>
+        {chatMessages.map(renderMessage)}
+        {isChatLoading && (
+          <View style={styles.buddyMessageRow}>
+            <View style={styles.avatarContainer}>
+              <ActivityIndicator color="#5c77ff" size="small" />
             </View>
-            <Text style={styles.timestampSubtextLeft}>BUDDY • 14:03</Text>
+            <View style={styles.msgBuddyPill}>
+              <Text style={styles.msgTextBuddy}>Typing...</Text>
+            </View>
           </View>
-        </View>
-
-        {/* User Message Block 2 */}
-        <View style={styles.userMessageRow}>
-          <View style={styles.msgUserPill}>
-            <Text style={styles.msgTextUser}>
-              I'm looking for a highly-rated BBQ spot nearby. Can you show me the way on Naver Maps?
-            </Text>
-          </View>
-          <Text style={styles.timestampSubtextRight}>YOU • 14:03</Text>
-        </View>
+        )}
       </ScrollView>
 
       {/* 4. CAMERA VIEWFINDER FLOATING LIVE-PANEL OVERLAY */}
@@ -196,8 +233,16 @@ export default function AIChatInterface({ navigation }) {
             placeholder="Ask AI..."
             placeholderTextColor="#4b5563"
             editable={true}
+            value={inputText}
+            onChangeText={setInputText}
+            onSubmitEditing={handleSend}
+            returnKeyType="send"
           />
-          <TouchableOpacity style={styles.sendActionButton}>
+          <TouchableOpacity
+            style={[styles.sendActionButton, (!inputText.trim() || isChatLoading) && styles.sendActionButtonDisabled]}
+            onPress={handleSend}
+            disabled={!inputText.trim() || isChatLoading}
+          >
             <Svg width="14" height="14" fill="none" stroke="#5c77ff" strokeWidth="2.5" viewBox="0 0 24 24">
               <Path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
             </Svg>
@@ -318,6 +363,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 4,
   },
+  errorBubble: {
+    borderColor: '#7f1d1d',
+    backgroundColor: '#2a1111',
+  },
   msgTextBuddy: {
     color: '#e5e5e5',
     fontSize: 14,
@@ -344,6 +393,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     fontWeight: '500',
+  },
+  userAttachmentText: {
+    color: 'rgba(255, 255, 255, 0.78)',
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 6,
   },
   naverButton: {
     backgroundColor: '#00c73c',
@@ -502,6 +557,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#1f1f1f',
     padding: 6,
     borderRadius: 8,
+  },
+  sendActionButtonDisabled: {
+    opacity: 0.45,
   },
   menuDockToggle: {
     borderRadius: 9999,

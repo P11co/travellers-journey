@@ -14,8 +14,10 @@ import useAppStore from '../../src/store';
 export default function CurrentItineraryView({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const itineraries = useAppStore((s) => s.itineraries);
+  const generatedItinerary = useAppStore((s) => s.generatedItinerary);
   const itineraryId = route?.params?.itineraryId;
-  const itinerary = itineraries.find((item) => item.id === itineraryId) || itineraries[itineraries.length - 1] || null;
+  const itinerary = itineraries.find((item) => item.id === itineraryId) || generatedItinerary || itineraries[0] || null;
+  const stops = itinerary?.stops || [];
 
   const handleSavePlan = () => {
     navigation.navigate('Home');
@@ -27,6 +29,47 @@ export default function CurrentItineraryView({ navigation, route }) {
       return;
     }
     navigation.navigate('Home');
+  };
+
+  const renderTimelineStop = (stop, index) => {
+    const isActive = index === 0;
+    const hasImage = Boolean(stop.image);
+
+    return (
+      <View key={stop.id || `${stop.name}-${index}`} style={styles.timelineNodeRow}>
+        <View style={[styles.timelineIconUnit, isActive && styles.activeNodeIcon]}>
+          <Svg width="16" height="16" fill="none" stroke={isActive ? '#ffffff' : '#9ca3af'} strokeWidth="2" viewBox="0 0 24 24">
+            <Path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <Path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          </Svg>
+        </View>
+        <View style={[styles.cardBg, hasImage ? styles.overflowClipCard : [styles.cardPaddingArea, styles.radiusPatch]]}>
+          {hasImage && (
+            <Image
+              source={{ uri: stop.image }}
+              style={styles.cardHeroImage}
+            />
+          )}
+          <View style={hasImage ? styles.cardPaddingArea : null}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={styles.cardNodeTitle}>{stop.name}</Text>
+              <Text style={isActive ? styles.monoTimeActive : styles.monoTimeMuted}>{stop.time}</Text>
+            </View>
+            <Text style={styles.cardBodyDescription}>{stop.description}</Text>
+            <View style={styles.badgeClusterRow}>
+              <View style={styles.grayTagBadge}>
+                <Text style={styles.grayTagText}>{stop.duration}</Text>
+              </View>
+              {(stop.tags || []).slice(0, 1).map((tag) => (
+                <View key={tag} style={styles.grayTagBadge}>
+                  <Text style={styles.grayTagText}>{tag}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
+      </View>
+    );
   };
 
   return (
@@ -78,93 +121,16 @@ export default function CurrentItineraryView({ navigation, route }) {
 
           {/* Continuous Running Svg Line Component */}
           <Svg style={styles.absoluteTimelineLine} pointerEvents="none">
-            <Line x1="20" y1="32" x2="20" y2="680" stroke="#2a2a2a" strokeWidth="1" />
+            <Line x1="20" y1="32" x2="20" y2={Math.max(120, stops.length * 120)} stroke="#2a2a2a" strokeWidth="1" />
           </Svg>
 
-          {/* TIMELINE CARD NODE 1 */}
-          <View style={styles.timelineNodeRow}>
-            <View style={[styles.timelineIconUnit, styles.activeNodeIcon]}>
-              <Svg width="16" height="16" fill="none" stroke="#ffffff" strokeWidth="2" viewBox="0 0 24 24">
-                <Path strokeLinecap="round" strokeLinejoin="round" d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
-              </Svg>
-            </View>
-            <View style={[styles.cardBg, styles.overflowClipCard]}>
-              <Image
-                source={{ uri: 'https://images.unsplash.com/photo-1540959733332-eab4deceeaf7?w=500' }}
-                style={styles.cardHeroImage}
-              />
-              <View style={styles.cardPaddingArea}>
-                <View style={styles.cardHeaderRow}>
-                  <Text style={styles.cardNodeTitle}>Gyeongbokgung Palace</Text>
-                  <Text style={styles.monoTimeActive}>09:00 AM</Text>
-                </View>
-                <Text style={styles.cardBodyDescription}>Experience the grandeur of the main royal palace of the Joseon dynasty.</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* TIMELINE CARD NODE 2 */}
-          <View style={styles.timelineNodeRow}>
-            <View style={styles.timelineIconUnit}>
-              <Svg width="16" height="16" fill="none" stroke="#9ca3af" strokeWidth="2" viewBox="0 0 24 24">
-                <Path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <Path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </Svg>
-            </View>
+          {stops.length ? (
+            stops.map(renderTimelineStop)
+          ) : (
             <View style={[styles.cardBg, styles.cardPaddingArea, styles.radiusPatch]}>
-              <View style={styles.cardHeaderRow}>
-                <Text style={styles.cardNodeTitle}>Bukchon Hanok Village</Text>
-                <Text style={styles.monoTimeMuted}>11:30 AM</Text>
-              </View>
-              <Text style={styles.cardBodyDescription}>Wander through hundreds of traditional houses, called hanok, that date back to the Joseon dynasty.</Text>
+              <Text style={styles.cardBodyDescription}>Generate an itinerary to review the route here.</Text>
             </View>
-          </View>
-
-          {/* TIMELINE CARD NODE 3 */}
-          <View style={styles.timelineNodeRow}>
-            <View style={styles.timelineIconUnit}>
-              <Svg width="16" height="16" fill="none" stroke="#9ca3af" strokeWidth="2" viewBox="0 0 24 24">
-                <Path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </Svg>
-            </View>
-            <View style={[styles.cardBg, styles.cardPaddingArea, styles.radiusPatch]}>
-              <View style={styles.cardHeaderRow}>
-                <Text style={styles.cardNodeTitle}>Lunch in Insadong</Text>
-                <Text style={styles.monoTimeMuted}>01:30 PM</Text>
-              </View>
-              <View style={styles.badgeClusterRow}>
-                <View style={styles.greenTagBadge}>
-                  <Text style={styles.greenTagText}>TOP CHOICE</Text>
-                </View>
-                <View style={styles.grayTagBadge}>
-                  <Text style={styles.grayTagText}>TRADITIONAL</Text>
-                </View>
-              </View>
-              <Text style={styles.cardBodyDescription}>Enjoy authentic Korean cuisine in the heart of Seoul's traditional cultural district.</Text>
-            </View>
-          </View>
-
-          {/* TIMELINE CARD NODE 4 */}
-          <View style={styles.timelineNodeRow}>
-            <View style={styles.timelineIconUnit}>
-              <Svg width="16" height="16" fill="none" stroke="#9ca3af" strokeWidth="2" viewBox="0 0 24 24">
-                <Path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </Svg>
-            </View>
-            <View style={[styles.cardBg, styles.overflowClipCard]}>
-              <Image
-                source={{ uri: 'https://images.unsplash.com/photo-1578637387939-43c525550085?w=500' }}
-                style={styles.cardHeroImage}
-              />
-              <View style={styles.cardPaddingArea}>
-                <View style={styles.cardHeaderRow}>
-                  <Text style={styles.cardNodeTitle}>N Seoul Tower</Text>
-                  <Text style={styles.monoTimeMuted}>04:00 PM</Text>
-                </View>
-                <Text style={styles.cardBodyDescription}>Catch the sunset and panoramic city views from the highest point in Seoul.</Text>
-              </View>
-            </View>
-          </View>
+          )}
 
         </View>
 

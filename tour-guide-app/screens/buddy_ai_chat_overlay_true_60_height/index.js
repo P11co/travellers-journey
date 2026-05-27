@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Dimensions,
   Image,
   LayoutAnimation,
+  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -13,6 +15,8 @@ import {
   View,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import useAppStore from '../../src/store';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const HANDLE_H = 40;
@@ -34,16 +38,21 @@ export default function BuddyAIChatOverlay({
   sheetMode = 'folded',
   onSheetModeChange,
 }) {
+  const insets = useSafeAreaInsets();
   const [cameraVisible, setCameraVisible] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [inputText, setInputText] = useState('');
   const [localMode, setLocalMode] = useState(sheetMode);
   const prevPropMode = useRef(sheetMode);
+  const scrollViewRef = useRef(null);
+  const chatMessages = useAppStore((s) => s.chatMessages);
+  const isChatLoading = useAppStore((s) => s.isChatLoading);
+  const sendMessage = useAppStore((s) => s.sendMessage);
 
-  const fullH = Math.max(320, SCREEN_HEIGHT - bottomOffset - 40);
-  const halfH = Math.round(SCREEN_HEIGHT * 0.45);
+  const halfH = Math.round(SCREEN_HEIGHT * 0.5);
 
   const heightFor = (mode) => {
-    if (mode === 'full') return fullH;
+    if (mode === 'full') return SCREEN_HEIGHT;
     if (mode === 'half') return halfH;
     return HANDLE_H;
   };
@@ -58,6 +67,16 @@ export default function BuddyAIChatOverlay({
     }
   }, [sheetMode]);
 
+  useEffect(() => {
+    if (localMode === 'folded') return undefined;
+
+    const timer = setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 80);
+
+    return () => clearTimeout(timer);
+  }, [localMode, chatMessages.length, isChatLoading]);
+
   const handleHandleTap = () => {
     const modes = ['folded', 'half', 'full'];
     const curIdx = modes.indexOf(localMode);
@@ -69,8 +88,70 @@ export default function BuddyAIChatOverlay({
     onSheetModeChange?.(nextMode);
   };
 
+  const handleSend = async () => {
+    const text = inputText.trim();
+    if (!text || isChatLoading) return;
+    setInputText('');
+    try {
+      await sendMessage(text);
+    } catch {
+      // Store renders a friendly failure message.
+    }
+  };
+
+  const handleOpenNaver = async (payload) => {
+    if (!payload) return;
+
+    try {
+      if (payload.naver_app_url) {
+        await Linking.openURL(payload.naver_app_url);
+        return;
+      }
+    } catch {
+      // Fall back to web URL.
+    }
+
+    if (payload.naver_web_url) {
+      await Linking.openURL(payload.naver_web_url);
+    }
+  };
+
+  const renderMessage = (message) => {
+    if (message.role === 'user') {
+      return (
+        <View key={message.id} style={styles.userRow}>
+          <View style={styles.userBubble}>
+            <Text style={styles.userText}>{message.content}</Text>
+            {message.attachmentType === 'image' && (
+              <Text style={styles.userAttachmentText}>Photo attached</Text>
+            )}
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <View key={message.id} style={styles.buddyRow}>
+        <View style={styles.avatar}>
+          <Svg width="16" height="16" fill="#5c77ff" viewBox="0 0 20 20">
+            <Path fillRule="evenodd" clipRule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" />
+          </Svg>
+        </View>
+        <View style={[styles.buddyBubble, message.isError && styles.errorBubble]}>
+          <Text style={styles.buddyText}>{message.content}</Text>
+          {message.action === 'OPEN_NAVER_MAP' && message.actionPayload && (
+            <TouchableOpacity style={styles.naverButton} onPress={() => handleOpenNaver(message.actionPayload)}>
+              <Text style={styles.naverButtonText}>Open in Naver</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    );
+  };
+
   const currentHeight = heightFor(localMode);
   const isExpanded = localMode !== 'folded';
+  const isFullScreen = localMode === 'full';
 
   return (
     <View style={styles.root} pointerEvents="box-none">
@@ -89,79 +170,46 @@ export default function BuddyAIChatOverlay({
         </View>
       )}
 
-      {/* Bottom sheet — height driven by state + LayoutAnimation */}
-      <View
-        style={[
-          styles.sheet,
-          { height: currentHeight, bottom: bottomOffset },
-        ]}
-      >
-        {/* Handle strip — always 40px, always tappable */}
-        <TouchableOpacity
-          style={styles.handleStrip}
-          onPress={handleHandleTap}
-          activeOpacity={0.7}
+      {isExpanded && (
+        <View
+          style={[
+            styles.sheet,
+            isFullScreen
+              ? [styles.fullscreenSheet, { paddingTop: insets.top }]
+              : { height: currentHeight, bottom: bottomOffset },
+          ]}
         >
-          <View style={styles.pill} />
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.handleStrip}
+            onPress={handleHandleTap}
+            activeOpacity={0.7}
+          >
+            <View style={styles.pill} />
+          </TouchableOpacity>
 
-        {/* Chat content — visible only when expanded */}
-        {isExpanded && (
           <View style={styles.content}>
             <View style={styles.row}>
 
               {/* Messages */}
               <ScrollView
+                ref={scrollViewRef}
                 style={styles.scroll}
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
+                onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
               >
-                <Text style={styles.timeLabel}>TODAY 14:32</Text>
-
-                <View style={styles.buddyRow}>
-                  <View style={styles.avatar}>
-                    <Svg width="16" height="16" fill="#5c77ff" viewBox="0 0 20 20">
-                      <Path fillRule="evenodd" clipRule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" />
-                    </Svg>
+                <Text style={styles.timeLabel}>TODAY</Text>
+                {chatMessages.map(renderMessage)}
+                {isChatLoading && (
+                  <View style={styles.buddyRow}>
+                    <View style={styles.avatar}>
+                      <ActivityIndicator color="#5c77ff" size="small" />
+                    </View>
+                    <View style={styles.buddyBubble}>
+                      <Text style={styles.buddyText}>Typing...</Text>
+                    </View>
                   </View>
-                  <View style={styles.buddyBubble}>
-                    <Text style={styles.buddyText}>I noticed you're near the central district. The weather is clearing up. Want me to adjust the walking route to include the park?</Text>
-                  </View>
-                </View>
-
-                <View style={styles.userRow}>
-                  <View style={styles.userBubble}>
-                    <Text style={styles.userText}>Yes, let's do that. Is there a coffee shop on the way?</Text>
-                  </View>
-                </View>
-
-                <View style={styles.buddyRow}>
-                  <View style={styles.avatar}>
-                    <Svg width="16" height="16" fill="#5c77ff" viewBox="0 0 20 20">
-                      <Path fillRule="evenodd" clipRule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" />
-                    </Svg>
-                  </View>
-                  <View style={styles.buddyBubble}>
-                    <Text style={styles.buddyText}>Absolutely! There's a highly-rated café called "Beanspot" 2 minutes off your route. Want me to add it as a waypoint?</Text>
-                  </View>
-                </View>
-
-                <View style={styles.userRow}>
-                  <View style={styles.userBubble}>
-                    <Text style={styles.userText}>Perfect, yes add it!</Text>
-                  </View>
-                </View>
-
-                <View style={styles.buddyRow}>
-                  <View style={styles.avatar}>
-                    <Svg width="16" height="16" fill="#5c77ff" viewBox="0 0 20 20">
-                      <Path fillRule="evenodd" clipRule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" />
-                    </Svg>
-                  </View>
-                  <View style={styles.buddyBubble}>
-                    <Text style={styles.buddyText}>Done! I've added Beanspot as a waypoint. Your updated route now includes a 5-minute stop there. ETA to N Seoul Tower adjusted to 4:15 PM.</Text>
-                  </View>
-                </View>
+                )}
               </ScrollView>
 
               {/* Right sidebar for media controls */}
@@ -191,15 +239,23 @@ export default function BuddyAIChatOverlay({
             </View>
 
             {/* Input bar */}
-            <View style={styles.inputBar}>
+            <View style={[styles.inputBar, isFullScreen && { paddingBottom: insets.bottom + 10 }]}>
               <View style={styles.inputInner}>
                 <TextInput
                   style={styles.input}
                   placeholder="Ask Buddy AI..."
                   placeholderTextColor="#6b7280"
                   editable
+                  value={inputText}
+                  onChangeText={setInputText}
+                  onSubmitEditing={handleSend}
+                  returnKeyType="send"
                 />
-                <TouchableOpacity style={styles.sendBtn}>
+                <TouchableOpacity
+                  style={[styles.sendBtn, (!inputText.trim() || isChatLoading) && styles.sendBtnDisabled]}
+                  onPress={handleSend}
+                  disabled={!inputText.trim() || isChatLoading}
+                >
                   <Svg width="16" height="16" fill="none" stroke="#5c77ff" strokeWidth="2.5" viewBox="0 0 24 24">
                     <Path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
                   </Svg>
@@ -215,8 +271,8 @@ export default function BuddyAIChatOverlay({
               </TouchableOpacity>
             </View>
           </View>
-        )}
-      </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -264,7 +320,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(15, 15, 20, 0.98)',
+    backgroundColor: '#0d0d12',
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
     overflow: 'hidden',
@@ -274,6 +330,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 12,
     elevation: 20,
+  },
+  fullscreenSheet: {
+    top: 0,
+    bottom: 0,
+    height: undefined,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   // Handle
   handleStrip: {
@@ -343,7 +408,20 @@ const styles = StyleSheet.create({
     padding: 12,
     maxWidth: '78%',
   },
+  errorBubble: {
+    borderColor: '#7f1d1d',
+    backgroundColor: '#2a1111',
+  },
   buddyText: { color: '#e2e8f0', fontSize: 13, lineHeight: 19 },
+  naverButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#00c73c',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 10,
+  },
+  naverButtonText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   userRow: {
     alignItems: 'flex-end',
     marginBottom: 12,
@@ -356,6 +434,12 @@ const styles = StyleSheet.create({
     maxWidth: '78%',
   },
   userText: { color: '#fff', fontSize: 13, lineHeight: 19 },
+  userAttachmentText: {
+    color: 'rgba(255, 255, 255, 0.78)',
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 6,
+  },
   // Sidebar
   sidebar: {
     width: 52,
@@ -393,6 +477,7 @@ const styles = StyleSheet.create({
   },
   input: { flex: 1, color: '#cbd5e1', fontSize: 14 },
   sendBtn: { marginLeft: 8, padding: 4 },
+  sendBtnDisabled: { opacity: 0.45 },
   menuBtn: {
     padding: 11,
     borderRadius: 999,

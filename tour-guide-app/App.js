@@ -30,11 +30,6 @@ export default function App() {
           <Stack.Screen name="ConfirmItinerary" component={CurrentItineraryView} />
           <Stack.Screen name="TourMap" component={TourMapScreen} />
           <Stack.Screen name="Chat" component={AIChatInterface} options={{ animation: 'slide_from_bottom' }} />
-          <Stack.Screen
-            name="FullscreenChat"
-            component={AIChatInterface}
-            options={{ animation: 'slide_from_bottom' }}
-          />
           <Stack.Screen name="Settings" component={SettingsConfigurationView} />
         </Stack.Navigator>
       </NavigationContainer>

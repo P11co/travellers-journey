@@ -1,0 +1,408 @@
+[
+    {
+        "id": "main_gate",
+        "name": "Main Gate (Gwanghwamun)",
+        "coordinates": {
+            "latitude": 37.57602,
+            "longitude": 126.97685
+        },
+        "radius": 40,
+        "proactivePrompt": "Welcome to Gyeongbokgung Palace. The ticket booth is 100 meters ahead. Tickets are 3,000 won and entry is free if you're wearing a hanbok.",
+        "knowledgeSummary": "Gwanghwamun is the main and largest gate of Gyeongbokgung Palace. It originally had a watchtower structure.",
+        "surroundings": {
+            "front": "Gwanghwamun Square and the city of Seoul",
+            "back": "Heungnyemun Gate and the palace grounds",
+            "left": "The National Palace Museum",
+            "right": "Ticket Booth and Dongsipjagak (East Watchtower)"
+        },
+        "facilities": {
+            "ticketBooth": "100 meters inside on the right",
+            "restrooms": "Near the National Palace Museum on the left",
+            "vendingMachines": "Next to the ticket booth",
+            "emergency": "Palace security office near the ticket booth"
+        }
+    },
+    {
+        "id": "ticket_booth",
+        "name": "Ticket Booth",
+        "coordinates": {
+            "latitude": 37.57724,
+            "longitude": 126.97746
+        },
+        "radius": 30,
+        "proactivePrompt": "The ticket booth is just ahead on your right. They accept credit cards and cash. Lines are typically shorter on weekday mornings.",
+        "knowledgeSummary": "Ticket booth for entering Gyeongbokgung Palace. Regular adult ticket is 3,000 KRW. Closed on Tuesdays.",
+        "surroundings": {
+            "front": "Entrance to the main palace courtyards",
+            "back": "Gwanghwamun Gate and the street",
+            "left": "The path leading to the National Palace Museum",
+            "right": "Palace outer walls and parking area"
+        },
+        "facilities": {
+            "ticketBooth": "You are at the ticket booth",
+            "restrooms": "Public restrooms located just behind the ticket booth building",
+            "waterFountains": "Next to the restrooms",
+            "emergency": "First aid station at the ticket booth"
+        }
+    },
+    {
+        "id": "geunjeongjeon",
+        "name": "Geunjeongjeon Throne Hall",
+        "coordinates": {
+            "latitude": 37.57865,
+            "longitude": 126.97711
+        },
+        "radius": 45,
+        "proactivePrompt": "You're approaching the main throne hall, Geunjeongjeon. Feel free to ask me anything about the architecture or history.",
+        "knowledgeSummary": "Geunjeongjeon is the main throne hall where the king held official ceremonies. Built in 1395. The name means 'industrious governance'.",
+        "surroundings": {
+            "front": "Geunjeongmun Gate and the large paved courtyard",
+            "back": "Sajeongjeon, the King's executive office",
+            "left": "Gyeonghoeru Pavilion across the wall",
+            "right": "Donggung, the Crown Prince's compound"
+        },
+        "facilities": {
+            "restrooms": "Located outside the courtyard, to the east near the entrance of Donggung",
+            "waterFountains": "Near the restrooms to the east",
+            "emergency": "Palace staff stationed near the entrance"
+        }
+    },
+    {
+        "id": "gyeonghoeru",
+        "name": "Gyeonghoeru Pavilion",
+        "coordinates": {
+            "latitude": 37.57962,
+            "longitude": 126.97598
+        },
+        "radius": 45,
+        "proactivePrompt": "This is Gyeonghoeru Pavilion, used for royal banquets. Visitors cannot enter, but it's a popular photo spot.",
+        "knowledgeSummary": "Gyeonghoeru Pavilion is a large elevated pavilion resting on 48 stone pillars, overlooking an artificial pond. Used for state banquets and receiving foreign envoys.",
+        "surroundings": {
+            "front": "The large artificial pond and the pavilion itself",
+            "back": "Sujeongjeon Hall and the palace walls",
+            "left": "A wooded area leading towards the northern gates",
+            "right": "Geunjeongjeon Throne Hall over the east wall"
+        },
+        "facilities": {
+            "restrooms": "Restrooms and a small cafe are located just south of the pavilion",
+            "vendingMachines": "At the cafe south of the pavilion",
+            "waterFountains": "At the cafe south of the pavilion"
+        }
+    },
+    {
+        "id": "national_palace_museum",
+        "name": "National Palace Museum",
+        "coordinates": {
+            "latitude": 37.5765,
+            "longitude": 126.97579
+        },
+        "radius": 40,
+        "proactivePrompt": "The National Palace Museum is on your left. Admission is separate (5,000 won). Would you like me to show you the entrance on the map?",
+        "knowledgeSummary": "The National Palace Museum of Korea houses a massive collection of art and objects from the Joseon Dynasty.",
+        "surroundings": {
+            "front": "Gwanghwamun Gate and the main entrance path",
+            "back": "Palace west walls and the street",
+            "left": "The road and subway station exits",
+            "right": "Heungnyemun Gate and the ticket booth path"
+        },
+        "facilities": {
+            "restrooms": "Inside the museum on the first floor and basement",
+            "waterFountains": "Inside the museum near the restrooms",
+            "vendingMachines": "Museum cafe and gift shop inside",
+            "emergency": "Information desk inside the museum lobby",
+            "ticketBooth": "Museum ticket desk inside the lobby"
+        }
+    },
+    {
+        "id": "heungnyemun",
+        "name": "Heungnyemun Gate",
+        "coordinates": {
+            "latitude": 37.57685,
+            "longitude": 126.97699
+        },
+        "radius": 30,
+        "proactivePrompt": "You are at Heungnyemun, the second inner gate. Have your tickets ready for inspection here.",
+        "knowledgeSummary": "Heungnyemun is the second gate of Gyeongbokgung. It was originally built in 1426, destroyed during the Japanese invasion, and reconstructed.",
+        "surroundings": {
+            "front": "Geunjeongmun Gate and the canal",
+            "back": "Gwanghwamun Gate and the outer courtyard",
+            "left": "Palace wall",
+            "right": "Ticket Booth area"
+        },
+        "facilities": {
+            "ticketBooth": "Just outside this gate",
+            "restrooms": "Near the ticket booth outside"
+        }
+    },
+    {
+        "id": "sajeongjeon",
+        "name": "Sajeongjeon Hall",
+        "coordinates": {
+            "latitude": 37.57912,
+            "longitude": 126.97705
+        },
+        "radius": 30,
+        "proactivePrompt": "This is Sajeongjeon, where the King conducted daily state affairs. Notice the sundial out front.",
+        "knowledgeSummary": "Sajeongjeon was the executive office where the King met with officials daily. 'Sajeong' means 'deeply pondering before deciding'.",
+        "surroundings": {
+            "front": "Geunjeongjeon Throne Hall",
+            "back": "Gangnyeongjeon (King's quarters)",
+            "left": "Sujeongjeon Hall",
+            "right": "Eastern palace buildings"
+        },
+        "facilities": {}
+    },
+    {
+        "id": "gangnyeongjeon",
+        "name": "Gangnyeongjeon Hall",
+        "coordinates": {
+            "latitude": 37.57948,
+            "longitude": 126.97703
+        },
+        "radius": 30,
+        "proactivePrompt": "You've reached Gangnyeongjeon, the King's living quarters. The roof has no white ridge, a unique feature of royal sleeping quarters.",
+        "knowledgeSummary": "Gangnyeongjeon served as the King's primary living and sleeping quarters. The lack of a top roof ridge signifies the King's status as the metaphorical dragon.",
+        "surroundings": {
+            "front": "Sajeongjeon Hall",
+            "back": "Gyotaejeon (Queen's quarters)",
+            "left": "Gyeonghoeru Pavilion (over the wall)",
+            "right": "Eastern residential buildings"
+        },
+        "facilities": {}
+    },
+    {
+        "id": "gyotaejeon",
+        "name": "Gyotaejeon Hall",
+        "coordinates": {
+            "latitude": 37.57984,
+            "longitude": 126.97702
+        },
+        "radius": 30,
+        "proactivePrompt": "This is Gyotaejeon, the Queen's residence. Be sure to check out the beautiful terraced garden directly behind it.",
+        "knowledgeSummary": "Gyotaejeon was the primary living quarters for the Queen. It was the center of the inner court.",
+        "surroundings": {
+            "front": "Gangnyeongjeon (King's quarters)",
+            "back": "Amisan Garden",
+            "left": "Western palace paths",
+            "right": "Eastern palace paths"
+        },
+        "facilities": {}
+    },
+    {
+        "id": "amisan",
+        "name": "Amisan Garden",
+        "coordinates": {
+            "latitude": 37.5801,
+            "longitude": 126.977
+        },
+        "radius": 20,
+        "proactivePrompt": "You are looking at Amisan, the Queen's private terraced garden. Notice the intricately carved hexagonal chimneys.",
+        "knowledgeSummary": "Amisan is an artificial mound with a terraced garden built for the Queen. The beautifully decorated brick chimneys are National Treasures.",
+        "surroundings": {
+            "front": "Gyotaejeon Hall",
+            "back": "Jagyeongjeon Hall",
+            "left": "Wooded area",
+            "right": "Palace paths"
+        },
+        "facilities": {}
+    },
+    {
+        "id": "hyangwonjeong",
+        "name": "Hyangwonjeong Pavilion",
+        "coordinates": {
+            "latitude": 37.58223,
+            "longitude": 126.97746
+        },
+        "radius": 40,
+        "proactivePrompt": "This beautiful hexagonal pavilion on the island is Hyangwonjeong. It's one of the most picturesque spots in the palace.",
+        "knowledgeSummary": "Hyangwonjeong is a two-story hexagonal pavilion built on an artificial island. It was constructed in 1873 for King Gojong's leisure.",
+        "surroundings": {
+            "front": "Geoncheonggung Residence",
+            "back": "The main palace complexes to the south",
+            "left": "National Folk Museum of Korea",
+            "right": "Eastern palace walls"
+        },
+        "facilities": {
+            "restrooms": "Near the National Folk Museum",
+            "cafe": "Cafe near the pond"
+        }
+    },
+    {
+        "id": "national_folk_museum",
+        "name": "National Folk Museum of Korea",
+        "coordinates": {
+            "latitude": 37.58169,
+            "longitude": 126.97906
+        },
+        "radius": 40,
+        "proactivePrompt": "The tall pagoda-style building is the National Folk Museum. Entry is free if you want to learn about traditional Korean life.",
+        "knowledgeSummary": "The National Folk Museum of Korea illustrates the history of traditional life of the Korean people. The building design combines various famous historical structures.",
+        "surroundings": {
+            "front": "Palace paths and eastern gates",
+            "back": "Palace walls",
+            "left": "Hyangwonjeong Pavilion",
+            "right": "Samcheong-dong exit"
+        },
+        "facilities": {
+            "restrooms": "Inside the museum",
+            "waterFountains": "Inside the museum",
+            "cafe": "Museum cafe on the first floor"
+        }
+    },
+    {
+        "id": "sinmumun",
+        "name": "Sinmumun (North Gate)",
+        "coordinates": {
+            "latitude": 37.58359,
+            "longitude": 126.97686
+        },
+        "radius": 25,
+        "proactivePrompt": "This is Sinmumun, the north gate. If you exit here, you'll see the Blue House (Cheongwadae) right across the street.",
+        "knowledgeSummary": "Sinmumun is the northern gate of Gyeongbokgung. Exiting this gate leads directly to the former presidential residence, the Blue House.",
+        "surroundings": {
+            "front": "The Blue House (outside the gate)",
+            "back": "Geoncheonggung Residence and the palace",
+            "left": "Northwest palace walls",
+            "right": "Northeast palace walls"
+        },
+        "facilities": {
+            "restrooms": "Just outside the gate near the Blue House"
+        }
+    },
+    {
+        "id": "yeonchumun",
+        "name": "Yeongchumun (West Gate)",
+        "coordinates": {
+            "latitude": 37.57866,
+            "longitude": 126.97397
+        },
+        "radius": 25,
+        "proactivePrompt": "You are at Yeongchumun, the west gate. This leads out to the Seochon neighborhood, famous for cafes and galleries.",
+        "knowledgeSummary": "Yeongchumun, the Autumn Gate, is the western entrance to the palace. It was primarily used by civil and military officials.",
+        "surroundings": {
+            "front": "Seochon Neighborhood (outside)",
+            "back": "Gyeonghoeru Pavilion area",
+            "left": "Southwest palace walls",
+            "right": "Northwest palace walls"
+        },
+        "facilities": {}
+    },
+    {
+        "id": "geonchunmun",
+        "name": "Geonchunmun (East Gate)",
+        "coordinates": {
+            "latitude": 37.57898,
+            "longitude": 126.98024
+        },
+        "radius": 25,
+        "proactivePrompt": "This is Geonchunmun, the east gate. Exiting here takes you towards the Bukchon Hanok Village and Samcheong-dong.",
+        "knowledgeSummary": "Geonchunmun, the Spring Gate, is the eastern entrance. It was historically used by the royal family and their relatives.",
+        "surroundings": {
+            "front": "Samcheong-dong road (outside)",
+            "back": "Donggung (Crown Prince's quarters)",
+            "left": "Northeast palace walls",
+            "right": "Southeast palace walls"
+        },
+        "facilities": {}
+    },
+    {
+        "id": "sejong_statue",
+        "name": "King Sejong Statue",
+        "coordinates": {
+            "latitude": 37.57271,
+            "longitude": 126.97686
+        },
+        "radius": 30,
+        "proactivePrompt": "You are at the statue of King Sejong the Great, the inventor of the Korean alphabet, Hangul.",
+        "knowledgeSummary": "A massive golden statue of King Sejong the Great, the 4th king of Joseon, located in the center of Gwanghwamun Square. Underneath is a museum dedicated to his achievements.",
+        "surroundings": {
+            "front": "Admiral Yi Sun-sin Statue",
+            "back": "Gwanghwamun Gate",
+            "left": "Sejong Center for the Performing Arts",
+            "right": "US Embassy and Kyobo Building"
+        },
+        "facilities": {
+            "restrooms": "Inside the underground museum (entrance behind the statue)"
+        }
+    },
+    {
+        "id": "yi_sun_sin_statue",
+        "name": "Admiral Yi Sun-sin Statue",
+        "coordinates": {
+            "latitude": 37.571,
+            "longitude": 126.97686
+        },
+        "radius": 30,
+        "proactivePrompt": "This is the statue of Admiral Yi Sun-sin, Korea's greatest naval hero. Notice the turtle ship miniature at the base.",
+        "knowledgeSummary": "A towering statue of Admiral Yi Sun-sin, who saved Korea during the Imjin War in the 16th century using his famous Turtle Ships.",
+        "surroundings": {
+            "front": "Cheonggyecheon Stream and City Hall",
+            "back": "King Sejong Statue",
+            "left": "Sejong Center",
+            "right": "Kyobo Bookstore"
+        },
+        "facilities": {}
+    },
+    {
+        "id": "cheonggyecheon_plaza",
+        "name": "Cheonggyecheon Stream Plaza",
+        "coordinates": {
+            "latitude": 37.56943,
+            "longitude": 126.97746
+        },
+        "radius": 40,
+        "proactivePrompt": "You are at Cheonggyecheon Plaza, the start of the 11km urban stream. It's a great place to sit and relax.",
+        "knowledgeSummary": "Cheonggyecheon is a restored public recreation space in downtown Seoul. The plaza features a famous spiral sculpture called 'Spring'.",
+        "surroundings": {
+            "front": "The stream walkway",
+            "back": "Gwanghwamun Square",
+            "left": "City Hall area",
+            "right": "Jonggak area"
+        },
+        "facilities": {
+            "restrooms": "Public restrooms down by the stream path"
+        }
+    },
+    {
+        "id": "gwanghwamun_station_9",
+        "name": "Gwanghwamun Station (Exit 9)",
+        "coordinates": {
+            "latitude": 37.57165,
+            "longitude": 126.97686
+        },
+        "radius": 20,
+        "proactivePrompt": "You are near Gwanghwamun Station Exit 9, directly in the square. Watch out for crowds here.",
+        "knowledgeSummary": "Exit 9 of Gwanghwamun Station connects directly to Haechi Madang, the underground plaza beneath Gwanghwamun Square.",
+        "surroundings": {
+            "front": "King Sejong Statue",
+            "back": "Admiral Yi Sun-sin Statue",
+            "left": "Underground museum entrance",
+            "right": "Street level crossing"
+        },
+        "facilities": {
+            "restrooms": "Inside the subway station",
+            "vendingMachines": "Inside the subway station"
+        }
+    },
+    {
+        "id": "sejong_center",
+        "name": "Sejong Center for the Performing Arts",
+        "coordinates": {
+            "latitude": 37.57248,
+            "longitude": 126.97548
+        },
+        "radius": 40,
+        "proactivePrompt": "The large building with the grand staircase is the Sejong Center, Seoul's largest arts and cultural complex.",
+        "knowledgeSummary": "The Sejong Center is the largest arts and cultural complex in Seoul, featuring a massive pipe organ and various theaters.",
+        "surroundings": {
+            "front": "Gwanghwamun Square",
+            "back": "Government Complex Seoul",
+            "left": "Gwanghwamun Station",
+            "right": "Palace western paths"
+        },
+        "facilities": {
+            "restrooms": "Inside the center",
+            "cafe": "Multiple cafes inside and around the stairs"
+        }
+    }
+]

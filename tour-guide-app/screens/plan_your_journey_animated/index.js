@@ -1,5 +1,6 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   View,
   Text,
   StyleSheet,
@@ -11,26 +12,103 @@ import Svg, { Path, Line } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useAppStore from '../../src/store';
 
+const BUDGET_OPTIONS = ['Budget', 'Standard', 'Premium', 'Luxury'];
+const TIME_OPTIONS = ['Half Day (4 hrs)', 'Full Day (8 hrs)', 'Two Days (16 hrs)'];
+
 export default function PlanYourJourneyView({ navigation }) {
   const insets = useSafeAreaInsets();
   const scrollViewRef = useRef(null);
   const draft = useAppStore((s) => s.draft);
+  const updateDraft = useAppStore((s) => s.updateDraft);
   const toggleDraftActivity = useAppStore((s) => s.toggleDraftActivity);
   const finalizeDraft = useAppStore((s) => s.finalizeDraft);
+  const generateItinerary = useAppStore((s) => s.generateItinerary);
+  const generatedItinerary = useAppStore((s) => s.generatedItinerary);
+  const isLoadingItinerary = useAppStore((s) => s.isLoadingItinerary);
+  const itineraryError = useAppStore((s) => s.itineraryError);
+  const [isFinalizing, setIsFinalizing] = useState(false);
 
   const activities = draft.activities;
+  const routeStops = generatedItinerary?.stops?.length ? generatedItinerary.stops : draft.stops;
 
   const toggleActivity = (key) => {
     toggleDraftActivity(key);
   };
 
-  const handleFinalizePlan = () => {
-    const itineraryId = finalizeDraft();
-    navigation.navigate('ConfirmItinerary', { itineraryId });
+  const cycleDraftOption = (field, options) => {
+    const currentIndex = options.indexOf(draft[field]);
+    const nextValue = options[(currentIndex + 1) % options.length];
+    updateDraft({ [field]: nextValue });
   };
 
-  const handleGenerateItinerary = () => {
+  const handleFinalizePlan = async () => {
+    setIsFinalizing(true);
+    try {
+      const itineraryId = await finalizeDraft();
+      navigation.navigate('ConfirmItinerary', { itineraryId });
+    } finally {
+      setIsFinalizing(false);
+    }
+  };
+
+  const handleGenerateItinerary = async () => {
     scrollViewRef.current?.scrollTo({ y: 680, animated: true });
+    try {
+      await generateItinerary();
+    } catch {
+      // Error state is already stored for rendering below.
+    }
+  };
+
+  const renderRouteStop = (stop, index) => {
+    const isLunch = /lunch|food|meal|restaurant/i.test(`${stop.name} ${stop.description || ''}`);
+    if (isLunch) {
+      return (
+        <View key={stop.id || `${stop.name}-${index}`} style={styles.stopsTimelineRow}>
+          <View style={styles.lunchIconCircleNodeElement}>
+            <Text style={styles.lunchIconChar}>🍴</Text>
+          </View>
+          <View style={styles.lunchSegmentBannerBox}>
+            <Text style={styles.lunchBannerMainText}>{stop.name}</Text>
+            <Text style={styles.lunchBannerTimeText}>{stop.time}</Text>
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <View key={stop.id || `${stop.name}-${index}`} style={styles.stopsTimelineRow}>
+        <View style={[styles.circleNodeCountElement, index === 0 && styles.activeBorderHighlightCircle]}>
+          <Text style={index === 0 ? styles.nodeCountActiveText : styles.nodeCountMutedText}>
+            {String(index + 1).padStart(2, '0')}
+          </Text>
+        </View>
+        <View style={styles.stopInfoDataCard}>
+          <View style={styles.gripDragButtonLeft}>
+            <Text style={styles.gripIconText}>⋮⋮</Text>
+          </View>
+          <View style={styles.stopInfoCardCoreBody}>
+            <View style={styles.stopCardHeaderSplitRow}>
+              <Text style={styles.stopNodeTitle}>{stop.name}</Text>
+              <Text style={styles.stopNodeTimeLabel}>{stop.time}</Text>
+            </View>
+            <Text style={styles.stopCardTextExcerpt} numberOfLines={2}>
+              {stop.description}
+            </Text>
+            <View style={styles.tagPillsContainerCluster}>
+              <View style={styles.interiorCardTagPill}>
+                <Text style={styles.interiorPillText}>{stop.duration}</Text>
+              </View>
+              {(stop.tags || []).slice(0, 1).map((tag) => (
+                <View key={tag} style={styles.interiorCardTagPill}>
+                  <Text style={styles.interiorPillText}>{tag}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
+      </View>
+    );
   };
 
   return (
@@ -80,16 +158,22 @@ export default function PlanYourJourneyView({ navigation }) {
           <View style={styles.formGroupSpacing}>
             <View>
               <Text style={styles.fieldLabel}>Budget Level</Text>
-              <TouchableOpacity style={styles.customSelectTrigger}>
-                <Text style={styles.selectText}>Standard</Text>
+              <TouchableOpacity
+                style={styles.customSelectTrigger}
+                onPress={() => cycleDraftOption('budgetLevel', BUDGET_OPTIONS)}
+              >
+                <Text style={styles.selectText}>{draft.budgetLevel}</Text>
                 <Text style={styles.dropdownCarat}>▼</Text>
               </TouchableOpacity>
             </View>
 
             <View>
               <Text style={styles.fieldLabel}>Available Time</Text>
-              <TouchableOpacity style={styles.customSelectTrigger}>
-                <Text style={styles.selectText}>Full Day (8 hrs)</Text>
+              <TouchableOpacity
+                style={styles.customSelectTrigger}
+                onPress={() => cycleDraftOption('availableTime', TIME_OPTIONS)}
+              >
+                <Text style={styles.selectText}>{draft.availableTime}</Text>
                 <Text style={styles.dropdownCarat}>▼</Text>
               </TouchableOpacity>
             </View>
@@ -194,9 +278,18 @@ export default function PlanYourJourneyView({ navigation }) {
           </View>
 
           {/* GENERATE RUN SHIMMER HUD ACTION BUTTON */}
-          <TouchableOpacity style={styles.sparkleGradientButton} onPress={handleGenerateItinerary}>
-            <Text style={styles.sparkleButtonText}>✨ Generate Itinerary</Text>
+          <TouchableOpacity
+            style={[styles.sparkleGradientButton, isLoadingItinerary && styles.disabledButton]}
+            onPress={handleGenerateItinerary}
+            disabled={isLoadingItinerary}
+          >
+            {isLoadingItinerary ? (
+              <ActivityIndicator color="#131313" />
+            ) : (
+              <Text style={styles.sparkleButtonText}>✨ Generate Itinerary</Text>
+            )}
           </TouchableOpacity>
+          {itineraryError && <Text style={styles.errorText}>{itineraryError}</Text>}
         </View>
 
         <View style={styles.dividerLine} />
@@ -214,7 +307,9 @@ export default function PlanYourJourneyView({ navigation }) {
               <Text style={styles.dragSubtextHelper}>Drag handles to reorder your schedule.</Text>
             </View>
             <View style={styles.rightAlignSummaryBlock}>
-              <Text style={styles.durationSummaryText}>8 Hours</Text>
+              <Text style={styles.durationSummaryText}>
+                {generatedItinerary?.duration || draft.availableTime.replace(/[()]/g, '')}
+              </Text>
               <Text style={styles.dragSubtextHelper}>Estimated Duration</Text>
             </View>
           </View>
@@ -222,88 +317,17 @@ export default function PlanYourJourneyView({ navigation }) {
           <View style={styles.timelineStructuralTrack}>
             {/* Svg Timeline Line Tracker Overlay */}
             <Svg style={styles.absoluteTimelineLineSegment} pointerEvents="none">
-              <Line x1="20" y1="20" x2="20" y2="340" stroke="#333333" strokeWidth="1" />
+              <Line x1="20" y1="20" x2="20" y2={Math.max(80, routeStops.length * 92)} stroke="#333333" strokeWidth="1" />
             </Svg>
-
-            {/* Stops Preview Card Step 1 */}
-            <View style={styles.stopsTimelineRow}>
-              <View style={[styles.circleNodeCountElement, styles.activeBorderHighlightCircle]}>
-                <Text style={styles.nodeCountActiveText}>01</Text>
+            {routeStops.length ? (
+              routeStops.map(renderRouteStop)
+            ) : (
+              <View style={styles.emptyRoutePreview}>
+                <Text style={styles.dragSubtextHelper}>
+                  Generate an itinerary to preview the route.
+                </Text>
               </View>
-              <View style={styles.stopInfoDataCard}>
-                <View style={styles.gripDragButtonLeft}>
-                  <Text style={styles.gripIconText}>⋮⋮</Text>
-                </View>
-                <View style={styles.stopInfoCardCoreBody}>
-                  <View style={styles.stopCardHeaderSplitRow}>
-                    <Text style={styles.stopNodeTitle}>Gyeongbokgung Palace</Text>
-                    <Text style={styles.stopNodeTimeLabel}>09:00 AM</Text>
-                  </View>
-                  <Text style={styles.stopCardTextExcerpt}>Start your day exploring the largest of the Five...</Text>
-                  <View style={styles.tagPillsContainerCluster}>
-                    <View style={styles.interiorCardTagPill}><Text style={styles.interiorPillText}>2.5 hours</Text></View>
-                    <View style={styles.interiorCardTagPill}><Text style={styles.interiorPillText}>Walking</Text></View>
-                  </View>
-                </View>
-              </View>
-            </View>
-
-            {/* Stops Preview Card Step 2 */}
-            <View style={styles.stopsTimelineRow}>
-              <View style={styles.circleNodeCountElement}>
-                <Text style={styles.nodeCountMutedText}>02</Text>
-              </View>
-              <View style={styles.stopInfoDataCard}>
-                <View style={styles.gripDragButtonLeft}>
-                  <Text style={styles.gripIconText}>⋮⋮</Text>
-                </View>
-                <View style={styles.stopInfoCardCoreBody}>
-                  <View style={styles.stopCardHeaderSplitRow}>
-                    <Text style={styles.stopNodeTitle}>Bukchon Hanok Village</Text>
-                    <Text style={styles.stopNodeTimeLabel}>11:45 AM</Text>
-                  </View>
-                  <Text style={styles.stopCardTextExcerpt}>A short walk from the palace. Wander through...</Text>
-                  <View style={styles.tagPillsContainerCluster}>
-                    <View style={styles.interiorCardTagPill}><Text style={styles.interiorPillText}>1.5 hours</Text></View>
-                    <View style={styles.interiorCardTagPill}><Text style={styles.interiorPillText}>Photography</Text></View>
-                  </View>
-                </View>
-              </View>
-            </View>
-
-            {/* Stops Preview Intercept Lunch Panel */}
-            <View style={styles.stopsTimelineRow}>
-              <View style={styles.lunchIconCircleNodeElement}>
-                <Text style={styles.lunchIconChar}>🍴</Text>
-              </View>
-              <View style={styles.lunchSegmentBannerBox}>
-                <Text style={styles.lunchBannerMainText}>Lunch Break in Insadong</Text>
-                <Text style={styles.lunchBannerTimeText}>13:15 PM</Text>
-              </View>
-            </View>
-
-            {/* Stops Preview Card Step 3 */}
-            <View style={styles.stopsTimelineRow}>
-              <View style={styles.circleNodeCountElement}>
-                <Text style={styles.nodeCountMutedText}>03</Text>
-              </View>
-              <View style={styles.stopInfoDataCard}>
-                <View style={styles.gripDragButtonLeft}>
-                  <Text style={styles.gripIconText}>⋮⋮</Text>
-                </View>
-                <View style={styles.stopInfoCardCoreBody}>
-                  <View style={styles.stopCardHeaderSplitRow}>
-                    <Text style={styles.stopNodeTitle}>N Seoul Tower</Text>
-                    <Text style={styles.stopNodeTimeLabel}>15:00 PM</Text>
-                  </View>
-                  <Text style={styles.stopCardTextExcerpt}>Head up Namsan Mountain for panoramic...</Text>
-                  <View style={styles.tagPillsContainerCluster}>
-                    <View style={styles.interiorCardTagPill}><Text style={styles.interiorPillText}>2 hours</Text></View>
-                    <View style={styles.interiorCardTagPill}><Text style={styles.interiorPillText}>Scenic</Text></View>
-                  </View>
-                </View>
-              </View>
-            </View>
+            )}
 
           </View>
         </View>
@@ -313,8 +337,16 @@ export default function PlanYourJourneyView({ navigation }) {
       {/* 3. PERSISTENT LOWER HORIZONTAL FOOTER INTERACTION UTILITY DOCK */}
       <View style={styles.bottomStickyActionTray}>
         <View style={styles.bottomHorizontalDockAlignRow}>
-          <TouchableOpacity style={styles.finalizePrimaryActionButton} onPress={handleFinalizePlan}>
-            <Text style={styles.finalizeButtonText}>Finalize Plan</Text>
+          <TouchableOpacity
+            style={[styles.finalizePrimaryActionButton, (isLoadingItinerary || isFinalizing) && styles.disabledButton]}
+            onPress={handleFinalizePlan}
+            disabled={isLoadingItinerary || isFinalizing}
+          >
+            {isFinalizing ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <Text style={styles.finalizeButtonText}>Finalize Plan</Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -554,6 +586,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 16,
   },
+  disabledButton: {
+    opacity: 0.65,
+  },
+  errorText: {
+    color: '#f87171',
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 10,
+  },
   dividerLine: {
     height: 1,
     backgroundColor: '#2a2a2a',
@@ -606,6 +647,13 @@ const styles = StyleSheet.create({
   timelineStructuralTrack: {
     position: 'relative',
     paddingLeft: 40,
+  },
+  emptyRoutePreview: {
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    borderRadius: 16,
+    padding: 16,
   },
   absoluteTimelineLineSegment: {
     ...StyleSheet.absoluteFillObject,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { API_BASE_URL, healthCheck } from '../../src/services/apiService';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -20,6 +21,27 @@ export default function SettingsConfigurationView({ navigation }) {
   const [offlineCaching, setOfflineCaching] = useState(false);
   const [hotspotSuggestions, setHotspotSuggestions] = useState(false);
   const [renderingEngine, setRenderingEngine] = useState('obsidian');
+  const [serverStatus, setServerStatus] = useState('checking');
+
+  useEffect(() => {
+    let mounted = true;
+
+    healthCheck()
+      .then((response) => {
+        if (mounted) {
+          setServerStatus(response?.status === 'ok' ? 'online' : 'degraded');
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setServerStatus('offline');
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const handleGoBack = () => {
     if (navigation.canGoBack()) {
@@ -52,6 +74,28 @@ export default function SettingsConfigurationView({ navigation }) {
         <View style={styles.headlineGroupSection}>
           <Text style={styles.screenHeadlineText}>Configuration</Text>
           <Text style={styles.screenSubtextHelper}>Manage developer preferences, data telemetry, and core settings.</Text>
+        </View>
+
+        <View style={styles.sectionContainerCard}>
+          <View style={styles.sectionTitleHeaderRow}>
+            <View style={styles.iconWrapperBoxMuted}>
+              <Svg width="20" height="20" fill="none" stroke="#34d399" strokeWidth="2" viewBox="0 0 24 24">
+                <Path strokeLinecap="round" strokeLinejoin="round" d="M4 17l6-6 4 4 6-8" />
+              </Svg>
+            </View>
+            <Text style={styles.sectionHeadlineTitle}>API Connection</Text>
+          </View>
+          <View style={styles.statusRow}>
+            <View style={[
+              styles.statusDot,
+              serverStatus === 'online' && styles.statusDotOnline,
+              serverStatus === 'offline' && styles.statusDotOffline,
+            ]} />
+            <View style={styles.statusTextWrap}>
+              <Text style={styles.toggleRowTitleHeader}>{serverStatus.toUpperCase()}</Text>
+              <Text style={styles.toggleRowSubtitleCaption}>{API_BASE_URL}</Text>
+            </View>
+          </View>
         </View>
 
         {/* NEURAL SYNTHESIS RADIO CARD SELECT SECTION */}
@@ -346,6 +390,26 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#e4e4e7',
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#f59e0b',
+    marginRight: 12,
+  },
+  statusDotOnline: {
+    backgroundColor: '#34d399',
+  },
+  statusDotOffline: {
+    backgroundColor: '#f87171',
+  },
+  statusTextWrap: {
+    flex: 1,
   },
   radioBlockClusterStack: {
     gap: 12,
