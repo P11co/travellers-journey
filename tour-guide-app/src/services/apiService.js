@@ -135,6 +135,7 @@ export function generateItinerary({
   availableHours,
   startTime = '10:00',
   sessionId,
+  allowAiFill = false,
 }) {
   return request('/itinerary/generate', {
     method: 'POST',
@@ -145,6 +146,7 @@ export function generateItinerary({
       available_hours: availableHours,
       start_time: startTime,
       session_id: sessionId || undefined,
+      allow_ai_fill: allowAiFill,
     },
   });
 }

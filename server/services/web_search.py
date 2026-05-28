@@ -3,10 +3,8 @@ from __future__ import annotations
 import httpx
 
 from server.config import (
-    OPENROUTER_API_KEY,
     NVIDIA_API_KEY,
     LLM_MODEL_ID,
-    OPENROUTER_BASE_URL,
     NVIDIA_BASE_URL,
     TAVILY_API_KEY,
 )
@@ -75,26 +73,15 @@ async def classify_intent(
     Ask the LLM to classify the user query into one of four intents:
     RAG, WEB_SEARCH, MAP_STATIC, or MAP_GEOCODE.
     Falls back to RAG on any error (safe default).
-    Supports both NVIDIA NIM and OpenRouter providers.
+    Uses NVIDIA NIM only; OpenRouter is reserved for vision requests.
     """
     model = model or LLM_MODEL_ID
 
-    # Resolve provider endpoint and API key
-    if provider == "nvidia":
-        if not NVIDIA_API_KEY:
-            # Fall back to OpenRouter if NVIDIA key is missing
-            if not OPENROUTER_API_KEY:
-                return "RAG"
-            url = OPENROUTER_BASE_URL
-            api_key = OPENROUTER_API_KEY
-        else:
-            url = NVIDIA_BASE_URL
-            api_key = NVIDIA_API_KEY
-    else:
-        if not OPENROUTER_API_KEY:
-            return "RAG"
-        url = OPENROUTER_BASE_URL
-        api_key = OPENROUTER_API_KEY
+    if not NVIDIA_API_KEY:
+        return "RAG"
+
+    url = NVIDIA_BASE_URL
+    api_key = NVIDIA_API_KEY
 
     prompt = _CLASSIFIER_USER_TEMPLATE.format(
         last_ai_message=last_ai_message.strip() or "(none)",

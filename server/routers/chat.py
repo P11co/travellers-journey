@@ -258,12 +258,12 @@ async def _call_llm(
     messages: list[dict],
     model: str,
     temperature: float = 0.7,
-    provider: str = "openrouter",
+    provider: str = "nvidia",
 ) -> str:
     """
     Call the LLM via the selected provider.
-    - provider='openrouter' → OpenRouter (default)
-    - provider='nvidia'     → NVIDIA NIM
+    - provider='nvidia'     → NVIDIA NIM (default)
+    - provider='openrouter' → OpenRouter, reserved for vision
     Reasoning traces (<think>...</think>) are always stripped before returning.
     """
     if provider == "nvidia":
@@ -333,13 +333,12 @@ async def chat(req: ChatRequest):
     Process a user text message.
     Automatically determines whether live web search is needed,
     fetches results if so, and injects them into the LLM context.
-    Supports model/provider override from the debug dashboard.
+    Text chat uses NVIDIA NIM. OpenRouter is reserved for vision.
     """
-    provider = req.provider or "nvidia"
+    provider = "nvidia"
     model = req.model_override or LLM_MODEL_ID
-    api_ok = OPENROUTER_API_KEY if provider == "openrouter" else NVIDIA_API_KEY
-    if not api_ok:
-        raise HTTPException(status_code=500, detail=f"Missing API key for provider '{provider}'")
+    if not NVIDIA_API_KEY:
+        raise HTTPException(status_code=500, detail="Missing NVIDIA_API_KEY")
 
     # Session management
     session_id = req.session_id or str(uuid.uuid4())

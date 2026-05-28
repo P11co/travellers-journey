@@ -6,13 +6,11 @@ import {
   ScrollView,
   TouchableOpacity,
   Switch,
-  Dimensions
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { API_BASE_URL, healthCheck } from '../../src/services/apiService';
-
-const { width: screenWidth } = Dimensions.get('window');
+import TrioDock from '../../src/components/TrioDock';
 
 export default function SettingsConfigurationView({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -292,31 +290,7 @@ export default function SettingsConfigurationView({ navigation }) {
 
       </ScrollView>
 
-      {/* 3. OVERLAY LAYER CORE HORIZONTAL RUN FLOATING NAVIGATION DOCK PILL */}
-      <View style={styles.floatingNavContainer}>
-        <View style={styles.navDockPillLayoutRow}>
-
-          <TouchableOpacity style={styles.tabMutedActionItem} onPress={() => navigation.navigate('ConfirmItinerary')}>
-            <Svg width="24" height="24" fill="none" stroke="#a1a1aa" strokeWidth="2" viewBox="0 0 24 24">
-              <Path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
-            </Svg>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.tabMutedActionItem} onPress={() => navigation.navigate('Chat')}>
-            <Svg width="24" height="24" fill="none" stroke="#a1a1aa" strokeWidth="2" viewBox="0 0 24 24">
-              <Path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" strokeLinecap="round" strokeLinejoin="round" />
-            </Svg>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.tabBubbleActiveIconWrapper} onPress={() => navigation.navigate('Settings')}>
-            <Svg width="24" height="24" fill="none" stroke="#ffffff" strokeWidth="2" viewBox="0 0 24 24">
-              <Path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" strokeLinecap="round" strokeLinejoin="round" />
-              <Path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" strokeLinecap="round" strokeLinejoin="round" />
-            </Svg>
-          </TouchableOpacity>
-
-        </View>
-      </View>
+      <TrioDock navigation={navigation} activeKey="settings" bottomOffset={24} />
 
     </View>
   );
@@ -558,41 +532,5 @@ const styles = StyleSheet.create({
   },
   textMutedLabel: {
     color: '#a1a1aa',
-  },
-  floatingNavContainer: {
-    position: 'absolute',
-    bottom: 24,
-    left: 16,
-    right: 16,
-    zIndex: 60,
-    alignItems: 'center',
-  },
-  navDockPillLayoutRow: {
-    backgroundColor: 'rgba(22, 22, 24, 0.9)',
-    borderWidth: 1,
-    borderColor: '#27272A',
-    borderRadius: 9999,
-    paddingHorizontal: 24,
-    paddingVertical: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 32,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 8,
-  },
-  tabMutedActionItem: {
-    padding: 4,
-  },
-  tabBubbleActiveIconWrapper: {
-    backgroundColor: '#5c77ff',
-    padding: 12,
-    borderRadius: 9999,
-    shadowColor: '#5c77ff',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 15,
   },
 });

@@ -66,6 +66,9 @@ import json
 _WAYPOINTS_PATH = os.path.join(
     _PROJECT_ROOT, "tour-guide-app", "src", "data", "waypoints.json"
 )
+_HOTSPOTS_PATH = os.path.join(
+    _PROJECT_ROOT, "tour-guide-app", "src", "data", "hotspots.json"
+)
 
 def load_waypoints() -> list[dict]:
     """Load the shared waypoints JSON file."""
@@ -75,3 +78,12 @@ def load_waypoints() -> list[dict]:
     return []
 
 WAYPOINTS: list[dict] = load_waypoints()
+
+def load_hotspots() -> list[dict]:
+    """Load the shared hotspot JSON file."""
+    if os.path.exists(_HOTSPOTS_PATH):
+        with open(_HOTSPOTS_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+HOTSPOTS: list[dict] = load_hotspots()

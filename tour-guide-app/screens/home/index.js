@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Alert,
   View,
   Text,
   StyleSheet,
@@ -15,10 +16,26 @@ import useAppStore from '../../src/store';
 export default function HomeScreen({ navigation }) {
   const itineraries = useAppStore((s) => s.itineraries);
   const startTour = useAppStore((s) => s.startTour);
+  const removeItinerary = useAppStore((s) => s.removeItinerary);
 
   const handleStartTour = (itinerary) => {
     startTour(itinerary.id);
     navigation.navigate('TourMap');
+  };
+
+  const handleDeleteItinerary = (itinerary) => {
+    Alert.alert(
+      'Delete itinerary?',
+      `Remove ${itinerary.name} from this device?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => removeItinerary(itinerary.id),
+        },
+      ],
+    );
   };
 
   return (
@@ -97,6 +114,15 @@ export default function HomeScreen({ navigation }) {
                 <Text style={styles.itineraryName}>{itinerary.name}</Text>
                 <Text style={styles.itineraryLocation}>{itinerary.location}</Text>
               </View>
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={() => handleDeleteItinerary(itinerary)}
+                hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
+              >
+                <Svg width="18" height="18" fill="none" stroke="#ef4444" strokeWidth="1.8" viewBox="0 0 24 24">
+                  <Path strokeLinecap="round" strokeLinejoin="round" d="M6 7h12M10 11v6m4-6v6M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m2 0v12a2 2 0 01-2 2H8a2 2 0 01-2-2V7h12z" />
+                </Svg>
+              </TouchableOpacity>
             </View>
 
             {/* Meta Tags */}
@@ -283,6 +309,17 @@ const styles = StyleSheet.create({
   },
   cardHeaderText: {
     flex: 1,
+  },
+  deleteButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.18)',
+    marginLeft: 10,
   },
   itineraryName: {
     fontSize: 18,

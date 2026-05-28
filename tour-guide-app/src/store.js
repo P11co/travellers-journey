@@ -2,19 +2,29 @@ import { create } from 'zustand';
 import {
   generateItinerary as generateItineraryRequest,
   getItinerary as getItineraryRequest,
+  reorderItinerary as reorderItineraryRequest,
   deleteItinerary as deleteItineraryRequest,
   getNaverMapLink,
   logActivity as logActivityRequest,
   sendChatMessage,
   sendVisionChat,
 } from './services/apiService';
+import hotspotsData from './data/hotspots.json';
 
-const ACTIVITY_HOTSPOTS = {
+const LEGACY_ACTIVITY_HOTSPOTS = {
   mmca: 'MMCA Seoul',
   detailedPalace: 'Gyeongbokgung Palace',
   kyobo: 'Kyobo Bookstore Gwanghwamun',
   hanok: 'Bukchon Hanok Village',
 };
+
+const HOTSPOTS_BY_ID = new Map(hotspotsData.map((hotspot) => [hotspot.id, hotspot]));
+const DEFAULT_SELECTED_HOTSPOTS = new Set(['h_001', 'h_007']);
+
+const buildInitialActivities = () =>
+  Object.fromEntries(
+    hotspotsData.map((hotspot) => [hotspot.id, DEFAULT_SELECTED_HOTSPOTS.has(hotspot.id)]),
+  );
 
 const DEFAULT_NAVER_TARGET = {
   placeName: 'Gyeongbokgung Palace',
@@ -25,6 +35,11 @@ const DEFAULT_NAVER_TARGET = {
 const createLocalSessionId = () =>
   `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
+const createClientId = (prefix) =>
+  `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+const USD_TO_KRW_BUDGET_RATE = 1350;
+
 const parseAvailableHours = (value) => {
   const match = String(value || '').match(/(\d+(?:\.\d+)?)/);
   return match ? Number(match[1]) : 8;
@@ -32,6 +47,10 @@ const parseAvailableHours = (value) => {
 
 const parseBudgetKrw = (value) => {
   const normalized = String(value || '').toLowerCase();
+  const usdMatch = normalized.match(/\$?\s*(\d+(?:\.\d+)?)/);
+  if (usdMatch) return Math.round(Number(usdMatch[1]) * USD_TO_KRW_BUDGET_RATE);
+
+  // Backward compatibility for any in-memory or persisted draft using old labels.
   if (normalized.includes('budget')) return 30000;
   if (normalized.includes('premium')) return 150000;
   if (normalized.includes('luxury')) return 300000;
@@ -44,6 +63,29 @@ const formatDuration = (minutes) => {
   if (minutes < 60) return `${minutes} min`;
   const hours = minutes / 60;
   return Number.isInteger(hours) ? `${hours} hour${hours === 1 ? '' : 's'}` : `${hours.toFixed(1)} hours`;
+};
+
+const parseTimeToMinutes = (value) => {
+  const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$/i);
+  if (!match) return 9 * 60;
+
+  let hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const meridiem = match[3]?.toUpperCase();
+
+  if (meridiem === 'PM' && hours !== 12) hours += 12;
+  if (meridiem === 'AM' && hours === 12) hours = 0;
+
+  return hours * 60 + minutes;
+};
+
+const formatMinutesAsTime = (totalMinutes) => {
+  const normalized = ((totalMinutes % 1440) + 1440) % 1440;
+  const hours24 = Math.floor(normalized / 60);
+  const minutes = normalized % 60;
+  const meridiem = hours24 >= 12 ? 'PM' : 'AM';
+  const hours12 = hours24 % 12 || 12;
+  return `${String(hours12).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${meridiem}`;
 };
 
 const getStopCoords = (stop) => {
@@ -97,7 +139,7 @@ const getNearestStop = (stops, currentLocation) => {
 const getDraftHotspots = (draft) => {
   const selected = Object.entries(draft.activities || {})
     .filter(([, enabled]) => enabled)
-    .map(([key]) => ACTIVITY_HOTSPOTS[key])
+    .map(([key]) => HOTSPOTS_BY_ID.get(key)?.name || LEGACY_ACTIVITY_HOTSPOTS[key])
     .filter(Boolean);
 
   return selected.length ? selected : [draft.primaryLocation];
@@ -139,6 +181,46 @@ const normalizeServerItinerary = (itinerary) => {
   };
 };
 
+const buildItemFromStop = (stop, order) => ({
+  order,
+  time: stop.time,
+  place: stop.place || stop.name,
+  activity: stop.activity || stop.description || '',
+  duration_minutes: stop.durationMinutes || 60,
+  estimated_cost_krw: stop.estimatedCostKrw || 0,
+  latitude: stop.latitude ?? null,
+  longitude: stop.longitude ?? null,
+  naver_map_url: stop.naverMapUrl || null,
+});
+
+const applyStopOrder = (itinerary, orderedStops) => {
+  const itemByOrder = new Map((itinerary.items || []).map((item) => [item.order, item]));
+  const sessionId = itinerary.sessionId || itinerary.id;
+  let runningTimeMinutes = parseTimeToMinutes(itinerary.stops?.[0]?.time || orderedStops[0]?.time);
+  const stops = orderedStops.map((stop, index) => ({
+    ...stop,
+    id: `${sessionId}-${index + 1}`,
+    order: index + 1,
+    time: formatMinutesAsTime(
+      orderedStops.slice(0, index).reduce(
+        (minutes, previousStop) => minutes + (Number(previousStop.durationMinutes) || 0),
+        runningTimeMinutes,
+      ),
+    ),
+  }));
+  const items = orderedStops.map((stop, index) => ({
+    ...(itemByOrder.get(stop.order) || buildItemFromStop(stop, index + 1)),
+    order: index + 1,
+    time: stops[index].time,
+  }));
+
+  return {
+    ...itinerary,
+    stops,
+    items,
+  };
+};
+
 const upsertById = (items, nextItem) => {
   const existingIndex = items.findIndex((item) => item.id === nextItem.id);
   if (existingIndex === -1) {
@@ -167,15 +249,11 @@ const useAppStore = create((set, get) => ({
   // Draft
   draft: {
     primaryLocation: 'Gyeongbokgung Palace',
-    budgetLevel: 'Standard',
+    budgetLevel: '$50',
     availableTime: 'Full Day (8 hrs)',
     startTime: '09:00',
-    activities: {
-      mmca: false,
-      detailedPalace: true,
-      kyobo: false,
-      hanok: true,
-    },
+    allowAiFill: false,
+    activities: buildInitialActivities(),
     stops: [],
   },
 
@@ -190,7 +268,7 @@ const useAppStore = create((set, get) => ({
   activityError: null,
 
   addItinerary: (itinerary) => {
-    const id = itinerary.id || itinerary.sessionId || Date.now().toString();
+    const id = itinerary.id || itinerary.sessionId || createClientId('itinerary');
     const createdAt = itinerary.createdAt || new Date().toISOString();
     const nextItinerary = { id, createdAt, ...itinerary };
 
@@ -260,13 +338,13 @@ const useAppStore = create((set, get) => ({
         availableHours: overrides.availableHours ?? parseAvailableHours(draft.availableTime),
         startTime: overrides.startTime || draft.startTime,
         sessionId: overrides.sessionId || sessionId,
+        allowAiFill: overrides.allowAiFill ?? draft.allowAiFill,
       });
 
       const normalized = normalizeServerItinerary(response);
       set((state) => ({
         sessionId: response.session_id,
         generatedItinerary: normalized,
-        itineraries: upsertById(state.itineraries, normalized),
         draft: {
           ...state.draft,
           stops: normalized.stops,
@@ -280,6 +358,20 @@ const useAppStore = create((set, get) => ({
     } finally {
       set({ isLoadingItinerary: false });
     }
+  },
+
+  commitItinerary: (id) => {
+    const { generatedItinerary, itineraries } = get();
+    const itinerary = generatedItinerary || itineraries.find((item) => item.id === id);
+    if (!itinerary) return null;
+
+    set((state) => ({
+      sessionId: itinerary.sessionId || itinerary.id,
+      generatedItinerary: null,
+      itineraries: upsertById(state.itineraries, itinerary),
+    }));
+
+    return itinerary.id;
   },
 
   finalizeDraft: async () => {
@@ -313,6 +405,55 @@ const useAppStore = create((set, get) => ({
     }
   },
 
+  reorderGeneratedStop: async (fromIndex, toIndex) => {
+    const { generatedItinerary } = get();
+    const stops = generatedItinerary?.stops || [];
+    if (
+      !generatedItinerary ||
+      fromIndex === toIndex ||
+      fromIndex < 0 ||
+      toIndex < 0 ||
+      fromIndex >= stops.length ||
+      toIndex >= stops.length
+    ) {
+      return null;
+    }
+
+    const reorderedStops = [...stops];
+    const [movedStop] = reorderedStops.splice(fromIndex, 1);
+    reorderedStops.splice(toIndex, 0, movedStop);
+
+    const serverOrder = reorderedStops.map((stop) => stop.order);
+    const optimisticItinerary = applyStopOrder(generatedItinerary, reorderedStops);
+    set((state) => ({
+      generatedItinerary: optimisticItinerary,
+      draft: {
+        ...state.draft,
+        stops: optimisticItinerary.stops,
+      },
+      itineraryError: null,
+    }));
+
+    try {
+      const response = await reorderItineraryRequest(
+        generatedItinerary.sessionId || generatedItinerary.id,
+        serverOrder,
+      );
+      const normalized = normalizeServerItinerary(response);
+      set((state) => ({
+        generatedItinerary: normalized,
+        draft: {
+          ...state.draft,
+          stops: normalized.stops,
+        },
+      }));
+      return normalized;
+    } catch (error) {
+      set({ itineraryError: error.message });
+      return optimisticItinerary;
+    }
+  },
+
   setCurrentLocation: ({ lat, lng, waypointId }) =>
     set({
       currentLocation: {
@@ -330,7 +471,7 @@ const useAppStore = create((set, get) => ({
     const state = get();
     const location = context.location || state.currentLocation || {};
     const userMessage = {
-      id: `user-${Date.now()}`,
+      id: createClientId('user'),
       role: 'user',
       content: message,
       timestamp: new Date().toISOString(),
@@ -357,7 +498,7 @@ const useAppStore = create((set, get) => ({
       }
 
       const assistantMessage = {
-        id: `assistant-${Date.now()}`,
+        id: createClientId('assistant'),
         role: 'assistant',
         content: response.reply,
         timestamp: new Date().toISOString(),
@@ -375,7 +516,7 @@ const useAppStore = create((set, get) => ({
       return assistantMessage;
     } catch (error) {
       const errorMessage = {
-        id: `assistant-error-${Date.now()}`,
+        id: createClientId('assistant-error'),
         role: 'assistant',
         content: `I could not reach the SeoulWalk server. ${error.message}`,
         timestamp: new Date().toISOString(),
@@ -385,7 +526,7 @@ const useAppStore = create((set, get) => ({
         chatError: error.message,
         chatMessages: [...current.chatMessages, errorMessage],
       }));
-      throw error;
+      return errorMessage;
     } finally {
       set({ isChatLoading: false });
     }
@@ -396,7 +537,7 @@ const useAppStore = create((set, get) => ({
     const state = get();
     const location = context.location || state.currentLocation || {};
     const userMessage = {
-      id: `user-vision-${Date.now()}`,
+      id: createClientId('user-vision'),
       role: 'user',
       content: message,
       timestamp: new Date().toISOString(),
@@ -421,7 +562,7 @@ const useAppStore = create((set, get) => ({
       });
 
       const assistantMessage = {
-        id: `assistant-vision-${Date.now()}`,
+        id: createClientId('assistant-vision'),
         role: 'assistant',
         content: response.reply,
         timestamp: new Date().toISOString(),
@@ -437,7 +578,7 @@ const useAppStore = create((set, get) => ({
       return assistantMessage;
     } catch (error) {
       const errorMessage = {
-        id: `assistant-vision-error-${Date.now()}`,
+        id: createClientId('assistant-vision-error'),
         role: 'assistant',
         content: `I could not process the image. ${error.message}`,
         timestamp: new Date().toISOString(),
@@ -447,7 +588,7 @@ const useAppStore = create((set, get) => ({
         chatError: error.message,
         chatMessages: [...current.chatMessages, errorMessage],
       }));
-      throw error;
+      return errorMessage;
     } finally {
       set({ isChatLoading: false });
     }

@@ -45,6 +45,7 @@ export default function BuddyAIChatOverlay({
   const [localMode, setLocalMode] = useState(sheetMode);
   const prevPropMode = useRef(sheetMode);
   const scrollViewRef = useRef(null);
+  const isNearBottomRef = useRef(true);
   const chatMessages = useAppStore((s) => s.chatMessages);
   const isChatLoading = useAppStore((s) => s.isChatLoading);
   const sendMessage = useAppStore((s) => s.sendMessage);
@@ -75,7 +76,23 @@ export default function BuddyAIChatOverlay({
     }, 80);
 
     return () => clearTimeout(timer);
-  }, [localMode, chatMessages.length, isChatLoading]);
+  }, [localMode]);
+
+  const scrollToBottom = (animated = true) => {
+    scrollViewRef.current?.scrollToEnd({ animated });
+  };
+
+  const handleScroll = ({ nativeEvent }) => {
+    const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+    const distanceFromBottom = contentSize.height - (layoutMeasurement.height + contentOffset.y);
+    isNearBottomRef.current = distanceFromBottom < 80;
+  };
+
+  const handleContentSizeChange = () => {
+    if (isNearBottomRef.current) {
+      scrollToBottom(true);
+    }
+  };
 
   const handleHandleTap = () => {
     const modes = ['folded', 'half', 'full'];
@@ -91,6 +108,7 @@ export default function BuddyAIChatOverlay({
   const handleSend = async () => {
     const text = inputText.trim();
     if (!text || isChatLoading) return;
+    isNearBottomRef.current = true;
     setInputText('');
     try {
       await sendMessage(text);
@@ -196,7 +214,11 @@ export default function BuddyAIChatOverlay({
                 style={styles.scroll}
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
-                onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+                keyboardDismissMode="on-drag"
+                keyboardShouldPersistTaps="handled"
+                scrollEventThrottle={16}
+                onScroll={handleScroll}
+                onContentSizeChange={handleContentSizeChange}
               >
                 <Text style={styles.timeLabel}>TODAY</Text>
                 {chatMessages.map(renderMessage)}

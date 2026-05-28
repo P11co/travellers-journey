@@ -10,6 +10,7 @@ import CurrentItineraryView from './screens/current_itinerary_exact_nav_match';
 import TourMapScreen from './screens/tour_map';
 import AIChatInterface from './screens/buddy_ai_chat_fullscreen_open_in_naver';
 import SettingsConfigurationView from './screens/settings_configuration_animated';
+import HotspotDetailScreen from './screens/hotspot_detail';
 
 const Stack = createNativeStackNavigator();
 
@@ -27,6 +28,11 @@ export default function App() {
         >
           <Stack.Screen name="Home" component={HomeScreen} />
           <Stack.Screen name="PlanJourney" component={PlanYourJourneyView} />
+          <Stack.Screen
+            name="HotspotDetail"
+            component={HotspotDetailScreen}
+            options={{ gestureEnabled: true, animation: 'slide_from_right' }}
+          />
           <Stack.Screen name="ConfirmItinerary" component={CurrentItineraryView} />
           <Stack.Screen name="TourMap" component={TourMapScreen} />
           <Stack.Screen name="Chat" component={AIChatInterface} options={{ animation: 'slide_from_bottom' }} />

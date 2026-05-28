@@ -8,11 +8,13 @@ import {
   TouchableOpacity,
   Image
 } from 'react-native';
-import Svg, { Path, Line } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useAppStore from '../../src/store';
+import hotspotsData from '../../src/data/hotspots.json';
+import hotspotImages from '../../src/data/hotspotImages';
 
-const BUDGET_OPTIONS = ['Budget', 'Standard', 'Premium', 'Luxury'];
+const BUDGET_OPTIONS = ['$25', '$50', '$100', '$200'];
 const TIME_OPTIONS = ['Half Day (4 hrs)', 'Full Day (8 hrs)', 'Two Days (16 hrs)'];
 
 export default function PlanYourJourneyView({ navigation }) {
@@ -21,44 +23,91 @@ export default function PlanYourJourneyView({ navigation }) {
   const draft = useAppStore((s) => s.draft);
   const updateDraft = useAppStore((s) => s.updateDraft);
   const toggleDraftActivity = useAppStore((s) => s.toggleDraftActivity);
-  const finalizeDraft = useAppStore((s) => s.finalizeDraft);
   const generateItinerary = useAppStore((s) => s.generateItinerary);
+  const reorderGeneratedStop = useAppStore((s) => s.reorderGeneratedStop);
+  const commitItinerary = useAppStore((s) => s.commitItinerary);
   const generatedItinerary = useAppStore((s) => s.generatedItinerary);
   const isLoadingItinerary = useAppStore((s) => s.isLoadingItinerary);
   const itineraryError = useAppStore((s) => s.itineraryError);
-  const [isFinalizing, setIsFinalizing] = useState(false);
+  const [reviewError, setReviewError] = useState(null);
 
   const activities = draft.activities;
-  const routeStops = generatedItinerary?.stops?.length ? generatedItinerary.stops : draft.stops;
+  const hasGeneratedRoute = Boolean(generatedItinerary);
+  const isPlanLocked = isLoadingItinerary || hasGeneratedRoute;
+  const routeStops = hasGeneratedRoute ? generatedItinerary.stops || [] : [];
+  const bottomError = reviewError || itineraryError;
 
   const toggleActivity = (key) => {
+    if (isPlanLocked) return;
     toggleDraftActivity(key);
   };
 
   const cycleDraftOption = (field, options) => {
+    if (isPlanLocked) return;
     const currentIndex = options.indexOf(draft[field]);
     const nextValue = options[(currentIndex + 1) % options.length];
     updateDraft({ [field]: nextValue });
   };
 
-  const handleFinalizePlan = async () => {
-    setIsFinalizing(true);
-    try {
-      const itineraryId = await finalizeDraft();
-      navigation.navigate('ConfirmItinerary', { itineraryId });
-    } finally {
-      setIsFinalizing(false);
+  const handleSaveAndViewItineraries = () => {
+    setReviewError(null);
+    if (!generatedItinerary) {
+      setReviewError('Generate an itinerary before saving the route.');
+      return;
     }
+    const committedId = commitItinerary(generatedItinerary.id);
+    if (!committedId) {
+      setReviewError('Unable to save this itinerary. Please try generating again.');
+      return;
+    }
+    navigation.navigate('Home');
   };
 
   const handleGenerateItinerary = async () => {
-    scrollViewRef.current?.scrollTo({ y: 680, animated: true });
+    setReviewError(null);
     try {
       await generateItinerary();
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 80);
     } catch {
       // Error state is already stored for rendering below.
     }
   };
+
+  const handlePrimaryAction = () => {
+    if (hasGeneratedRoute) {
+      handleSaveAndViewItineraries();
+      return;
+    }
+    handleGenerateItinerary();
+  };
+
+  const toggleAiFill = () => {
+    if (isPlanLocked) return;
+    updateDraft({ allowAiFill: !draft.allowAiFill });
+  };
+
+  const renderMoveControls = (index) => (
+    <View style={styles.reorderControls}>
+      <TouchableOpacity
+        style={[styles.reorderMoveButton, index === 0 && styles.reorderMoveButtonDisabled]}
+        onPress={() => reorderGeneratedStop(index, index - 1)}
+        disabled={index === 0}
+        activeOpacity={0.75}
+      >
+        <Text style={[styles.reorderMoveText, index === 0 && styles.reorderMoveTextDisabled]}>Up</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.reorderMoveButton, index === routeStops.length - 1 && styles.reorderMoveButtonDisabled]}
+        onPress={() => reorderGeneratedStop(index, index + 1)}
+        disabled={index === routeStops.length - 1}
+        activeOpacity={0.75}
+      >
+        <Text style={[styles.reorderMoveText, index === routeStops.length - 1 && styles.reorderMoveTextDisabled]}>Dn</Text>
+      </TouchableOpacity>
+    </View>
+  );
 
   const renderRouteStop = (stop, index) => {
     const isLunch = /lunch|food|meal|restaurant/i.test(`${stop.name} ${stop.description || ''}`);
@@ -69,8 +118,11 @@ export default function PlanYourJourneyView({ navigation }) {
             <Text style={styles.lunchIconChar}>🍴</Text>
           </View>
           <View style={styles.lunchSegmentBannerBox}>
-            <Text style={styles.lunchBannerMainText}>{stop.name}</Text>
-            <Text style={styles.lunchBannerTimeText}>{stop.time}</Text>
+            {renderMoveControls(index)}
+            <View style={styles.lunchBannerTextWrap}>
+              <Text style={styles.lunchBannerMainText}>{stop.name}</Text>
+              <Text style={styles.lunchBannerTimeText}>{stop.time}</Text>
+            </View>
           </View>
         </View>
       );
@@ -84,9 +136,7 @@ export default function PlanYourJourneyView({ navigation }) {
           </Text>
         </View>
         <View style={styles.stopInfoDataCard}>
-          <View style={styles.gripDragButtonLeft}>
-            <Text style={styles.gripIconText}>⋮⋮</Text>
-          </View>
+          {renderMoveControls(index)}
           <View style={styles.stopInfoCardCoreBody}>
             <View style={styles.stopCardHeaderSplitRow}>
               <Text style={styles.stopNodeTitle}>{stop.name}</Text>
@@ -105,6 +155,65 @@ export default function PlanYourJourneyView({ navigation }) {
                 </View>
               ))}
             </View>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const renderHotspotActivity = (hotspot) => {
+    const selected = Boolean(activities[hotspot.id]);
+    const imageSource = hotspotImages[hotspot.id];
+
+    return (
+      <View
+        key={hotspot.id}
+        style={[
+          styles.activityRowCard,
+          selected && styles.activityRowCardActive,
+          isPlanLocked && styles.lockedSelectionCard,
+        ]}
+      >
+        <TouchableOpacity
+          style={styles.activityPressArea}
+          onPress={() => toggleActivity(hotspot.id)}
+          disabled={isPlanLocked}
+          activeOpacity={0.85}
+        >
+          <View style={styles.activityCardLeftInfo}>
+            <View style={styles.activityIconBox}>
+              {imageSource && (
+                <Image source={imageSource} style={styles.activityImage} />
+              )}
+            </View>
+            <View style={styles.activityTextWrap}>
+              <Text style={styles.activityMainTitleText} numberOfLines={2}>
+                {hotspot.name}
+              </Text>
+              <Text style={styles.activityCategoryText} numberOfLines={2}>
+                {hotspot.category} • {hotspot.est_duration_mins} min
+              </Text>
+              <Text style={styles.activityDescriptionText} numberOfLines={3}>
+                {hotspot.short_desc}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+        <View style={styles.activityActionColumn}>
+          <TouchableOpacity
+            style={styles.activityMoreButton}
+            onPress={() => navigation.navigate('HotspotDetail', { hotspotId: hotspot.id })}
+            activeOpacity={0.8}
+            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+          >
+            <Text style={styles.activityMoreText}>...</Text>
+          </TouchableOpacity>
+          <View style={[
+            styles.nativeCheckboxOutline,
+            selected && styles.checkboxActiveState,
+            isPlanLocked && styles.lockedCheckbox,
+          ]}>
+            {selected && <Text style={styles.checkboxCheckSymbol}>✓</Text>}
           </View>
         </View>
       </View>
@@ -157,10 +266,11 @@ export default function PlanYourJourneyView({ navigation }) {
 
           <View style={styles.formGroupSpacing}>
             <View>
-              <Text style={styles.fieldLabel}>Budget Level</Text>
+              <Text style={styles.fieldLabel}>Budget (USD)</Text>
               <TouchableOpacity
-                style={styles.customSelectTrigger}
+                style={[styles.customSelectTrigger, isPlanLocked && styles.lockedControl]}
                 onPress={() => cycleDraftOption('budgetLevel', BUDGET_OPTIONS)}
+                disabled={isPlanLocked}
               >
                 <Text style={styles.selectText}>{draft.budgetLevel}</Text>
                 <Text style={styles.dropdownCarat}>▼</Text>
@@ -170,8 +280,9 @@ export default function PlanYourJourneyView({ navigation }) {
             <View>
               <Text style={styles.fieldLabel}>Available Time</Text>
               <TouchableOpacity
-                style={styles.customSelectTrigger}
+                style={[styles.customSelectTrigger, isPlanLocked && styles.lockedControl]}
                 onPress={() => cycleDraftOption('availableTime', TIME_OPTIONS)}
+                disabled={isPlanLocked}
               >
                 <Text style={styles.selectText}>{draft.availableTime}</Text>
                 <Text style={styles.dropdownCarat}>▼</Text>
@@ -220,136 +331,109 @@ export default function PlanYourJourneyView({ navigation }) {
           </View>
 
           <View style={styles.activityListContainer}>
-            {/* Activity Node 1 */}
-            <TouchableOpacity style={styles.activityRowCard} onPress={() => toggleActivity('mmca')}>
-              <View style={styles.activityCardLeftInfo}>
-                <View style={styles.activityIconBox} />
-                <View>
-                  <Text style={styles.activityMainTitleText}>MMCA (Contemporary Art)</Text>
-                  <Text style={styles.activityCategoryText}>Modern Art & Design</Text>
-                </View>
-              </View>
-              <View style={[styles.nativeCheckboxOutline, activities.mmca && styles.checkboxActiveState]}>
-                {activities.mmca && <Text style={styles.checkboxCheckSymbol}>✓</Text>}
-              </View>
-            </TouchableOpacity>
-
-            {/* Activity Node 2 */}
-            <TouchableOpacity style={styles.activityRowCard} onPress={() => toggleActivity('detailedPalace')}>
-              <View style={styles.activityCardLeftInfo}>
-                <View style={styles.activityIconBox} />
-                <View>
-                  <Text style={styles.activityMainTitleText}>Gyeongbokgung (Detailed Tour)</Text>
-                  <Text style={styles.activityCategoryText}>Guided Palace History</Text>
-                </View>
-              </View>
-              <View style={[styles.nativeCheckboxOutline, activities.detailedPalace && styles.checkboxActiveState]}>
-                {activities.detailedPalace && <Text style={styles.checkboxCheckSymbol}>✓</Text>}
-              </View>
-            </TouchableOpacity>
-
-            {/* Activity Node 3 */}
-            <TouchableOpacity style={styles.activityRowCard} onPress={() => toggleActivity('kyobo')}>
-              <View style={styles.activityCardLeftInfo}>
-                <View style={styles.activityIconBox} />
-                <View>
-                  <Text style={styles.activityMainTitleText}>Kyobo Bookstore</Text>
-                  <Text style={styles.activityCategoryText}>Korea's Largest Bookstore</Text>
-                </View>
-              </View>
-              <View style={[styles.nativeCheckboxOutline, activities.kyobo && styles.checkboxActiveState]}>
-                {activities.kyobo && <Text style={styles.checkboxCheckSymbol}>✓</Text>}
-              </View>
-            </TouchableOpacity>
-
-            {/* Activity Node 4 */}
-            <TouchableOpacity style={styles.activityRowCard} onPress={() => toggleActivity('hanok')}>
-              <View style={styles.activityCardLeftInfo}>
-                <View style={styles.activityIconBox} />
-                <View>
-                  <Text style={styles.activityMainTitleText}>Bukchon Hanok Village</Text>
-                  <Text style={styles.activityCategoryText}>Traditional Korean Houses</Text>
-                </View>
-              </View>
-              <View style={[styles.nativeCheckboxOutline, activities.hanok && styles.checkboxActiveState]}>
-                {activities.hanok && <Text style={styles.checkboxCheckSymbol}>✓</Text>}
-              </View>
-            </TouchableOpacity>
+            {hotspotsData.map(renderHotspotActivity)}
           </View>
+          {isPlanLocked && (
+            <Text style={styles.lockedSelectionText}>
+              Route inputs are locked after generation. Open locations to learn more, or save this route and create a new journey.
+            </Text>
+          )}
 
-          {/* GENERATE RUN SHIMMER HUD ACTION BUTTON */}
-          <TouchableOpacity
-            style={[styles.sparkleGradientButton, isLoadingItinerary && styles.disabledButton]}
-            onPress={handleGenerateItinerary}
-            disabled={isLoadingItinerary}
-          >
-            {isLoadingItinerary ? (
-              <ActivityIndicator color="#131313" />
-            ) : (
-              <Text style={styles.sparkleButtonText}>✨ Generate Itinerary</Text>
-            )}
-          </TouchableOpacity>
-          {itineraryError && <Text style={styles.errorText}>{itineraryError}</Text>}
         </View>
 
-        <View style={styles.dividerLine} />
+        {hasGeneratedRoute && (
+          <>
+            <View style={styles.dividerLine} />
 
-        {/* GENERATED ROUTE REAL-TIME PREVIEW TILES */}
-        <View style={styles.sectionContainerMargin}>
-          <View style={styles.routeSplitHeaderRow}>
-            <View>
-              <View style={styles.badgeLabelContainerAlign}>
-                <Text style={styles.routeHeadlineText}>Generated Route</Text>
-                <View style={styles.aiBadgeTag}>
-                  <Text style={styles.aiBadgeText}>AI OPTIMIZED</Text>
+            {/* GENERATED ROUTE REAL-TIME PREVIEW TILES */}
+            <View style={styles.sectionContainerMargin}>
+              <View style={styles.routeSplitHeaderRow}>
+                <View style={styles.routeHeaderMain}>
+                  <View style={styles.badgeLabelContainerAlign}>
+                    <Text style={styles.routeHeadlineText}>Generated Route</Text>
+                    <View style={styles.aiBadgeTag}>
+                      <Text style={styles.aiBadgeText}>AI OPTIMIZED</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.dragSubtextHelper}>Use the move controls to reorder your schedule.</Text>
+                </View>
+                <View style={styles.rightAlignSummaryBlock}>
+                  <Text style={styles.durationSummaryText}>
+                    {generatedItinerary?.duration || draft.availableTime.replace(/[()]/g, '')}
+                  </Text>
+                  <Text style={styles.dragSubtextHelper}>Estimated Duration</Text>
                 </View>
               </View>
-              <Text style={styles.dragSubtextHelper}>Drag handles to reorder your schedule.</Text>
-            </View>
-            <View style={styles.rightAlignSummaryBlock}>
-              <Text style={styles.durationSummaryText}>
-                {generatedItinerary?.duration || draft.availableTime.replace(/[()]/g, '')}
-              </Text>
-              <Text style={styles.dragSubtextHelper}>Estimated Duration</Text>
-            </View>
-          </View>
 
-          <View style={styles.timelineStructuralTrack}>
-            {/* Svg Timeline Line Tracker Overlay */}
-            <Svg style={styles.absoluteTimelineLineSegment} pointerEvents="none">
-              <Line x1="20" y1="20" x2="20" y2={Math.max(80, routeStops.length * 92)} stroke="#333333" strokeWidth="1" />
-            </Svg>
-            {routeStops.length ? (
-              routeStops.map(renderRouteStop)
-            ) : (
-              <View style={styles.emptyRoutePreview}>
-                <Text style={styles.dragSubtextHelper}>
-                  Generate an itinerary to preview the route.
-                </Text>
+              <View style={styles.timelineStructuralTrack}>
+                <View style={styles.timelineLine} pointerEvents="none" />
+                {routeStops.length ? (
+                  routeStops.map(renderRouteStop)
+                ) : (
+                  <View style={styles.emptyRoutePreview}>
+                    <Text style={styles.dragSubtextHelper}>
+                      The itinerary was created, but no stops were returned.
+                    </Text>
+                  </View>
+                )}
               </View>
-            )}
-
-          </View>
-        </View>
+            </View>
+          </>
+        )}
 
       </ScrollView>
 
       {/* 3. PERSISTENT LOWER HORIZONTAL FOOTER INTERACTION UTILITY DOCK */}
       <View style={styles.bottomStickyActionTray}>
+        {!hasGeneratedRoute && (
+          <TouchableOpacity
+            style={styles.aiFillToggleRow}
+            onPress={toggleAiFill}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.aiFillCheckbox, draft.allowAiFill && styles.aiFillCheckboxActive]}>
+              {draft.allowAiFill && <Text style={styles.aiFillCheckText}>✓</Text>}
+            </View>
+            <Text style={styles.aiFillToggleText}>
+              AI can fill if timeslots are too free
+            </Text>
+          </TouchableOpacity>
+        )}
         <View style={styles.bottomHorizontalDockAlignRow}>
           <TouchableOpacity
-            style={[styles.finalizePrimaryActionButton, (isLoadingItinerary || isFinalizing) && styles.disabledButton]}
-            onPress={handleFinalizePlan}
-            disabled={isLoadingItinerary || isFinalizing}
+            style={[styles.finalizePrimaryActionButton, isLoadingItinerary && styles.disabledButton]}
+            onPress={handlePrimaryAction}
+            disabled={isLoadingItinerary}
           >
-            {isFinalizing ? (
-              <ActivityIndicator color="#ffffff" />
+            {isLoadingItinerary ? (
+              <ActivityIndicator color="#131313" />
             ) : (
-              <Text style={styles.finalizeButtonText}>Finalize Plan</Text>
+              <Text style={styles.finalizeButtonText}>
+                {hasGeneratedRoute ? 'Save & View Itineraries' : '✨ Generate Itinerary'}
+              </Text>
             )}
           </TouchableOpacity>
         </View>
+        {bottomError && (
+          <Text style={[styles.errorText, styles.finalizeErrorText]}>{bottomError}</Text>
+        )}
       </View>
+
+      {isLoadingItinerary && (
+        <View style={[styles.generationNoticeOverlay, { top: insets.top + 68 }]} pointerEvents="none">
+          <View style={styles.generationNoticePanel}>
+            <View style={styles.generationNoticeIcon}>
+              <ActivityIndicator size="small" color="#8ca1ff" />
+            </View>
+            <View style={styles.generationNoticeTextWrap}>
+              <Text style={styles.generationNoticeTitle}>Generating itinerary</Text>
+              <Text style={styles.generationNoticeSubtitle}>
+                Please wait while we generate your itinerary. This may take a while. Feel free to click into the locations you are about to visit to learn more
+              </Text>
+            </View>
+          </View>
+        </View>
+      )}
 
     </View>
   );
@@ -449,6 +533,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  lockedControl: {
+    opacity: 0.55,
+  },
   selectText: {
     color: '#ffffff',
     fontSize: 14,
@@ -530,26 +617,82 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 12,
   },
+  activityPressArea: {
+    flex: 1,
+    minWidth: 0,
+  },
+  activityRowCardActive: {
+    borderColor: 'rgba(92, 119, 255, 0.72)',
+    backgroundColor: 'rgba(92, 119, 255, 0.08)',
+  },
+  lockedSelectionCard: {
+    opacity: 0.82,
+  },
   activityCardLeftInfo: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    paddingRight: 12,
   },
   activityIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
+    width: 56,
+    height: 56,
+    borderRadius: 12,
     backgroundColor: '#2a2a2a',
+    overflow: 'hidden',
+  },
+  activityImage: {
+    width: '100%',
+    height: '100%',
+  },
+  activityTextWrap: {
+    flex: 1,
+    minWidth: 0,
   },
   activityMainTitleText: {
     fontSize: 14,
     fontWeight: '500',
     color: '#ffffff',
+    lineHeight: 18,
+    flexShrink: 1,
   },
   activityCategoryText: {
     fontSize: 12,
     color: '#6b7280',
     marginTop: 2,
+    lineHeight: 16,
+    flexShrink: 1,
+  },
+  activityDescriptionText: {
+    fontSize: 11,
+    color: '#9ca3af',
+    lineHeight: 15,
+    marginTop: 5,
+    flexShrink: 1,
+  },
+  activityActionColumn: {
+    width: 34,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    alignSelf: 'stretch',
+  },
+  activityMoreButton: {
+    width: 30,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activityMoreText: {
+    color: '#d4d4d8',
+    fontSize: 16,
+    fontWeight: '700',
+    lineHeight: 16,
+    marginTop: -4,
   },
   nativeCheckboxOutline: {
     width: 20,
@@ -564,27 +707,69 @@ const styles = StyleSheet.create({
   checkboxActiveState: {
     borderColor: '#5c77ff',
   },
+  lockedCheckbox: {
+    backgroundColor: '#202126',
+  },
   checkboxCheckSymbol: {
     color: '#5c77ff',
     fontSize: 12,
     fontWeight: '700',
   },
-  sparkleGradientButton: {
-    backgroundColor: '#5c77ff',
+  lockedSelectionText: {
+    color: '#71717a',
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 12,
+  },
+  generationNoticeOverlay: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    zIndex: 80,
+    alignItems: 'center',
+  },
+  generationNoticePanel: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: 'rgba(24, 24, 27, 0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
     borderRadius: 16,
-    paddingVertical: 14,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 32,
+    elevation: 8,
+  },
+  generationNoticeIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(92, 119, 255, 0.14)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
-    shadowColor: '#5c77ff',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(92, 119, 255, 0.28)',
   },
-  sparkleButtonText: {
-    color: '#131313',
-    fontWeight: '700',
-    fontSize: 16,
+  generationNoticeTextWrap: {
+    flex: 1,
+    minWidth: 0,
+    marginLeft: 16,
+  },
+  generationNoticeTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ffffff',
+    letterSpacing: 0.2,
+  },
+  generationNoticeSubtitle: {
+    fontSize: 12,
+    color: '#a1a1aa',
+    lineHeight: 17,
+    marginTop: 4,
   },
   disabledButton: {
     opacity: 0.65,
@@ -601,21 +786,27 @@ const styles = StyleSheet.create({
     marginVertical: 32,
   },
   routeSplitHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
     marginBottom: 32,
+    gap: 12,
+  },
+  routeHeaderMain: {
+    width: '100%',
+    minWidth: 0,
   },
   badgeLabelContainerAlign: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 8,
+    maxWidth: '100%',
   },
   routeHeadlineText: {
     fontSize: 24,
     fontWeight: '700',
     color: '#ffffff',
-    lineHeight: 28,
+    lineHeight: 30,
+    flexShrink: 1,
+    minWidth: 0,
   },
   aiBadgeTag: {
     backgroundColor: 'rgba(6, 78, 59, 0.4)',
@@ -635,18 +826,25 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     lineHeight: 16,
     marginTop: 4,
+    flexShrink: 1,
   },
   rightAlignSummaryBlock: {
-    alignItems: 'flex-end',
+    width: '100%',
+    minWidth: 0,
+    alignItems: 'flex-start',
   },
   durationSummaryText: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#ffffff',
+    lineHeight: 24,
+    flexShrink: 1,
   },
   timelineStructuralTrack: {
     position: 'relative',
     paddingLeft: 40,
+    width: '100%',
+    minWidth: 0,
   },
   emptyRoutePreview: {
     backgroundColor: '#1a1a1a',
@@ -655,15 +853,21 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
   },
-  absoluteTimelineLineSegment: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 0,
+  timelineLine: {
+    position: 'absolute',
+    left: 20,
+    top: 12,
+    bottom: 24,
+    width: 1,
+    backgroundColor: '#333333',
   },
   stopsTimelineRow: {
     flexDirection: 'row',
     position: 'relative',
     marginBottom: 24,
     width: '100%',
+    minWidth: 0,
+    zIndex: 2,
   },
   circleNodeCountElement: {
     position: 'absolute',
@@ -697,6 +901,7 @@ const styles = StyleSheet.create({
   },
   stopInfoDataCard: {
     flex: 1,
+    minWidth: 0,
     backgroundColor: '#1a1a1a',
     borderWidth: 1,
     borderColor: '#2a2a2a',
@@ -704,34 +909,61 @@ const styles = StyleSheet.create({
     padding: 16,
     flexDirection: 'row',
     gap: 12,
+    zIndex: 3,
   },
-  gripDragButtonLeft: {
-    paddingTop: 2,
+  reorderControls: {
+    width: 36,
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
   },
-  gripIconText: {
-    color: '#4b5563',
-    fontSize: 16,
+  reorderMoveButton: {
+    width: 34,
+    minHeight: 26,
+    borderRadius: 8,
+    backgroundColor: '#131313',
+    borderWidth: 1,
+    borderColor: '#374151',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reorderMoveButtonDisabled: {
+    opacity: 0.32,
+  },
+  reorderMoveText: {
+    color: '#d1d5db',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  reorderMoveTextDisabled: {
+    color: '#6b7280',
   },
   stopInfoCardCoreBody: {
     flex: 1,
+    minWidth: 0,
   },
   stopCardHeaderSplitRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 4,
+    gap: 8,
+    minWidth: 0,
   },
   stopNodeTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: '#ffffff',
     flex: 1,
-    paddingRight: 8,
+    minWidth: 0,
+    lineHeight: 20,
   },
   stopNodeTimeLabel: {
     fontSize: 11,
     color: '#6b7280',
     textAlign: 'right',
+    maxWidth: 72,
+    lineHeight: 15,
   },
   stopCardTextExcerpt: {
     fontSize: 13,
@@ -741,6 +973,7 @@ const styles = StyleSheet.create({
   },
   tagPillsContainerCluster: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
   },
   interiorCardTagPill: {
@@ -773,22 +1006,36 @@ const styles = StyleSheet.create({
   },
   lunchSegmentBannerBox: {
     flex: 1,
+    minWidth: 0,
     backgroundColor: '#131313',
     borderWidth: 1,
     borderColor: '#2a2a2a',
     borderRadius: 16,
     padding: 12,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
+    zIndex: 3,
+  },
+  lunchBannerTextWrap: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
   },
   lunchBannerMainText: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 14,
     color: '#9ca3af',
+    lineHeight: 18,
   },
   lunchBannerTimeText: {
     fontSize: 11,
     color: '#6b7280',
+    marginLeft: 8,
   },
   bottomStickyActionTray: {
     position: 'absolute',
@@ -805,6 +1052,47 @@ const styles = StyleSheet.create({
   bottomHorizontalDockAlignRow: {
     flexDirection: 'row',
     gap: 12,
+  },
+  aiFillToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    marginBottom: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    maxWidth: '100%',
+  },
+  aiFillCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: '#374151',
+    backgroundColor: '#131313',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 9,
+  },
+  aiFillCheckboxActive: {
+    borderColor: '#5c77ff',
+    backgroundColor: 'rgba(92, 119, 255, 0.18)',
+  },
+  aiFillCheckText: {
+    color: '#8ca1ff',
+    fontSize: 12,
+    fontWeight: '900',
+    lineHeight: 14,
+  },
+  aiFillToggleText: {
+    color: '#d4d4d8',
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 16,
+    flexShrink: 1,
+  },
+  finalizeErrorText: {
+    textAlign: 'center',
+    marginTop: 8,
   },
   finalizePrimaryActionButton: {
     flex: 1,

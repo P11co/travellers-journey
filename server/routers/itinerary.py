@@ -11,11 +11,11 @@ Endpoints:
 from __future__ import annotations
 
 import json
+import re
 import uuid
-import httpx
 from fastapi import APIRouter, HTTPException
 
-from server.config import OPENROUTER_API_KEY, LLM_MODEL_ID, OPENROUTER_BASE_URL, WAYPOINTS
+from server.config import HOTSPOTS, LLM_MODEL_ID, WAYPOINTS
 from server.models import (
     ItineraryGenerateRequest,
     ItineraryResponse,
@@ -31,6 +31,7 @@ from server.database import (
     delete_session,
 )
 from server.routers.handoff import build_naver_urls
+from server.routers.chat import _call_llm
 
 router = APIRouter(prefix="/itinerary", tags=["Itinerary"])
 
@@ -40,7 +41,7 @@ router = APIRouter(prefix="/itinerary", tags=["Itinerary"])
 # ---------------------------------------------------------------------------
 _ITINERARY_SYSTEM_PROMPT = """\
 You are SeoulWalk Itinerary Planner. Given a tourist's constraints, generate \
-a structured day-plan as a JSON array.
+a structured walking route as a JSON array.
 
 RULES:
 - Output ONLY a valid JSON array — no markdown, no extra text.
@@ -54,18 +55,91 @@ RULES:
   "latitude" (float or null),
   "longitude" (float or null)
 - Include travel/walking time between locations as separate items if needed.
-- Respect the user's budget and available time.
-- Keep activities realistic for the Gwanghwamun / Gyeongbokgung area.
-- If you know the GPS coordinates of a place, include them. Otherwise set to null.
+- Treat available time as a maximum, not a target to fill.
+- Selected hotspots are hard constraints, not loose suggestions.
+- Do not invent new places, restaurants, cafes, museums, palaces, streets, or parks.
+- If fill mode is disabled, use only selected hotspots plus utility items like "Walking to X" or generic "Rest break".
+- If fill mode is enabled, extra stops must come only from the provided fill pool of known hotspots.
+- Use the exact provided coordinates for hotspot stops. Utility items must use null coordinates.
 """
+
+_REQUIRED_ITEM_KEYS = {
+    "order",
+    "time",
+    "place",
+    "activity",
+    "duration_minutes",
+    "estimated_cost_krw",
+    "latitude",
+    "longitude",
+}
+
+
+def _normalize_name(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+
+
+def _parse_time_to_minutes(value: str | None) -> int:
+    match = re.match(r"^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$", (value or "").strip(), re.I)
+    if not match:
+        return 9 * 60
+
+    hours = int(match.group(1))
+    minutes = int(match.group(2))
+    meridiem = match.group(3).upper() if match.group(3) else None
+    if meridiem == "PM" and hours != 12:
+        hours += 12
+    if meridiem == "AM" and hours == 12:
+        hours = 0
+    return hours * 60 + minutes
+
+
+def _format_minutes_as_time(total_minutes: int) -> str:
+    normalized = total_minutes % (24 * 60)
+    hours_24 = normalized // 60
+    minutes = normalized % 60
+    meridiem = "PM" if hours_24 >= 12 else "AM"
+    hours_12 = hours_24 % 12 or 12
+    return f"{hours_12:02d}:{minutes:02d} {meridiem}"
+
+
+def _resolve_hotspots(names: list[str]) -> list[dict]:
+    hotspots_by_name = {_normalize_name(hotspot["name"]): hotspot for hotspot in HOTSPOTS}
+    resolved = []
+    seen = set()
+    for name in names:
+        hotspot = hotspots_by_name.get(_normalize_name(name))
+        if hotspot and hotspot["id"] not in seen:
+            resolved.append(hotspot)
+            seen.add(hotspot["id"])
+    return resolved
+
+
+def _format_hotspot_lines(hotspots: list[dict]) -> str:
+    if not hotspots:
+        return "- None"
+    return "\n".join(
+        (
+            f'- {hotspot["name"]}: duration={hotspot["est_duration_mins"]} min, '
+            f'lat={hotspot["lat"]}, lng={hotspot["lng"]}, '
+            f'description="{hotspot["short_desc"]}"'
+        )
+        for hotspot in hotspots
+    )
+
+
+def _known_fill_hotspots(selected_hotspots: list[dict]) -> list[dict]:
+    selected_ids = {hotspot["id"] for hotspot in selected_hotspots}
+    return [hotspot for hotspot in HOTSPOTS if hotspot["id"] not in selected_ids]
 
 
 def _build_user_prompt(req: ItineraryGenerateRequest) -> str:
     budget_text = f"{req.budget_krw:,} KRW" if req.budget_krw else "No budget constraint"
-    hotspot_list = ", ".join(req.hotspots)
+    selected_hotspots = _resolve_hotspots(req.hotspots)
+    selected_names = ", ".join(hotspot["name"] for hotspot in selected_hotspots) or ", ".join(req.hotspots)
+    fill_pool = _known_fill_hotspots(selected_hotspots) if req.allow_ai_fill else []
     waypoint_info = ""
     if WAYPOINTS:
-        wp_names = [wp["name"] for wp in WAYPOINTS]
         waypoint_info = (
             f"\n\nKnown waypoints with exact GPS coordinates:\n"
             + "\n".join(
@@ -76,62 +150,183 @@ def _build_user_prompt(req: ItineraryGenerateRequest) -> str:
 
     return (
         f"Location: {req.location}\n"
-        f"Selected hotspots: {hotspot_list}\n"
+        f"Selected hotspots: {selected_names}\n"
+        f"Selected hotspot details:\n{_format_hotspot_lines(selected_hotspots)}\n"
+        f"AI fill mode: {'enabled' if req.allow_ai_fill else 'disabled'}\n"
+        f"Known fill pool, only usable when AI fill mode is enabled:\n{_format_hotspot_lines(fill_pool)}\n"
         f"Budget: {budget_text}\n"
-        f"Available time: {req.available_hours} hours starting at {req.start_time}\n"
+        f"Maximum available time: {req.available_hours} hours starting at {req.start_time}\n"
+        f"If the selected hotspots take less time than the maximum, do not pad the route unless fill mode is enabled.\n"
         f"{waypoint_info}"
     )
 
 
-async def call_llm_for_itinerary(req: ItineraryGenerateRequest) -> list[dict]:
-    """Call OpenRouter LLM to generate the itinerary JSON."""
-    if not OPENROUTER_API_KEY:
-        raise HTTPException(status_code=500, detail="Missing OpenRouter API key")
+def _hotspot_to_item(hotspot: dict) -> dict:
+    return {
+        "order": 0,
+        "time": "",
+        "place": hotspot["name"],
+        "activity": hotspot["short_desc"],
+        "duration_minutes": int(hotspot["est_duration_mins"]),
+        "estimated_cost_krw": 0,
+        "latitude": float(hotspot["lat"]),
+        "longitude": float(hotspot["lng"]),
+    }
 
-    user_prompt = _build_user_prompt(req)
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.post(
-            OPENROUTER_BASE_URL,
-            headers={
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": LLM_MODEL_ID,
-                "messages": [
-                    {"role": "system", "content": _ITINERARY_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "temperature": 0.4,
-            },
+def _fallback_itinerary_items(req: ItineraryGenerateRequest) -> list[dict]:
+    selected_hotspots = _resolve_hotspots(req.hotspots)
+    if selected_hotspots:
+        return _recalculate_item_schedule(
+            [_hotspot_to_item(hotspot) for hotspot in selected_hotspots],
+            req.start_time,
         )
 
-    if resp.status_code != 200:
-        raise HTTPException(
-            status_code=502,
-            detail=f"OpenRouter returned {resp.status_code}: {resp.text[:300]}",
-        )
+    return _recalculate_item_schedule(
+        [{
+            "order": 0,
+            "time": "",
+            "place": req.location,
+            "activity": "Explore the selected area at a relaxed pace.",
+            "duration_minutes": 60,
+            "estimated_cost_krw": 0,
+            "latitude": None,
+            "longitude": None,
+        }],
+        req.start_time,
+    )
 
-    data = resp.json()
-    raw_content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
 
-    # Parse the JSON array from the LLM response
-    try:
-        # Strip markdown code fences if the model wraps output in ```json ... ```
-        cleaned = raw_content.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[1]  # remove first line
-            cleaned = cleaned.rsplit("```", 1)[0]  # remove closing fence
-        items = json.loads(cleaned)
-        if not isinstance(items, list):
-            raise ValueError("Expected a JSON array")
+def _extract_json_array(raw_content: str) -> str:
+    cleaned = raw_content.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[1]
+        cleaned = cleaned.rsplit("```", 1)[0]
+
+    match = re.search(r"\[[\s\S]*\]", cleaned)
+    return match.group(0) if match else cleaned
+
+
+def _parse_itinerary_items(raw_content: str) -> list[dict]:
+    items = json.loads(_extract_json_array(raw_content))
+    if not isinstance(items, list):
+        raise ValueError("Expected a JSON array")
+
+    for item in items:
+        if not isinstance(item, dict):
+            raise ValueError("Each itinerary item must be an object")
+        missing = _REQUIRED_ITEM_KEYS - set(item)
+        if missing:
+            raise ValueError(f"Missing itinerary item keys: {sorted(missing)}")
+
+    return items
+
+
+def _is_utility_item(item: dict) -> bool:
+    text = f'{item.get("place", "")} {item.get("activity", "")}'.lower()
+    return any(
+        keyword in text
+        for keyword in ("walk", "walking", "travel", "transit", "rest break", "lunch break")
+    )
+
+
+def _merge_known_hotspot_item(item: dict, hotspot: dict) -> dict:
+    return {
+        **item,
+        "place": hotspot["name"],
+        "duration_minutes": int(item.get("duration_minutes") or hotspot["est_duration_mins"]),
+        "latitude": float(hotspot["lat"]),
+        "longitude": float(hotspot["lng"]),
+    }
+
+
+def _filter_known_items(items: list[dict], req: ItineraryGenerateRequest) -> list[dict]:
+    selected_hotspots = _resolve_hotspots(req.hotspots)
+    allowed_hotspots = selected_hotspots + (_known_fill_hotspots(selected_hotspots) if req.allow_ai_fill else [])
+    allowed_by_name = {_normalize_name(hotspot["name"]): hotspot for hotspot in allowed_hotspots}
+    selected_names = {_normalize_name(hotspot["name"]) for hotspot in selected_hotspots}
+
+    filtered = []
+    selected_seen = set()
+    for item in items:
+        normalized_place = _normalize_name(str(item.get("place", "")))
+        known_hotspot = allowed_by_name.get(normalized_place)
+        if known_hotspot:
+            filtered.append(_merge_known_hotspot_item(item, known_hotspot))
+            if normalized_place in selected_names:
+                selected_seen.add(normalized_place)
+            continue
+
+        if _is_utility_item(item):
+            filtered.append({
+                **item,
+                "latitude": None,
+                "longitude": None,
+            })
+
+    # Ensure strict mode cannot accidentally omit a selected destination.
+    for hotspot in selected_hotspots:
+        normalized_name = _normalize_name(hotspot["name"])
+        if normalized_name not in selected_seen:
+            filtered.append(_hotspot_to_item(hotspot))
+
+    filtered = _trim_optional_items_to_available_time(filtered, req, selected_names)
+    return _recalculate_item_schedule(filtered or _fallback_itinerary_items(req), req.start_time)
+
+
+def _trim_optional_items_to_available_time(
+    items: list[dict],
+    req: ItineraryGenerateRequest,
+    selected_names: set[str],
+) -> list[dict]:
+    max_minutes = int(req.available_hours * 60)
+    if max_minutes <= 0:
         return items
-    except (json.JSONDecodeError, ValueError) as e:
-        raise HTTPException(
-            status_code=502,
-            detail=f"LLM returned unparseable itinerary: {e}. Raw: {raw_content[:500]}",
+
+    running_minutes = 0
+    trimmed = []
+    for item in items:
+        duration = int(item.get("duration_minutes") or 60)
+        is_selected_hotspot = _normalize_name(str(item.get("place", ""))) in selected_names
+        if running_minutes + duration <= max_minutes or is_selected_hotspot:
+            trimmed.append(item)
+            running_minutes += duration
+
+    return trimmed
+
+
+def _recalculate_item_schedule(items: list[dict], start_time: str) -> list[dict]:
+    running_minutes = _parse_time_to_minutes(start_time)
+    scheduled = []
+    for order, item in enumerate(items, start=1):
+        duration = int(item.get("duration_minutes") or 60)
+        scheduled.append({
+            **item,
+            "order": order,
+            "time": _format_minutes_as_time(running_minutes),
+            "duration_minutes": duration,
+        })
+        running_minutes += duration
+    return scheduled
+
+
+async def call_llm_for_itinerary(req: ItineraryGenerateRequest) -> list[dict]:
+    """Call the same default chat model/provider to generate itinerary JSON."""
+    user_prompt = _build_user_prompt(req)
+    try:
+        raw_content = await _call_llm(
+            messages=[
+                {"role": "system", "content": _ITINERARY_SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+            model=LLM_MODEL_ID,
+            temperature=0.4,
+            provider="nvidia",
         )
+        return _filter_known_items(_parse_itinerary_items(raw_content), req)
+    except (HTTPException, json.JSONDecodeError, ValueError) as exc:
+        print(f"⚠️ Falling back to deterministic itinerary: {exc}")
+        return _fallback_itinerary_items(req)
 
 
 # ---------------------------------------------------------------------------

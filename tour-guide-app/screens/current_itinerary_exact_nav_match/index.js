@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
+  ActivityIndicator,
   View,
   Text,
   StyleSheet,
@@ -7,7 +8,7 @@ import {
   TouchableOpacity,
   Image
 } from 'react-native';
-import Svg, { Line, Path } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useAppStore from '../../src/store';
 
@@ -15,12 +16,39 @@ export default function CurrentItineraryView({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const itineraries = useAppStore((s) => s.itineraries);
   const generatedItinerary = useAppStore((s) => s.generatedItinerary);
+  const activeTourId = useAppStore((s) => s.activeTourId);
+  const loadItinerary = useAppStore((s) => s.loadItinerary);
+  const commitItinerary = useAppStore((s) => s.commitItinerary);
+  const startTour = useAppStore((s) => s.startTour);
+  const isLoadingItinerary = useAppStore((s) => s.isLoadingItinerary);
+  const itineraryError = useAppStore((s) => s.itineraryError);
   const itineraryId = route?.params?.itineraryId;
-  const itinerary = itineraries.find((item) => item.id === itineraryId) || generatedItinerary || itineraries[0] || null;
+  const itinerary =
+    itineraries.find((item) => item.id === itineraryId) ||
+    itineraries.find((item) => item.id === activeTourId) ||
+    generatedItinerary ||
+    itineraries[0] ||
+    null;
   const stops = itinerary?.stops || [];
+  const isViewingActiveTour = Boolean(itinerary?.id && activeTourId && itinerary.id === activeTourId);
 
-  const handleSavePlan = () => {
-    navigation.navigate('Home');
+  useEffect(() => {
+    if (!itineraryId || itinerary || isLoadingItinerary) return;
+    loadItinerary(itineraryId).catch(() => {
+      // Error state is rendered in the timeline fallback.
+    });
+  }, [itineraryId, itinerary, isLoadingItinerary, loadItinerary]);
+
+  const handlePrimaryAction = () => {
+    if (isViewingActiveTour) {
+      navigation.navigate('TourMap');
+      return;
+    }
+
+    const committedId = commitItinerary(itinerary?.id);
+    if (!committedId) return;
+    startTour(committedId);
+    navigation.navigate('TourMap');
   };
 
   const handleGoBack = () => {
@@ -102,7 +130,7 @@ export default function CurrentItineraryView({ navigation, route }) {
                 <Path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
               </Svg>
             </View>
-            <View>
+            <View style={styles.summaryTextWrap}>
               <Text style={styles.summaryTitle}>{itinerary?.name || 'Gyeongbokgung Palace Tour'}</Text>
               <Text style={styles.textMuted}>{itinerary?.location || 'Gyeongbokgung Palace, Seoul'}</Text>
             </View>
@@ -119,16 +147,20 @@ export default function CurrentItineraryView({ navigation, route }) {
         {/* TIMELINE ARCHITECTURE WRAPPER */}
         <View style={styles.timelineWrapper}>
 
-          {/* Continuous Running Svg Line Component */}
-          <Svg style={styles.absoluteTimelineLine} pointerEvents="none">
-            <Line x1="20" y1="32" x2="20" y2={Math.max(120, stops.length * 120)} stroke="#2a2a2a" strokeWidth="1" />
-          </Svg>
+          <View style={styles.timelineLine} pointerEvents="none" />
 
           {stops.length ? (
             stops.map(renderTimelineStop)
+          ) : isLoadingItinerary ? (
+            <View style={[styles.cardBg, styles.cardPaddingArea, styles.radiusPatch, styles.loadingCard]}>
+              <ActivityIndicator color="#5c77ff" />
+              <Text style={styles.cardBodyDescription}>Loading itinerary...</Text>
+            </View>
           ) : (
             <View style={[styles.cardBg, styles.cardPaddingArea, styles.radiusPatch]}>
-              <Text style={styles.cardBodyDescription}>Generate an itinerary to review the route here.</Text>
+              <Text style={styles.cardBodyDescription}>
+                {itineraryError || 'Generate an itinerary to review the route here.'}
+              </Text>
             </View>
           )}
 
@@ -137,11 +169,21 @@ export default function CurrentItineraryView({ navigation, route }) {
       </ScrollView>
 
       <View style={[styles.bottomStickyActionTray, { paddingBottom: insets.bottom + 16 }]}>
-        <TouchableOpacity style={styles.primaryActionButton} onPress={handleSavePlan}>
+        <TouchableOpacity
+          style={[styles.primaryActionButton, (!itinerary || isLoadingItinerary) && styles.disabledButton]}
+          onPress={handlePrimaryAction}
+          disabled={!itinerary || isLoadingItinerary}
+        >
           <Svg width="18" height="18" fill="none" stroke="#ffffff" strokeWidth="2" viewBox="0 0 24 24" style={styles.tagIconSpace}>
-            <Path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            <Path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d={isViewingActiveTour ? 'M15 19l-7-7 7-7' : 'M5 13l4 4L19 7'}
+            />
           </Svg>
-          <Text style={styles.primaryButtonText}>Understood, Save Plan</Text>
+          <Text style={styles.primaryButtonText}>
+            {isViewingActiveTour ? 'Back to Map' : 'Save & Start Tour'}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -189,6 +231,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#2a2a2a',
     borderRadius: 20,
+    minWidth: 0,
   },
   radiusPatch: {
     borderRadius: 20,
@@ -203,6 +246,7 @@ const styles = StyleSheet.create({
     gap: 16,
     padding: 16,
     paddingBottom: 12,
+    minWidth: 0,
   },
   summaryIconWrapper: {
     width: 40,
@@ -216,10 +260,18 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#ffffff',
+    lineHeight: 23,
+    flexShrink: 1,
   },
   textMuted: {
     fontSize: 14,
     color: '#9ca3af',
+    lineHeight: 19,
+    flexShrink: 1,
+  },
+  summaryTextWrap: {
+    flex: 1,
+    minWidth: 0,
   },
   timeTagBadge: {
     backgroundColor: '#22252a',
@@ -244,15 +296,27 @@ const styles = StyleSheet.create({
     position: 'relative',
     paddingLeft: 40,
     marginTop: 16,
+    width: '100%',
+    minWidth: 0,
   },
-  absoluteTimelineLine: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 0,
+  loadingCard: {
+    alignItems: 'center',
+    gap: 10,
+  },
+  timelineLine: {
+    position: 'absolute',
+    left: 20,
+    top: 10,
+    bottom: 24,
+    width: 1,
+    backgroundColor: '#2a2a2a',
   },
   timelineNodeRow: {
     position: 'relative',
     marginBottom: 32,
     width: '100%',
+    minWidth: 0,
+    zIndex: 2,
   },
   timelineIconUnit: {
     position: 'absolute',
@@ -282,24 +346,33 @@ const styles = StyleSheet.create({
   cardHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 4,
+    gap: 8,
+    minWidth: 0,
   },
   cardNodeTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: '#ffffff',
+    lineHeight: 21,
+    flex: 1,
+    minWidth: 0,
   },
   monoTimeActive: {
     fontSize: 12,
     fontFamily: 'Courier',
     color: '#4ade80',
     fontWeight: '600',
+    maxWidth: 76,
+    lineHeight: 16,
   },
   monoTimeMuted: {
     fontSize: 12,
     fontFamily: 'Courier',
     color: '#9ca3af',
+    maxWidth: 76,
+    lineHeight: 16,
   },
   cardBodyDescription: {
     fontSize: 14,
@@ -308,6 +381,7 @@ const styles = StyleSheet.create({
   },
   badgeClusterRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     marginBottom: 8,
     marginTop: 2,
@@ -358,6 +432,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  disabledButton: {
+    opacity: 0.55,
   },
   primaryButtonText: {
     color: '#ffffff',

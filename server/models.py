@@ -45,6 +45,10 @@ class ItineraryGenerateRequest(BaseModel):
         None,
         description="Existing session ID to attach the itinerary to. If omitted, a new session is created.",
     )
+    allow_ai_fill: bool = Field(
+        False,
+        description="If true, the planner may add extra known hotspots when selected stops leave substantial free time.",
+    )
 
 
 class ItineraryItem(BaseModel):
@@ -95,7 +99,7 @@ class ChatRequest(BaseModel):
     )
     provider: str | None = Field(
         None,
-        description="LLM provider: 'openrouter' (default) or 'nvidia'"
+        description="Deprecated. Non-vision LLM requests always use NVIDIA NIM."
     )
 
 

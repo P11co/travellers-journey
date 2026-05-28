@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import aiosqlite
 import os
+import re
 from server.config import DATABASE_PATH
 
 # ---------------------------------------------------------------------------
@@ -222,25 +223,56 @@ async def reorder_itinerary(session_id: str, new_order: list[int]) -> bool:
     try:
         # Fetch existing items
         cursor = await db.execute(
-            "SELECT id, item_order FROM itinerary_items WHERE session_id = ? ORDER BY item_order",
+            """SELECT id, item_order, time_slot, duration_minutes
+               FROM itinerary_items
+               WHERE session_id = ?
+               ORDER BY item_order""",
             (session_id,),
         )
         rows = await cursor.fetchall()
         if len(rows) != len(new_order):
             return False
 
-        # Map old item_order → id (primary key)
-        order_to_id = {row["item_order"]: row["id"] for row in rows}
+        def parse_time_to_minutes(value: str | None) -> int:
+            match = re.match(r"^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$", (value or "").strip(), re.I)
+            if not match:
+                return 9 * 60
 
-        # Update each item's order
+            hours = int(match.group(1))
+            minutes = int(match.group(2))
+            meridiem = match.group(3).upper() if match.group(3) else None
+
+            if meridiem == "PM" and hours != 12:
+                hours += 12
+            if meridiem == "AM" and hours == 12:
+                hours = 0
+            return hours * 60 + minutes
+
+        def format_minutes_as_time(total_minutes: int) -> str:
+            normalized = total_minutes % (24 * 60)
+            hours_24 = normalized // 60
+            minutes = normalized % 60
+            meridiem = "PM" if hours_24 >= 12 else "AM"
+            hours_12 = hours_24 % 12 or 12
+            return f"{hours_12:02d}:{minutes:02d} {meridiem}"
+
+        # Map old item_order → full row so the reordered schedule can be
+        # recalculated from the original start time.
+        order_to_row = {row["item_order"]: row for row in rows}
+        running_minutes = parse_time_to_minutes(rows[0]["time_slot"])
+
+        # Update each item's order and time. Reordering without time
+        # recalculation makes the UI show impossible chronology.
         for new_pos, old_order in enumerate(new_order, start=1):
-            item_id = order_to_id.get(old_order)
-            if item_id is None:
+            row = order_to_row.get(old_order)
+            if row is None:
                 return False
+            next_time_slot = format_minutes_as_time(running_minutes)
             await db.execute(
-                "UPDATE itinerary_items SET item_order = ? WHERE id = ?",
-                (new_pos, item_id),
+                "UPDATE itinerary_items SET item_order = ?, time_slot = ? WHERE id = ?",
+                (new_pos, next_time_slot, row["id"]),
             )
+            running_minutes += row["duration_minutes"] or 0
         await db.commit()
         return True
     finally:

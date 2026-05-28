@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import Svg, { Path, Line } from 'react-native-svg';
 import useAppStore from '../../src/store';
+import TrioDock from '../../src/components/TrioDock';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -21,13 +22,31 @@ export default function AIChatInterface({ navigation }) {
   const [cameraVisible, setCameraVisible] = useState(false);
   const [inputText, setInputText] = useState('');
   const scrollViewRef = useRef(null);
+  const isNearBottomRef = useRef(true);
   const chatMessages = useAppStore((s) => s.chatMessages);
   const isChatLoading = useAppStore((s) => s.isChatLoading);
   const sendMessage = useAppStore((s) => s.sendMessage);
 
+  const scrollToBottom = (animated = true) => {
+    scrollViewRef.current?.scrollToEnd({ animated });
+  };
+
+  const handleScroll = ({ nativeEvent }) => {
+    const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+    const distanceFromBottom = contentSize.height - (layoutMeasurement.height + contentOffset.y);
+    isNearBottomRef.current = distanceFromBottom < 80;
+  };
+
+  const handleContentSizeChange = () => {
+    if (isNearBottomRef.current) {
+      scrollToBottom(true);
+    }
+  };
+
   const handleSend = async () => {
     const text = inputText.trim();
     if (!text || isChatLoading) return;
+    isNearBottomRef.current = true;
     setInputText('');
     try {
       await sendMessage(text);
@@ -115,41 +134,13 @@ export default function AIChatInterface({ navigation }) {
         </Svg>
       </View>
 
-      {/* 2. TOP FLOATING NAVIGATION PILL */}
-      <View style={styles.topNavWrapper}>
-        <View style={styles.navPill}>
-          <TouchableOpacity style={styles.pillIconButton} onPress={() => navigation.navigate('ConfirmItinerary')}>
-            <Svg width="20" height="20" fill="none" stroke="#9ca3aa" strokeWidth="2" viewBox="0 0 24 24">
-              <Path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
-              />
-            </Svg>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.centerBubbleButton} onPress={() => navigation.goBack()}>
-            <Svg width="20" height="20" fill="none" stroke="#ffffff" strokeWidth="2" viewBox="0 0 24 24">
-              <Path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-            </Svg>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.pillIconButton} onPress={() => navigation.navigate('Settings')}>
-            <Svg width="20" height="20" fill="none" stroke="#9ca3aa" strokeWidth="2" viewBox="0 0 24 24">
-              <Path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-              />
-              <Path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-              />
-            </Svg>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <TrioDock
+        navigation={navigation}
+        activeKey="chat"
+        placement="top"
+        topOffset={28}
+        onChatPress={() => navigation.goBack()}
+      />
 
       {/* 3. SCROLLABLE CORE CHAT WINDOW */}
       <ScrollView
@@ -157,7 +148,11 @@ export default function AIChatInterface({ navigation }) {
         style={styles.chatScrollContainer}
         contentContainerStyle={styles.chatContentPadding}
         showsVerticalScrollIndicator={false}
-        onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        scrollEventThrottle={16}
+        onScroll={handleScroll}
+        onContentSizeChange={handleContentSizeChange}
       >
         <Text style={styles.dateStamp}>TODAY</Text>
         {chatMessages.map(renderMessage)}
@@ -280,39 +275,6 @@ const styles = StyleSheet.create({
   gridOverlay: {
     ...StyleSheet.absoluteFillObject,
     opacity: 0.25,
-  },
-  topNavWrapper: {
-    position: 'absolute',
-    top: 48,
-    left: 16,
-    right: 16,
-    zIndex: 50,
-  },
-  navPill: {
-    backgroundColor: 'rgba(26, 26, 26, 0.8)',
-    borderWidth: 1,
-    borderColor: '#333333',
-    borderRadius: 9999,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  pillIconButton: {
-    padding: 4,
-  },
-  centerBubbleButton: {
-    backgroundColor: '#5c77ff',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#5c77ff',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 15,
   },
   chatScrollContainer: {
     flex: 1,

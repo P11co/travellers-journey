@@ -1,0 +1,202 @@
+[
+    {
+        "id": "h_001",
+        "name": "Gyeongbokgung Palace",
+        "category": "Palaces & History",
+        "image_url": "assets/images/hotspots/palace_history_1778862119711.png",
+        "short_desc": "The largest and most iconic royal palace of the Joseon Dynasty. Famous for the Royal Guard Changing Ceremony.",
+        "est_duration_mins": 120,
+        "lat": 37.5796,
+        "lng": 126.977
+    },
+    {
+        "id": "h_002",
+        "name": "Gwanghwamun Square",
+        "category": "Palaces & History",
+        "image_url": "assets/images/hotspots/h_002_gwanghwamun_square_1778862327944.png",
+        "short_desc": "The central plaza featuring the iconic statues of King Sejong (creator of Hangul) and Admiral Yi Sun-sin.",
+        "est_duration_mins": 45,
+        "lat": 37.5726,
+        "lng": 126.9769
+    },
+    {
+        "id": "h_003",
+        "name": "Deoksugung Palace",
+        "category": "Palaces & History",
+        "image_url": "assets/images/hotspots/h_003_deoksugung_palace_1778862344580.png",
+        "short_desc": "A unique palace blending traditional Korean and Western-style architecture.",
+        "est_duration_mins": 90,
+        "lat": 37.5658,
+        "lng": 126.9751
+    },
+    {
+        "id": "h_004",
+        "name": "Deoksugung Stone-wall Road",
+        "category": "Palaces & History",
+        "image_url": "assets/images/hotspots/h_004_stonewall_road_1778862357027.png",
+        "short_desc": "A famous, romantic walking path wrapping around Deoksugung Palace.",
+        "est_duration_mins": 30,
+        "lat": 37.5663,
+        "lng": 126.974
+    },
+    {
+        "id": "h_005",
+        "name": "Cheong Wa Dae (The Blue House)",
+        "category": "Palaces & History",
+        "image_url": "assets/images/hotspots/h_005_blue_house_1778862375393.png",
+        "short_desc": "The former presidential residence located right behind Gyeongbokgung, now open to the public as a massive park.",
+        "est_duration_mins": 90,
+        "lat": 37.5866,
+        "lng": 126.9748
+    },
+    {
+        "id": "h_006",
+        "name": "National Palace Museum of Korea",
+        "category": "Palaces & History",
+        "image_url": "assets/images/hotspots/h_006_palace_museum_1778862402556.png",
+        "short_desc": "Located right on the Gyeongbokgung grounds, housing royal artifacts.",
+        "est_duration_mins": 60,
+        "lat": 37.5765,
+        "lng": 126.9758
+    },
+    {
+        "id": "h_007",
+        "name": "Bukchon Hanok Village",
+        "category": "Traditional Villages & Culture",
+        "image_url": "assets/images/hotspots/traditional_village_1778862134576.png",
+        "short_desc": "A highly photogenic residential village filled with hundreds of preserved traditional Korean houses (hanoks).",
+        "est_duration_mins": 120,
+        "lat": 37.5826,
+        "lng": 126.9836
+    },
+    {
+        "id": "h_008",
+        "name": "Seochon Village",
+        "category": "Traditional Villages & Culture",
+        "image_url": "assets/images/hotspots/h_008_seochon_village_1778862418796.png",
+        "short_desc": "A trendy, artistic neighborhood west of Gyeongbokgung known for hidden cafes, vintage shops, and older hanoks.",
+        "est_duration_mins": 90,
+        "lat": 37.5804,
+        "lng": 126.9686
+    },
+    {
+        "id": "h_009",
+        "name": "Insadong Culture Street",
+        "category": "Traditional Villages & Culture",
+        "image_url": "assets/images/hotspots/h_009_insadong_street_1778862433793.png",
+        "short_desc": "The go-to pedestrian street for traditional Korean crafts, souvenirs, and traditional tea houses.",
+        "est_duration_mins": 90,
+        "lat": 37.5743,
+        "lng": 126.985
+    },
+    {
+        "id": "h_010",
+        "name": "Jogyesa Temple",
+        "category": "Traditional Villages & Culture",
+        "image_url": "assets/images/hotspots/h_010_jogyesa_temple_1778862448224.png",
+        "short_desc": "The chief temple of Korean Buddhism, located just a short walk from Gwanghwamun, featuring beautiful lantern displays.",
+        "est_duration_mins": 45,
+        "lat": 37.5739,
+        "lng": 126.9822
+    },
+    {
+        "id": "h_011",
+        "name": "Tongin Traditional Market",
+        "category": "Markets & Food",
+        "image_url": "assets/images/hotspots/h_011_tongin_market_1778862475251.png",
+        "short_desc": "Famous for its 'Yeopjeon' (brass coin) lunchbox, where visitors buy ancient coins to trade for street food like oil tteokbokki.",
+        "est_duration_mins": 60,
+        "lat": 37.5807,
+        "lng": 126.9698
+    },
+    {
+        "id": "h_012",
+        "name": "Gwangjang Market",
+        "category": "Markets & Food",
+        "image_url": "assets/images/hotspots/markets_food_1778862148930.png",
+        "short_desc": "Famous for its bustling street food alleys, specifically Bindaetteok (mung bean pancakes) and Yukhoe (beef tartare).",
+        "est_duration_mins": 120,
+        "lat": 37.57,
+        "lng": 126.9996
+    },
+    {
+        "id": "h_013",
+        "name": "Tosokchon Samgyetang",
+        "category": "Markets & Food",
+        "image_url": "assets/images/hotspots/h_013_tosokchon_samgyetang_1778862490739.png",
+        "short_desc": "Legendary healthy Korean Chicken Soup with Ginseng, located in Seochon.",
+        "est_duration_mins": 90,
+        "lat": 37.5776,
+        "lng": 126.9715
+    },
+    {
+        "id": "h_014",
+        "name": "Jongno K-BBQ Alley",
+        "category": "Markets & Food",
+        "image_url": "assets/images/hotspots/h_014_jongno_bbq_1778862507909.png",
+        "short_desc": "A vibrant area for authentic Korean BBQ (Pork Galbi & Samgyeopsal).",
+        "est_duration_mins": 90,
+        "lat": 37.5695,
+        "lng": 126.986
+    },
+    {
+        "id": "h_015",
+        "name": "Insadong Hanjeongsik",
+        "category": "Markets & Food",
+        "image_url": "assets/images/hotspots/h_015_insadong_hanjeongsik_1778862521933.png",
+        "short_desc": "A traditional Korean full-course dining experience featuring dozens of side dishes served in a hanok setting.",
+        "est_duration_mins": 120,
+        "lat": 37.574,
+        "lng": 126.9855
+    },
+    {
+        "id": "h_016",
+        "name": "Cheonggyecheon Stream",
+        "category": "Nature, Modern & Leisure",
+        "image_url": "assets/images/hotspots/nature_modern_1778862166079.png",
+        "short_desc": "A peaceful, sunken urban stream running through downtown Seoul. Highly recommended for evening walks and lantern festivals.",
+        "est_duration_mins": 60,
+        "lat": 37.5694,
+        "lng": 126.9774
+    },
+    {
+        "id": "h_017",
+        "name": "Naksan Park",
+        "category": "Nature, Modern & Leisure",
+        "image_url": "assets/images/hotspots/h_017_naksan_park_1778862549198.png",
+        "short_desc": "Spectacular night views of the Seoul city walls and downtown skyline.",
+        "est_duration_mins": 90,
+        "lat": 37.5805,
+        "lng": 127.0069
+    },
+    {
+        "id": "h_018",
+        "name": "Lotte Department Store (Myeongdong Main)",
+        "category": "Nature, Modern & Leisure",
+        "image_url": "assets/images/hotspots/h_018_placeholder.jpg",
+        "short_desc": "A massive shopping hub just south of the Gwanghwamun area, featuring a massive basement food hall.",
+        "est_duration_mins": 120,
+        "lat": 37.5648,
+        "lng": 126.9816
+    },
+    {
+        "id": "h_019",
+        "name": "Kyobo Bookstore (Gwanghwamun Branch)",
+        "category": "Nature, Modern & Leisure",
+        "image_url": "assets/images/hotspots/h_019_placeholder.jpg",
+        "short_desc": "Korea's largest and most famous bookstore, located right at Gwanghwamun Square. A great cultural and stationary shopping spot.",
+        "est_duration_mins": 60,
+        "lat": 37.5707,
+        "lng": 126.9778
+    },
+    {
+        "id": "h_020",
+        "name": "National Museum of Modern and Contemporary Art (MMCA)",
+        "category": "Nature, Modern & Leisure",
+        "image_url": "assets/images/hotspots/h_020_placeholder.jpg",
+        "short_desc": "Located right next to Gyeongbokgung, offering world-class modern art exhibitions in a beautiful architectural space.",
+        "est_duration_mins": 120,
+        "lat": 37.5786,
+        "lng": 126.98
+    }
+]
