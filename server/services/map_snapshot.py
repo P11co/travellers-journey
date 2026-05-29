@@ -5,6 +5,7 @@ import base64
 import os
 import httpx
 from server.config import NAVER_MAP_CLIENT_ID, NAVER_MAP_CLIENT_SECRET
+from server.services.langsmith_tracing import sanitize_trace_payload, traceable
 
 # A valid 100x100 solid gray PNG base64 for local testing fallback
 MOCK_MAP_B64 = (
@@ -18,6 +19,17 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(_DIR))
 MAP_CACHE_PATH = os.path.join(_PROJECT_ROOT, "data", "latest_map.png")
 
 
+def _sanitize_map_snapshot_output(value):
+    if isinstance(value, str) and value:
+        return f"[map snapshot base64 omitted: {len(value)} chars]"
+    return sanitize_trace_payload(value)
+
+
+@traceable(
+    name="Naver Static Map Snapshot",
+    run_type="tool",
+    process_outputs=_sanitize_map_snapshot_output,
+)
 async def get_map_snapshot(
     latitude: float,
     longitude: float,

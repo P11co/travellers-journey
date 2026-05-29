@@ -39,6 +39,13 @@ DEEPGRAM_API_KEY: str = (
 TAVILY_API_KEY: str = os.getenv("TAVILY_API_KEY") or ""
 NVIDIA_API_KEY: str = os.getenv("NVIDIA_API_KEY") or ""
 
+# Optional LangSmith tracing. The LangSmith SDK reads these environment
+# variables directly; these constants make the settings visible to the app.
+LANGSMITH_TRACING: str = os.getenv("LANGSMITH_TRACING") or "false"
+LANGSMITH_ENDPOINT: str = os.getenv("LANGSMITH_ENDPOINT") or ""
+LANGSMITH_API_KEY: str = os.getenv("LANGSMITH_API_KEY") or ""
+LANGSMITH_PROJECT: str = os.getenv("LANGSMITH_PROJECT") or "seoulwalk-user-study"
+
 # Naver Maps API keys
 NAVER_MAP_CLIENT_ID: str = os.getenv("NAVER_MAP_CLIENT_ID") or ""
 NAVER_MAP_CLIENT_SECRET: str = os.getenv("NAVER_MAP_CLIENT_SECRET") or ""

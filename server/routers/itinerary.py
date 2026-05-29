@@ -32,6 +32,7 @@ from server.database import (
 )
 from server.routers.handoff import build_naver_urls
 from server.routers.chat import _call_llm
+from server.services.langsmith_tracing import traceable
 
 router = APIRouter(prefix="/itinerary", tags=["Itinerary"])
 
@@ -310,6 +311,7 @@ def _recalculate_item_schedule(items: list[dict], start_time: str) -> list[dict]
     return scheduled
 
 
+@traceable(name="Generate Itinerary With LLM", run_type="chain")
 async def call_llm_for_itinerary(req: ItineraryGenerateRequest) -> list[dict]:
     """Call the same default chat model/provider to generate itinerary JSON."""
     user_prompt = _build_user_prompt(req)
@@ -334,6 +336,7 @@ async def call_llm_for_itinerary(req: ItineraryGenerateRequest) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 @router.post("/generate", response_model=ItineraryResponse)
+@traceable(name="Itinerary Generate API", run_type="chain")
 async def generate_itinerary(req: ItineraryGenerateRequest):
     """Generate an AI-powered itinerary and persist it."""
     # 1. Create or reuse session

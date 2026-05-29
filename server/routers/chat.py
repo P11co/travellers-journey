@@ -48,6 +48,7 @@ from server.database import (
     create_session,
     get_session,
     get_chat_history,
+    get_itinerary_items,
     save_chat_message,
     get_activity_logs,
     save_trace_event,
@@ -61,6 +62,8 @@ from server.services.web_search import (
 from server.services.rag import search_rag
 from server.services.map_snapshot import get_map_snapshot
 from server.services.geocoding import geocode_search, format_geocoding_for_prompt
+from server.services.langsmith_tracing import sanitize_trace_payload, traceable
+from server.services.trace_artifacts import save_base64_image_artifact
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
@@ -99,6 +102,22 @@ If sources conflict, use the most recent web result.
 
 ### 7. Scope
 Expert on Gyeongbokgung, nearby Seoul, Korean etiquette. Redirect off-topic queries.
+
+### 8. Itinerary Context Rule
+Use ITINERARY CONTEXT when the user asks about next steps, schedule, route
+progress, remaining stops, or plans.
+
+For ambiguous questions like "Where should we go now?", "What's next?", or
+"What should we do?", provide both:
+- the next planned itinerary stop
+- a nearby/current-location option from CURRENT CONTEXT, if available
+
+Do not tell the user they are off-course, behind schedule, or in the wrong
+place unless they explicitly ask whether they are off-route/on-track.
+
+Example: "According to our schedule, we should head to Sajeongjeon next. If you
+meant what's interesting right around here, Geunjeongjeon's courtyard and
+Gyeonghoeru Pavilion are also worth looking at from this spot."
 """
 
 _VISION_SYSTEM_PROMPT = """\
@@ -248,6 +267,37 @@ async def _build_activity_context(session_id: str) -> str:
     )
 
 
+async def _build_itinerary_context(session_id: str) -> str:
+    """Build a compact saved-itinerary summary for route-aware chat."""
+    items = await get_itinerary_items(session_id)
+    if not items:
+        return ""
+
+    lines = []
+    for item in items:
+        duration = item.get("duration_minutes") or 0
+        cost = item.get("estimated_cost_krw") or 0
+        details = []
+        if duration:
+            details.append(f"{duration} min")
+        details.append("free" if cost <= 0 else f"{cost:,} KRW")
+        if item.get("latitude") is not None and item.get("longitude") is not None:
+            details.append(f"coords {item['latitude']:.6f}, {item['longitude']:.6f}")
+
+        lines.append(
+            f"- {item['order']}. {item['place']} at {item['time']} "
+            f"({', '.join(details)}): {item.get('activity') or 'Visit this stop'}"
+        )
+
+    return (
+        "\n\n### ITINERARY CONTEXT\n"
+        "Saved route for this session, in planned order:\n"
+        + "\n".join(lines)
+        + "\nUse this route for schedule, next-step, remaining-stop, and plan questions."
+        + "\nCombine it with CURRENT CONTEXT for ambiguous next-step questions."
+    )
+
+
 async def _trace_chat_event(session_id: str, event_type: str, payload: dict | None = None) -> None:
     """Best-effort behavior trace logging; never block the chat flow."""
     try:
@@ -261,6 +311,26 @@ async def _trace_chat_event(session_id: str, event_type: str, payload: dict | No
         print(f"⚠️ Failed to save trace event {event_type}: {exc}")
 
 
+@traceable(name="Resolve Waypoint Context", run_type="tool")
+async def _resolve_waypoint_context(
+    waypoint_id: str | None,
+    latitude: float | None,
+    longitude: float | None,
+) -> tuple[dict | None, str]:
+    waypoint = _find_waypoint(waypoint_id, latitude, longitude)
+    return waypoint, _build_context(waypoint)
+
+
+@traceable(name="Build Activity Context", run_type="tool")
+async def _get_activity_context_for_trace(session_id: str) -> str:
+    return await _build_activity_context(session_id)
+
+
+@traceable(name="Build Itinerary Context", run_type="tool")
+async def _get_itinerary_context_for_trace(session_id: str) -> str:
+    return await _build_itinerary_context(session_id)
+
+
 def _strip_thinking(text: str | None) -> str:
     """Remove <think>...</think> reasoning traces from model output (for TTS safety)."""
     if not text:
@@ -268,6 +338,12 @@ def _strip_thinking(text: str | None) -> str:
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
 
+@traceable(
+    name="Provider Chat Completion",
+    run_type="llm",
+    process_inputs=sanitize_trace_payload,
+    process_outputs=sanitize_trace_payload,
+)
 async def _call_llm(
     messages: list[dict],
     model: str,
@@ -342,6 +418,12 @@ async def _call_llm(
 # ---------------------------------------------------------------------------
 
 @router.post("", response_model=ChatResponse)
+@traceable(
+    name="SeoulWalk Text Chat",
+    run_type="chain",
+    process_inputs=sanitize_trace_payload,
+    process_outputs=sanitize_trace_payload,
+)
 async def chat(req: ChatRequest):
     """
     Process a user text message.
@@ -370,8 +452,11 @@ async def chat(req: ChatRequest):
     )
 
     # Spatial context
-    waypoint = _find_waypoint(req.waypoint_id, req.latitude, req.longitude)
-    gps_context = _build_context(waypoint)
+    waypoint, gps_context = await _resolve_waypoint_context(
+        req.waypoint_id,
+        req.latitude,
+        req.longitude,
+    )
     await _trace_chat_event(
         session_id,
         "chat_waypoint_context_resolved",
@@ -469,13 +554,20 @@ async def chat(req: ChatRequest):
     temporal_context = await _get_live_environment()
 
     # Build activity context (visited waypoints)
-    activity_context = await _build_activity_context(session_id)
+    activity_context = await _get_activity_context_for_trace(session_id)
+    itinerary_context = await _get_itinerary_context_for_trace(session_id)
+    await _trace_chat_event(
+        session_id,
+        "chat_itinerary_context_loaded",
+        {"included": bool(itinerary_context)},
+    )
 
     # Build system prompt — append context + activity + search/geocode results
     full_system = (
         _SYSTEM_PROMPT.format(temporal_context=temporal_context)
         + f"\n\nCURRENT CONTEXT:\n{gps_context}"
         + activity_context
+        + itinerary_context
         + f"{search_block}"
         + f"{geocode_block}"
     )
@@ -489,6 +581,7 @@ async def chat(req: ChatRequest):
 
     # Fetch map snapshot (for MAP_STATIC and MAP_GEOCODE intents, or whenever coords exist)
     map_snapshot_b64 = None
+    map_snapshot_artifact = None
     if lat is not None and lng is not None:
         await _trace_chat_event(
             session_id,
@@ -496,10 +589,26 @@ async def chat(req: ChatRequest):
             {"latitude": lat, "longitude": lng},
         )
         map_snapshot_b64 = await get_map_snapshot(lat, lng)
+        if map_snapshot_b64:
+            map_snapshot_artifact = save_base64_image_artifact(
+                image_base64=map_snapshot_b64,
+                session_id=session_id,
+                label="map-snapshot",
+                mime_type="image/png",
+                metadata={
+                    "source": "naver_static_map",
+                    "latitude": lat,
+                    "longitude": lng,
+                    "waypoint_id": waypoint["id"] if waypoint else None,
+                },
+            )
         await _trace_chat_event(
             session_id,
             "chat_map_snapshot_completed",
-            {"included": map_snapshot_b64 is not None},
+            {
+                "included": map_snapshot_b64 is not None,
+                "artifact": map_snapshot_artifact,
+            },
         )
 
     # Build user message content (multimodal if map snapshot exists)
@@ -574,10 +683,12 @@ async def chat(req: ChatRequest):
         "should_search": intent == "WEB_SEARCH",
         "gps_context": gps_context,
         "activity_context": activity_context,
+        "itinerary_context": itinerary_context,
         "search_block": (search_block + geocode_block).strip(),
         "full_prompt": full_system,
         "map_snapshot_included": map_snapshot_b64 is not None,
-        "messages_sent": messages,
+        "map_snapshot_artifact": map_snapshot_artifact,
+        "messages_sent": sanitize_trace_payload(messages),
     }
 
     return ChatResponse(
@@ -595,6 +706,12 @@ async def chat(req: ChatRequest):
 # ---------------------------------------------------------------------------
 
 @router.post("/vision", response_model=VisionChatResponse)
+@traceable(
+    name="SeoulWalk Vision Chat",
+    run_type="chain",
+    process_inputs=sanitize_trace_payload,
+    process_outputs=sanitize_trace_payload,
+)
 async def chat_vision(req: VisionChatRequest):
     """
     Process a user photo + optional text question.
@@ -610,8 +727,24 @@ async def chat_vision(req: VisionChatRequest):
         await create_session(session_id, location="Gwanghwamun")
 
     # Spatial context
-    waypoint = _find_waypoint(req.waypoint_id, req.latitude, req.longitude)
-    gps_context = _build_context(waypoint)
+    waypoint, gps_context = await _resolve_waypoint_context(
+        req.waypoint_id,
+        req.latitude,
+        req.longitude,
+    )
+
+    image_artifact = save_base64_image_artifact(
+        image_base64=req.image_base64,
+        session_id=session_id,
+        label="vision-upload",
+        mime_type=req.image_mime_type,
+        metadata={
+            "source": "user_vision_upload",
+            "latitude": req.latitude,
+            "longitude": req.longitude,
+            "waypoint_id": req.waypoint_id,
+        },
+    )
 
     # Build multimodal message — OpenRouter uses the OpenAI content array format
     data_url = f"data:{req.image_mime_type};base64,{req.image_base64}"
@@ -651,6 +784,7 @@ async def chat_vision(req: VisionChatRequest):
     debug_trace = {
         "gps_context": gps_context,
         "full_prompt": vision_system,
+        "image_artifact": image_artifact,
     }
 
     return VisionChatResponse(

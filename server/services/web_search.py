@@ -8,6 +8,7 @@ from server.config import (
     NVIDIA_BASE_URL,
     TAVILY_API_KEY,
 )
+from server.services.langsmith_tracing import traceable
 
 TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 
@@ -63,6 +64,7 @@ Current user message:
 """
 
 
+@traceable(name="Classify Chat Intent", run_type="llm")
 async def classify_intent(
     user_message: str,
     last_ai_message: str = "",
@@ -164,6 +166,7 @@ async def needs_web_search(
 # Tavily search
 # ---------------------------------------------------------------------------
 
+@traceable(name="Tavily Web Search", run_type="tool")
 async def tavily_search(query: str, max_results: int = 4) -> list[dict]:
     """
     Run a Tavily search and return a list of result dicts.
@@ -205,6 +208,7 @@ async def tavily_search(query: str, max_results: int = 4) -> list[dict]:
         return []
 
 
+@traceable(name="Search With Fallback", run_type="tool")
 async def search_with_fallback(query: str) -> list[dict]:
     """Run a Tavily web search for the given query."""
     return await tavily_search(query, max_results=4)

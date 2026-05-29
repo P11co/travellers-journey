@@ -13,10 +13,12 @@ from __future__ import annotations
 import httpx
 
 from server.config import NAVER_MAP_CLIENT_ID, NAVER_MAP_CLIENT_SECRET
+from server.services.langsmith_tracing import traceable
 
 GEOCODE_URL = "https://maps.apigw.ntruss.com/map-geocode/v2/geocode"
 
 
+@traceable(name="Naver Geocode Search", run_type="tool")
 async def geocode_search(
     query: str,
     center_lng: float | None = None,

@@ -6,6 +6,7 @@ Handles querying ChromaDB for knowledge base retrieval.
 from __future__ import annotations
 
 import os
+from server.services.langsmith_tracing import traceable
 
 # Optional imports because ChromaDB is heavy and we only initialize it when needed
 _chroma_client = None
@@ -34,6 +35,7 @@ def _get_collection():
     return _collection
 
 
+@traceable(name="Chroma RAG Search", run_type="retriever")
 def search_rag(query: str, top_k: int = 3) -> str:
     """
     Search ChromaDB for the most relevant knowledge base chunks.
