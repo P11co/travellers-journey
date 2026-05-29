@@ -204,6 +204,32 @@ class ActivitySummaryResponse(BaseModel):
     logs: list[dict]
 
 
+class TraceEventRequest(BaseModel):
+    """Request body for POST /activity/trace"""
+    session_id: str | None = Field(
+        None,
+        description="Session ID to attach the trace event to. If omitted, the server creates one.",
+    )
+    event_type: str = Field(
+        ...,
+        description="Stable event name, e.g. waypoint_context_attached.",
+    )
+    event_payload: dict = Field(
+        default_factory=dict,
+        description="Small JSON metadata payload. Do not include large blobs.",
+    )
+    source: str = Field(
+        "frontend",
+        description="Event producer, usually frontend or backend.",
+    )
+
+
+class TraceEventResponse(BaseModel):
+    """Response from POST /activity/trace"""
+    status: str = "logged"
+    session_id: str
+
+
 # ---------------------------------------------------------------------------
 # Session / Health
 # ---------------------------------------------------------------------------

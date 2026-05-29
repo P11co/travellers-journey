@@ -193,6 +193,19 @@ export function logActivity({ sessionId, lat, lng, timestamp }) {
   });
 }
 
+export function logTraceEvent({ sessionId, eventType, eventPayload = {}, source = 'frontend' }) {
+  return request('/activity/trace', {
+    method: 'POST',
+    timeoutMs: 8000,
+    body: {
+      session_id: sessionId || undefined,
+      event_type: eventType,
+      event_payload: eventPayload,
+      source,
+    },
+  });
+}
+
 export function getActivitySummary(sessionId) {
   return request(`/activity/${encodeURIComponent(sessionId)}/summary`);
 }
@@ -208,5 +221,6 @@ export default {
   deleteItinerary,
   getNaverMapLink,
   logActivity,
+  logTraceEvent,
   getActivitySummary,
 };

@@ -24,8 +24,10 @@ export default function AIChatInterface({ navigation }) {
   const scrollViewRef = useRef(null);
   const isNearBottomRef = useRef(true);
   const chatMessages = useAppStore((s) => s.chatMessages);
+  const chatWaypointContext = useAppStore((s) => s.chatWaypointContext);
   const isChatLoading = useAppStore((s) => s.isChatLoading);
   const sendMessage = useAppStore((s) => s.sendMessage);
+  const clearChatWaypointContext = useAppStore((s) => s.clearChatWaypointContext);
 
   const scrollToBottom = (animated = true) => {
     scrollViewRef.current?.scrollToEnd({ animated });
@@ -86,6 +88,9 @@ export default function AIChatInterface({ navigation }) {
             <Text style={styles.msgTextUser}>{message.content}</Text>
             {message.attachmentType === 'image' && (
               <Text style={styles.userAttachmentText}>Photo attached</Text>
+            )}
+            {message.contextWaypoint && (
+              <Text style={styles.userAttachmentText}>Context: {message.contextWaypoint.name}</Text>
             )}
           </View>
           <Text style={styles.timestampSubtextRight}>YOU • {formatTimestamp(message.timestamp)}</Text>
@@ -217,42 +222,55 @@ export default function AIChatInterface({ navigation }) {
 
       {/* 6. BOTTOM CONTEXT INPUT FOOTER BAR */}
       <View style={styles.bottomDockInputBar}>
-        <View style={styles.inputFieldContainer}>
-          <TouchableOpacity style={styles.audioAttachButton}>
-            <Svg width="20" height="20" fill="none" stroke="#5c77ff" strokeWidth="2" viewBox="0 0 24 24">
-              <Path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-            </Svg>
-          </TouchableOpacity>
-          <TextInput
-            style={styles.textInputBox}
-            placeholder="Ask AI..."
-            placeholderTextColor="#4b5563"
-            editable={true}
-            value={inputText}
-            onChangeText={setInputText}
-            onSubmitEditing={handleSend}
-            returnKeyType="send"
-          />
+        {chatWaypointContext && (
+          <View style={styles.contextChip}>
+            <Text style={styles.contextChipText} numberOfLines={1}>
+              {chatWaypointContext.name} attached
+            </Text>
+            <TouchableOpacity style={styles.contextChipClose} onPress={clearChatWaypointContext}>
+              <Text style={styles.contextChipCloseText}>x</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <View style={styles.bottomInputRow}>
+          <View style={styles.inputFieldContainer}>
+            <TouchableOpacity style={styles.audioAttachButton}>
+              <Svg width="20" height="20" fill="none" stroke="#5c77ff" strokeWidth="2" viewBox="0 0 24 24">
+                <Path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+              </Svg>
+            </TouchableOpacity>
+            <TextInput
+              style={styles.textInputBox}
+              placeholder="Ask AI..."
+              placeholderTextColor="#4b5563"
+              editable={true}
+              value={inputText}
+              onChangeText={setInputText}
+              onSubmitEditing={handleSend}
+              returnKeyType="send"
+            />
+            <TouchableOpacity
+              style={[styles.sendActionButton, (!inputText.trim() || isChatLoading) && styles.sendActionButtonDisabled]}
+              onPress={handleSend}
+              disabled={!inputText.trim() || isChatLoading}
+            >
+              <Svg width="14" height="14" fill="none" stroke="#5c77ff" strokeWidth="2.5" viewBox="0 0 24 24">
+                <Path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+              </Svg>
+            </TouchableOpacity>
+          </View>
+
+          {/* Toggle Menu Toggle Launcher */}
           <TouchableOpacity
-            style={[styles.sendActionButton, (!inputText.trim() || isChatLoading) && styles.sendActionButtonDisabled]}
-            onPress={handleSend}
-            disabled={!inputText.trim() || isChatLoading}
+            style={styles.menuDockToggle}
+            onPress={() => setSidebarVisible(!sidebarVisible)}
           >
-            <Svg width="14" height="14" fill="none" stroke="#5c77ff" strokeWidth="2.5" viewBox="0 0 24 24">
-              <Path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+            <Svg width="20" height="20" fill="none" stroke="#ffffff" strokeWidth="2.5" viewBox="0 0 24 24">
+              <Path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
             </Svg>
           </TouchableOpacity>
         </View>
-
-        {/* Toggle Menu Toggle Launcher */}
-        <TouchableOpacity
-          style={styles.menuDockToggle}
-          onPress={() => setSidebarVisible(!sidebarVisible)}
-        >
-          <Svg width="20" height="20" fill="none" stroke="#ffffff" strokeWidth="2.5" viewBox="0 0 24 24">
-            <Path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-          </Svg>
-        </TouchableOpacity>
       </View>
     </View>
   );
@@ -281,7 +299,7 @@ const styles = StyleSheet.create({
   },
   chatContentPadding: {
     paddingTop: 130,
-    paddingBottom: 140,
+    paddingBottom: 170,
     paddingHorizontal: 16,
   },
   dateStamp: {
@@ -489,10 +507,46 @@ const styles = StyleSheet.create({
     borderColor: '#333333',
     padding: 16,
     paddingBottom: 24,
+    gap: 8,
+    zIndex: 50,
+  },
+  bottomInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    zIndex: 50,
+  },
+  contextChip: {
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(92, 119, 255, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(92, 119, 255, 0.42)',
+    borderRadius: 999,
+    paddingLeft: 10,
+    paddingRight: 4,
+    paddingVertical: 4,
+  },
+  contextChipText: {
+    color: '#c7d2fe',
+    fontSize: 11,
+    fontWeight: '800',
+    flexShrink: 1,
+  },
+  contextChipClose: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 4,
+  },
+  contextChipCloseText: {
+    color: '#c7d2fe',
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 16,
   },
   inputFieldContainer: {
     flex: 1,

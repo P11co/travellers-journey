@@ -6,6 +6,7 @@ import {
   deleteItinerary as deleteItineraryRequest,
   getNaverMapLink,
   logActivity as logActivityRequest,
+  logTraceEvent as logTraceEventRequest,
   sendChatMessage,
   sendVisionChat,
 } from './services/apiService';
@@ -259,6 +260,7 @@ const useAppStore = create((set, get) => ({
 
   // Chat
   chatMessages: [initialAssistantMessage],
+  chatWaypointContext: null,
   isChatLoading: false,
   chatError: null,
 
@@ -464,17 +466,81 @@ const useAppStore = create((set, get) => ({
       },
     }),
 
+  logTraceEvent: async (eventType, eventPayload = {}) => {
+    if (!eventType) return null;
+    const sessionId = get().sessionId || createLocalSessionId();
+    set({ sessionId });
+
+    try {
+      return await logTraceEventRequest({
+        sessionId,
+        eventType,
+        eventPayload: {
+          ...eventPayload,
+          client_timestamp: new Date().toISOString(),
+        },
+      });
+    } catch {
+      return null;
+    }
+  },
+
+  setChatWaypointContext: (waypoint) => {
+    const nextContext = waypoint
+      ? {
+          id: waypoint.id,
+          name: waypoint.name,
+          summary: waypoint.summary || waypoint.knowledgeSummary || '',
+          lat: waypoint.lat ?? waypoint.latitude ?? waypoint.coordinates?.latitude,
+          lng: waypoint.lng ?? waypoint.longitude ?? waypoint.coordinates?.longitude,
+          attachedAt: new Date().toISOString(),
+        }
+      : null;
+
+    set({
+      chatWaypointContext: nextContext,
+    });
+
+    if (nextContext) {
+      get().logTraceEvent('waypoint_context_attached', {
+        waypoint_id: nextContext.id,
+        waypoint_name: nextContext.name,
+        latitude: nextContext.lat,
+        longitude: nextContext.lng,
+      });
+    }
+  },
+
+  clearChatWaypointContext: () => {
+    const previous = get().chatWaypointContext;
+    set({ chatWaypointContext: null });
+    if (previous) {
+      get().logTraceEvent('waypoint_context_removed', {
+        waypoint_id: previous.id,
+        waypoint_name: previous.name,
+      });
+    }
+  },
+
   sendMessage: async (text, context = {}) => {
     const message = text.trim();
     if (!message) return null;
 
     const state = get();
+    const sessionId = context.sessionId || state.sessionId || createLocalSessionId();
+    if (!state.sessionId) set({ sessionId });
     const location = context.location || state.currentLocation || {};
+    const waypointContext = context.waypoint || state.chatWaypointContext || null;
+    const waypointLat = waypointContext?.lat ?? waypointContext?.latitude ?? waypointContext?.coordinates?.latitude;
+    const waypointLng = waypointContext?.lng ?? waypointContext?.longitude ?? waypointContext?.coordinates?.longitude;
     const userMessage = {
       id: createClientId('user'),
       role: 'user',
       content: message,
       timestamp: new Date().toISOString(),
+      contextWaypoint: waypointContext
+        ? { id: waypointContext.id, name: waypointContext.name }
+        : null,
     };
 
     set((current) => ({
@@ -483,13 +549,21 @@ const useAppStore = create((set, get) => ({
       chatError: null,
     }));
 
+    get().logTraceEvent('chat_message_submitted', {
+      message,
+      message_length: message.length,
+      waypoint_id: waypointContext?.id || location.waypointId || null,
+      waypoint_name: waypointContext?.name || null,
+      has_coordinates: Boolean((waypointLat ?? location.lat) && (waypointLng ?? location.lng)),
+    });
+
     try {
       const response = await sendChatMessage({
         message,
-        sessionId: context.sessionId || state.sessionId,
-        lat: context.lat ?? location.lat,
-        lng: context.lng ?? location.lng,
-        waypointId: context.waypointId || location.waypointId,
+        sessionId,
+        lat: context.lat ?? waypointLat ?? location.lat,
+        lng: context.lng ?? waypointLng ?? location.lng,
+        waypointId: context.waypointId || waypointContext?.id || location.waypointId,
       });
 
       let actionPayload = response.action_payload || null;
@@ -513,6 +587,14 @@ const useAppStore = create((set, get) => ({
         chatMessages: [...current.chatMessages, assistantMessage],
       }));
 
+      get().logTraceEvent('chat_message_response_received', {
+        response_waypoint_id: response.waypoint_id,
+        action: response.action,
+        web_search_used: response.web_search_used,
+        reply_length: response.reply?.length || 0,
+        backend_intent: response.debug_trace?.intent,
+      });
+
       return assistantMessage;
     } catch (error) {
       const errorMessage = {
@@ -526,6 +608,11 @@ const useAppStore = create((set, get) => ({
         chatError: error.message,
         chatMessages: [...current.chatMessages, errorMessage],
       }));
+      get().logTraceEvent('chat_message_failed', {
+        message,
+        error: error.message,
+        waypoint_id: waypointContext?.id || location.waypointId || null,
+      });
       return errorMessage;
     } finally {
       set({ isChatLoading: false });
@@ -536,12 +623,18 @@ const useAppStore = create((set, get) => ({
     const message = text.trim() || 'What is this?';
     const state = get();
     const location = context.location || state.currentLocation || {};
+    const waypointContext = context.waypoint || state.chatWaypointContext || null;
+    const waypointLat = waypointContext?.lat ?? waypointContext?.latitude ?? waypointContext?.coordinates?.latitude;
+    const waypointLng = waypointContext?.lng ?? waypointContext?.longitude ?? waypointContext?.coordinates?.longitude;
     const userMessage = {
       id: createClientId('user-vision'),
       role: 'user',
       content: message,
       timestamp: new Date().toISOString(),
       attachmentType: 'image',
+      contextWaypoint: waypointContext
+        ? { id: waypointContext.id, name: waypointContext.name }
+        : null,
     };
 
     set((current) => ({
@@ -555,9 +648,9 @@ const useAppStore = create((set, get) => ({
         imageBase64,
         message,
         sessionId: context.sessionId || state.sessionId,
-        lat: context.lat ?? location.lat,
-        lng: context.lng ?? location.lng,
-        waypointId: context.waypointId || location.waypointId,
+        lat: context.lat ?? waypointLat ?? location.lat,
+        lng: context.lng ?? waypointLng ?? location.lng,
+        waypointId: context.waypointId || waypointContext?.id || location.waypointId,
         imageMimeType: context.imageMimeType,
       });
 

@@ -10,6 +10,8 @@ from server.models import (
     ActivityLogRequest,
     ActivityLogResponse,
     ActivitySummaryResponse,
+    TraceEventRequest,
+    TraceEventResponse,
 )
 from server.database import (
     get_session,
@@ -17,11 +19,18 @@ from server.database import (
     save_activity_log,
     get_activity_logs,
     get_latest_activity_log,
+    save_trace_event,
+    get_trace_events,
 )
 from server.config import WAYPOINTS
 from server.services.map_snapshot import get_map_snapshot
 
 router = APIRouter(prefix="/activity", tags=["Activity"])
+
+
+async def _ensure_session(session_id: str) -> None:
+    if not await get_session(session_id):
+        await create_session(session_id, location="Gwanghwamun")
 
 
 def _find_nearest_waypoint(lat: float, lng: float) -> dict | None:
@@ -53,9 +62,7 @@ def _find_nearest_waypoint(lat: float, lng: float) -> dict | None:
 @router.post("/log", response_model=ActivityLogResponse)
 async def log_activity(req: ActivityLogRequest):
     """Record a GPS ping from the frontend (called every ~5 min or on waypoint change)."""
-    # Ensure session exists
-    if not await get_session(req.session_id):
-        await create_session(req.session_id, location="Gwanghwamun")
+    await _ensure_session(req.session_id)
 
     # Match to nearest waypoint
     wp = _find_nearest_waypoint(req.latitude, req.longitude)
@@ -86,6 +93,20 @@ async def log_activity(req: ActivityLogRequest):
         matched_waypoint_id=wp["id"] if wp else None,
         matched_waypoint_name=wp["name"] if wp else None,
     )
+
+
+@router.post("/trace", response_model=TraceEventResponse)
+async def log_trace_event(req: TraceEventRequest):
+    """Append a user-study behavior/system event without feeding it into LLM context."""
+    session_id = req.session_id or str(uuid.uuid4())
+    await _ensure_session(session_id)
+    await save_trace_event(
+        session_id=session_id,
+        event_type=req.event_type,
+        event_payload=req.event_payload,
+        source=req.source,
+    )
+    return TraceEventResponse(session_id=session_id)
 
 
 @router.get("/{session_id}/summary", response_model=ActivitySummaryResponse)
@@ -147,3 +168,14 @@ async def get_activity_summary(session_id: str):
         summary_text=summary_text,
         logs=logs,
     )
+
+
+@router.get("/{session_id}/trace")
+async def get_trace_summary(session_id: str, limit: int = 500):
+    """Return raw behavior trace events for a session."""
+    events = await get_trace_events(session_id, limit=limit)
+    return {
+        "session_id": session_id,
+        "total_events": len(events),
+        "events": events,
+    }

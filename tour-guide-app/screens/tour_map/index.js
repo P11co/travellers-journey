@@ -90,10 +90,18 @@ export default function TourMapScreen({ navigation }) {
     navigation.navigate('ConfirmItinerary', activeTourId ? { itineraryId: activeTourId } : undefined);
   };
 
+  const handleAskWaypoint = () => {
+    setChatSheetMode((mode) => (mode === 'full' ? 'full' : 'half'));
+  };
+
   return (
     <View style={styles.container}>
       {/* Full-screen map */}
-      <ARMapNavigationView navigation={navigation} showBottomNav={false} />
+      <ARMapNavigationView
+        navigation={navigation}
+        showBottomNav={false}
+        onAskWaypoint={handleAskWaypoint}
+      />
 
       {/* Chat Overlay (absolute positioned, bottom sheet) */}
       <BuddyAIChatOverlay

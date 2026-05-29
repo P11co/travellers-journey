@@ -50,6 +50,7 @@ from server.database import (
     get_chat_history,
     save_chat_message,
     get_activity_logs,
+    save_trace_event,
 )
 from server.services.web_search import (
     needs_web_search,
@@ -247,6 +248,19 @@ async def _build_activity_context(session_id: str) -> str:
     )
 
 
+async def _trace_chat_event(session_id: str, event_type: str, payload: dict | None = None) -> None:
+    """Best-effort behavior trace logging; never block the chat flow."""
+    try:
+        await save_trace_event(
+            session_id=session_id,
+            event_type=event_type,
+            event_payload=payload or {},
+            source="backend",
+        )
+    except Exception as exc:
+        print(f"⚠️ Failed to save trace event {event_type}: {exc}")
+
+
 def _strip_thinking(text: str | None) -> str:
     """Remove <think>...</think> reasoning traces from model output (for TTS safety)."""
     if not text:
@@ -344,10 +358,30 @@ async def chat(req: ChatRequest):
     session_id = req.session_id or str(uuid.uuid4())
     if not await get_session(session_id):
         await create_session(session_id, location="Gwanghwamun")
+    await _trace_chat_event(
+        session_id,
+        "chat_request_received",
+        {
+            "message": req.message,
+            "message_length": len(req.message),
+            "waypoint_id": req.waypoint_id,
+            "has_coordinates": req.latitude is not None and req.longitude is not None,
+        },
+    )
 
     # Spatial context
     waypoint = _find_waypoint(req.waypoint_id, req.latitude, req.longitude)
     gps_context = _build_context(waypoint)
+    await _trace_chat_event(
+        session_id,
+        "chat_waypoint_context_resolved",
+        {
+            "requested_waypoint_id": req.waypoint_id,
+            "resolved_waypoint_id": waypoint["id"] if waypoint else None,
+            "resolved_waypoint_name": waypoint["name"] if waypoint else None,
+            "resolution": "explicit_waypoint_or_geofence" if waypoint else "none",
+        },
+    )
 
     # --- Conversation History ---
     history = await get_chat_history(session_id, limit=6)
@@ -365,9 +399,24 @@ async def chat(req: ChatRequest):
         model=model,
     )
     print(f"🧠 Intent classification: {intent}")
+    await _trace_chat_event(
+        session_id,
+        "chat_intent_classified",
+        {
+            "intent": intent,
+            "model": model,
+            "has_last_assistant_message": bool(last_ai_message),
+        },
+    )
 
     if intent == "WEB_SEARCH":
+        await _trace_chat_event(session_id, "chat_web_search_started", {"query": req.message})
         results = await search_with_fallback(req.message)
+        await _trace_chat_event(
+            session_id,
+            "chat_web_search_completed",
+            {"result_count": len(results or [])},
+        )
         if results:
             search_block = "\n\n" + format_search_results_for_prompt(results)
             search_used = True
@@ -378,20 +427,41 @@ async def chat(req: ChatRequest):
         if (lat is None or lng is None) and waypoint:
             lat = waypoint["coordinates"]["latitude"]
             lng = waypoint["coordinates"]["longitude"]
+        await _trace_chat_event(
+            session_id,
+            "chat_geocode_started",
+            {"query": req.message, "center_lat": lat, "center_lng": lng},
+        )
         geo_results = await geocode_search(
             query=req.message,
             center_lng=lng,
             center_lat=lat,
+        )
+        await _trace_chat_event(
+            session_id,
+            "chat_geocode_completed",
+            {"result_count": len(geo_results or [])},
         )
         if geo_results:
             geocode_block = "\n\n" + format_geocoding_for_prompt(geo_results, req.message)
     elif intent == "MAP_STATIC":
         # MAP_STATIC — no extra retrieval needed; the map snapshot image
         # will be attached to the user message payload below.
+        await _trace_chat_event(
+            session_id,
+            "chat_map_static_context_selected",
+            {"waypoint_id": waypoint["id"] if waypoint else None},
+        )
         pass
     else:
         # RAG — default fallback for palace/history knowledge
+        await _trace_chat_event(session_id, "chat_rag_search_started", {"query": req.message})
         rag_context = await asyncio.to_thread(search_rag, req.message)
+        await _trace_chat_event(
+            session_id,
+            "chat_rag_search_completed",
+            {"has_context": bool(rag_context)},
+        )
         if rag_context:
             search_block = f"\n\n{rag_context}"
 
@@ -420,7 +490,17 @@ async def chat(req: ChatRequest):
     # Fetch map snapshot (for MAP_STATIC and MAP_GEOCODE intents, or whenever coords exist)
     map_snapshot_b64 = None
     if lat is not None and lng is not None:
+        await _trace_chat_event(
+            session_id,
+            "chat_map_snapshot_started",
+            {"latitude": lat, "longitude": lng},
+        )
         map_snapshot_b64 = await get_map_snapshot(lat, lng)
+        await _trace_chat_event(
+            session_id,
+            "chat_map_snapshot_completed",
+            {"included": map_snapshot_b64 is not None},
+        )
 
     # Build user message content (multimodal if map snapshot exists)
     user_content = req.message
@@ -437,12 +517,37 @@ async def chat(req: ChatRequest):
     messages.extend(history)
     messages.append({"role": "user", "content": user_content})
 
-    reply = await _call_llm(
-        messages=messages,
-        model=model,
-        temperature=0.7,
-        provider=provider,
+    started_at = time.perf_counter()
+    await _trace_chat_event(
+        session_id,
+        "chat_llm_response_started",
+        {
+            "provider": provider,
+            "model": model,
+            "intent": intent,
+            "map_snapshot_included": map_snapshot_b64 is not None,
+        },
     )
+    try:
+        reply = await _call_llm(
+            messages=messages,
+            model=model,
+            temperature=0.7,
+            provider=provider,
+        )
+    except Exception as exc:
+        await _trace_chat_event(
+            session_id,
+            "chat_llm_response_failed",
+            {
+                "provider": provider,
+                "model": model,
+                "intent": intent,
+                "error_type": type(exc).__name__,
+                "duration_ms": round((time.perf_counter() - started_at) * 1000),
+            },
+        )
+        raise
 
     # Save to history
     await save_chat_message(session_id, "user", req.message)
@@ -450,6 +555,19 @@ async def chat(req: ChatRequest):
 
     # Detect Naver Map action
     action = "OPEN_NAVER_MAP" if "naver map" in reply.lower() else None
+    await _trace_chat_event(
+        session_id,
+        "chat_llm_response_completed",
+        {
+            "provider": provider,
+            "model": model,
+            "intent": intent,
+            "duration_ms": round((time.perf_counter() - started_at) * 1000),
+            "reply_length": len(reply),
+            "action": action,
+            "web_search_used": search_used,
+        },
+    )
 
     debug_trace = {
         "intent": intent,

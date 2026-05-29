@@ -47,8 +47,10 @@ export default function BuddyAIChatOverlay({
   const scrollViewRef = useRef(null);
   const isNearBottomRef = useRef(true);
   const chatMessages = useAppStore((s) => s.chatMessages);
+  const chatWaypointContext = useAppStore((s) => s.chatWaypointContext);
   const isChatLoading = useAppStore((s) => s.isChatLoading);
   const sendMessage = useAppStore((s) => s.sendMessage);
+  const clearChatWaypointContext = useAppStore((s) => s.clearChatWaypointContext);
 
   const halfH = Math.round(SCREEN_HEIGHT * 0.5);
 
@@ -142,6 +144,9 @@ export default function BuddyAIChatOverlay({
             <Text style={styles.userText}>{message.content}</Text>
             {message.attachmentType === 'image' && (
               <Text style={styles.userAttachmentText}>Photo attached</Text>
+            )}
+            {message.contextWaypoint && (
+              <Text style={styles.userAttachmentText}>Context: {message.contextWaypoint.name}</Text>
             )}
           </View>
         </View>
@@ -262,35 +267,47 @@ export default function BuddyAIChatOverlay({
 
             {/* Input bar */}
             <View style={[styles.inputBar, isFullScreen && { paddingBottom: insets.bottom + 10 }]}>
-              <View style={styles.inputInner}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ask Buddy AI..."
-                  placeholderTextColor="#6b7280"
-                  editable
-                  value={inputText}
-                  onChangeText={setInputText}
-                  onSubmitEditing={handleSend}
-                  returnKeyType="send"
-                />
+              {chatWaypointContext && (
+                <View style={styles.contextChip}>
+                  <Text style={styles.contextChipText} numberOfLines={1}>
+                    {chatWaypointContext.name} attached
+                  </Text>
+                  <TouchableOpacity style={styles.contextChipClose} onPress={clearChatWaypointContext}>
+                    <Text style={styles.contextChipCloseText}>x</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              <View style={styles.inputRow}>
+                <View style={styles.inputInner}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Ask Buddy AI..."
+                    placeholderTextColor="#6b7280"
+                    editable
+                    value={inputText}
+                    onChangeText={setInputText}
+                    onSubmitEditing={handleSend}
+                    returnKeyType="send"
+                  />
+                  <TouchableOpacity
+                    style={[styles.sendBtn, (!inputText.trim() || isChatLoading) && styles.sendBtnDisabled]}
+                    onPress={handleSend}
+                    disabled={!inputText.trim() || isChatLoading}
+                  >
+                    <Svg width="16" height="16" fill="none" stroke="#5c77ff" strokeWidth="2.5" viewBox="0 0 24 24">
+                      <Path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                    </Svg>
+                  </TouchableOpacity>
+                </View>
                 <TouchableOpacity
-                  style={[styles.sendBtn, (!inputText.trim() || isChatLoading) && styles.sendBtnDisabled]}
-                  onPress={handleSend}
-                  disabled={!inputText.trim() || isChatLoading}
+                  style={[styles.menuBtn, sidebarVisible && styles.menuBtnActive]}
+                  onPress={() => setSidebarVisible(!sidebarVisible)}
                 >
-                  <Svg width="16" height="16" fill="none" stroke="#5c77ff" strokeWidth="2.5" viewBox="0 0 24 24">
-                    <Path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                  <Svg width="20" height="20" fill="none" stroke="#fff" strokeWidth="2.5" viewBox="0 0 24 24">
+                    <Path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" />
                   </Svg>
                 </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                style={[styles.menuBtn, sidebarVisible && styles.menuBtnActive]}
-                onPress={() => setSidebarVisible(!sidebarVisible)}
-              >
-                <Svg width="20" height="20" fill="none" stroke="#fff" strokeWidth="2.5" viewBox="0 0 24 24">
-                  <Path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" />
-                </Svg>
-              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -477,14 +494,50 @@ const styles = StyleSheet.create({
   sideBtnActive: { backgroundColor: 'rgba(92,119,255,0.25)' },
   // Input
   inputBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+    gap: 8,
     backgroundColor: '#0d0d12',
     borderTopWidth: 1,
     borderColor: '#1f1f2e',
     paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  contextChip: {
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(92, 119, 255, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(92, 119, 255, 0.42)',
+    borderRadius: 999,
+    paddingLeft: 10,
+    paddingRight: 4,
+    paddingVertical: 4,
+  },
+  contextChipText: {
+    color: '#c7d2fe',
+    fontSize: 11,
+    fontWeight: '800',
+    flexShrink: 1,
+  },
+  contextChipClose: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 4,
+  },
+  contextChipCloseText: {
+    color: '#c7d2fe',
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 16,
   },
   inputInner: {
     flex: 1,

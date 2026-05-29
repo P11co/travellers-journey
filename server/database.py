@@ -9,6 +9,7 @@ Uses aiosqlite for non-blocking I/O.  Tables:
 from __future__ import annotations
 
 import aiosqlite
+import json
 import os
 import re
 from server.config import DATABASE_PATH
@@ -53,6 +54,15 @@ CREATE TABLE IF NOT EXISTS activity_logs (
     matched_waypoint_id TEXT,
     map_snapshot_b64     TEXT,
     timestamp           TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS trace_events (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id          TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    event_type          TEXT NOT NULL,
+    event_payload_json  TEXT NOT NULL DEFAULT '{}',
+    source              TEXT NOT NULL DEFAULT 'backend',
+    created_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
 """
 
@@ -351,6 +361,64 @@ async def get_latest_activity_log(session_id: str) -> dict | None:
             "map_snapshot_b64": row["map_snapshot_b64"],
             "timestamp": row["timestamp"],
         }
+    finally:
+        await db.close()
+
+
+# ---------------------------------------------------------------------------
+# Behavior Trace CRUD
+# ---------------------------------------------------------------------------
+async def save_trace_event(
+    session_id: str,
+    event_type: str,
+    event_payload: dict | None = None,
+    source: str = "backend",
+) -> None:
+    """Append one behavior/system trace event for later user-study analysis."""
+    db = await get_db()
+    try:
+        await db.execute(
+            """INSERT INTO trace_events
+               (session_id, event_type, event_payload_json, source)
+               VALUES (?, ?, ?, ?)""",
+            (
+                session_id,
+                event_type,
+                json.dumps(event_payload or {}, ensure_ascii=False),
+                source,
+            ),
+        )
+        await db.commit()
+    finally:
+        await db.close()
+
+
+async def get_trace_events(session_id: str, limit: int = 500) -> list[dict]:
+    """Retrieve trace events for a session, ordered chronologically."""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            """SELECT event_type, event_payload_json, source, created_at
+               FROM trace_events
+               WHERE session_id = ?
+               ORDER BY id ASC
+               LIMIT ?""",
+            (session_id, limit),
+        )
+        rows = await cursor.fetchall()
+        events = []
+        for row in rows:
+            try:
+                payload = json.loads(row["event_payload_json"] or "{}")
+            except json.JSONDecodeError:
+                payload = {}
+            events.append({
+                "event_type": row["event_type"],
+                "event_payload": payload,
+                "source": row["source"],
+                "created_at": row["created_at"],
+            })
+        return events
     finally:
         await db.close()
 
