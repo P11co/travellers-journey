@@ -1,9 +1,11 @@
 import { create } from 'zustand';
 import {
   AudioModule,
+  createAudioPlayer,
   RecordingPresets,
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
+  setIsAudioActiveAsync,
 } from 'expo-audio';
 import * as Speech from 'expo-speech';
 import {
@@ -17,9 +19,29 @@ import {
   sendChatMessage,
   sendChatMessageStream,
   sendVisionChat,
+  synthesizeSpeech,
   transcribeAudio,
 } from './services/apiService';
 import hotspotsData from './data/hotspots.json';
+
+let activeTtsPlayer = null;
+let activeTtsSubscription = null;
+
+const releaseActiveTtsPlayer = () => {
+  if (activeTtsSubscription) {
+    activeTtsSubscription.remove?.();
+    activeTtsSubscription = null;
+  }
+  if (activeTtsPlayer) {
+    try {
+      activeTtsPlayer.pause?.();
+      activeTtsPlayer.remove?.();
+    } catch {
+      // Audio player may already be released by the native layer.
+    }
+    activeTtsPlayer = null;
+  }
+};
 
 const LEGACY_ACTIVITY_HOTSPOTS = {
   mmca: 'MMCA Seoul',
@@ -336,6 +358,7 @@ const useAppStore = create((set, get) => ({
   themeMode: 'dark',
   hotspotSuggestionsEnabled: false,
   voiceModeEnabled: false,
+  voiceOutputProvider: 'deepgram',
   isRecording: false,
   isTranscribing: false,
   isSpeaking: false,
@@ -354,6 +377,14 @@ const useAppStore = create((set, get) => ({
     if (!voiceModeEnabled) {
       get().stopSpeaking();
     }
+  },
+  setVoiceOutputProvider: (voiceOutputProvider) => {
+    const normalized = voiceOutputProvider === 'system' ? 'system' : 'deepgram';
+    set({ voiceOutputProvider: normalized });
+    get().logTraceEvent('voice_output_provider_selected', { provider: normalized });
+  },
+  testVoiceOutput: async () => {
+    await get().speakAssistantReply('Voice mode is ready.');
   },
 
   resetStudySession: async () => {
@@ -649,21 +680,36 @@ const useAppStore = create((set, get) => ({
     }
   },
 
-  speakAssistantReply: async (text) => {
+  speakSystemAssistantReply: async (text, { fallbackFrom } = {}) => {
     const content = String(text || '').trim();
     if (!content) return;
 
     try {
       await Speech.stop();
+      releaseActiveTtsPlayer();
+      await setIsAudioActiveAsync(true);
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+        interruptionMode: 'doNotMix',
+      });
       set({ isSpeaking: true, voiceError: null });
-      get().logTraceEvent('voice_tts_started', { text_length: content.length });
+      get().logTraceEvent('voice_tts_started', {
+        provider: 'system',
+        fallback_from: fallbackFrom || null,
+        text_length: content.length,
+      });
       Speech.speak(content.replace(/[*_`~]/g, ''), {
         language: 'en-US',
         rate: 0.95,
         pitch: 1,
+        volume: 1,
+        onStart: () => {
+          get().logTraceEvent('voice_tts_native_started', { provider: 'system' });
+        },
         onDone: () => {
           set({ isSpeaking: false });
-          get().logTraceEvent('voice_tts_completed', { text_length: content.length });
+          get().logTraceEvent('voice_tts_completed', { provider: 'system', text_length: content.length });
         },
         onStopped: () => set({ isSpeaking: false }),
         onError: (error) => {
@@ -681,9 +727,114 @@ const useAppStore = create((set, get) => ({
     }
   },
 
+  speakDeepgramAssistantReply: async (text) => {
+    const content = String(text || '').trim();
+    if (!content) return;
+
+    try {
+      await Speech.stop();
+      releaseActiveTtsPlayer();
+      await setIsAudioActiveAsync(true);
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+        interruptionMode: 'doNotMix',
+      });
+
+      set({ isSpeaking: true, voiceError: null });
+      get().logTraceEvent('voice_tts_started', {
+        provider: 'deepgram',
+        text_length: content.length,
+      });
+
+      const response = await synthesizeSpeech({
+        text: content.replace(/[*_`~]/g, ''),
+        sessionId: get().sessionId,
+      });
+
+      activeTtsPlayer = createAudioPlayer(
+        { uri: response.audio_url },
+        { updateInterval: 250, keepAudioSessionActive: true },
+      );
+      activeTtsPlayer.volume = 1;
+      let didLogLoaded = false;
+      let didLogPlaying = false;
+      let didHandlePlaybackError = false;
+      activeTtsSubscription = activeTtsPlayer.addListener?.('playbackStatusUpdate', (status) => {
+        if (status?.error && !didHandlePlaybackError) {
+          didHandlePlaybackError = true;
+          const playbackError = typeof status.error === 'string'
+            ? status.error
+            : 'Deepgram audio playback failed.';
+          get().logTraceEvent('voice_tts_playback_failed', {
+            provider: 'deepgram',
+            model: response.model,
+            audio_url: response.audio_url,
+            error: playbackError,
+          });
+          releaseActiveTtsPlayer();
+          set({
+            isSpeaking: false,
+            voiceError: `${playbackError} Falling back to default voice.`,
+          });
+          get().speakSystemAssistantReply(content, { fallbackFrom: 'deepgram_playback' });
+          return;
+        }
+        if (status?.isLoaded && !didLogLoaded) {
+          didLogLoaded = true;
+          get().logTraceEvent('voice_tts_playback_loaded', {
+            provider: 'deepgram',
+            model: response.model,
+            duration: status.duration ?? null,
+          });
+        }
+        if (status?.playing && !didLogPlaying) {
+          didLogPlaying = true;
+          get().logTraceEvent('voice_tts_playback_started', {
+            provider: 'deepgram',
+            model: response.model,
+            current_time: status.currentTime ?? null,
+          });
+        }
+        if (status?.didJustFinish) {
+          releaseActiveTtsPlayer();
+          set({ isSpeaking: false });
+          get().logTraceEvent('voice_tts_completed', {
+            provider: 'deepgram',
+            model: response.model,
+            text_length: content.length,
+          });
+        }
+      });
+      activeTtsPlayer.play();
+      get().logTraceEvent('voice_tts_native_started', {
+        provider: 'deepgram',
+        model: response.model,
+        audio_url: response.audio_url,
+      });
+    } catch (error) {
+      get().logTraceEvent('voice_tts_failed', {
+        provider: 'deepgram',
+        error: error.message || 'Deepgram text-to-speech failed.',
+      });
+      set({
+        voiceError: `${error.message || 'Deepgram text-to-speech failed.'} Falling back to default voice.`,
+      });
+      await get().speakSystemAssistantReply(content, { fallbackFrom: 'deepgram' });
+    }
+  },
+
+  speakAssistantReply: async (text) => {
+    if (get().voiceOutputProvider === 'system') {
+      return get().speakSystemAssistantReply(text);
+    }
+    return get().speakDeepgramAssistantReply(text);
+  },
+
   stopSpeaking: async () => {
     try {
       await Speech.stop();
+      releaseActiveTtsPlayer();
     } finally {
       set({ isSpeaking: false });
     }

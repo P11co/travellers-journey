@@ -25,6 +25,11 @@ export default function SettingsConfigurationView({ navigation }) {
   const setHotspotSuggestionsEnabled = useAppStore((s) => s.setHotspotSuggestionsEnabled);
   const voiceModeEnabled = useAppStore((s) => s.voiceModeEnabled);
   const setVoiceModeEnabled = useAppStore((s) => s.setVoiceModeEnabled);
+  const voiceOutputProvider = useAppStore((s) => s.voiceOutputProvider);
+  const setVoiceOutputProvider = useAppStore((s) => s.setVoiceOutputProvider);
+  const testVoiceOutput = useAppStore((s) => s.testVoiceOutput);
+  const isSpeaking = useAppStore((s) => s.isSpeaking);
+  const voiceError = useAppStore((s) => s.voiceError);
   const resetStudySession = useAppStore((s) => s.resetStudySession);
   const theme = getTheme(themeMode);
 
@@ -145,6 +150,72 @@ export default function SettingsConfigurationView({ navigation }) {
                 trackColor={{ false: '#3f3f46', true: '#5c77ff' }}
                 thumbColor="#ffffff"
               />
+            </View>
+            <View style={styles.voiceProviderBlock}>
+              <Text style={[styles.subsectionLabel, { color: theme.mutedText }]}>Voice Output</Text>
+              <View style={styles.radioBlockClusterStack}>
+                <TouchableOpacity
+                  style={[
+                    styles.radioSelectionCardBase,
+                    voiceOutputProvider === 'deepgram' ? styles.radioCardActive : styles.radioCardMuted,
+                    {
+                      backgroundColor: voiceOutputProvider === 'deepgram' ? theme.accentSoft : theme.background,
+                      borderColor: voiceOutputProvider === 'deepgram' ? theme.accent : theme.border,
+                    },
+                  ]}
+                  onPress={() => setVoiceOutputProvider('deepgram')}
+                  activeOpacity={0.82}
+                >
+                  <View style={styles.radioSplitFlexRow}>
+                    <View style={styles.radioCardTextCoreArea}>
+                      <Text style={[styles.radioCardTitleMain, { color: theme.text }]}>Deepgram Aura</Text>
+                      <Text style={[styles.radioCardDescriptionLabel, { color: theme.mutedText }]}>Neural server voice. Falls back to the default device voice if unavailable.</Text>
+                    </View>
+                    {voiceOutputProvider === 'deepgram' && (
+                      <Svg width="20" height="20" fill={theme.accent} viewBox="0 0 20 20">
+                        <Path fillRule="evenodd" clipRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.7-9.7a1 1 0 00-1.4-1.4L9 10.17 7.7 8.88a1 1 0 10-1.4 1.42l2 2a1 1 0 001.4 0l4-4z" />
+                      </Svg>
+                    )}
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.radioSelectionCardBase,
+                    voiceOutputProvider === 'system' ? styles.radioCardActive : styles.radioCardMuted,
+                    {
+                      backgroundColor: voiceOutputProvider === 'system' ? theme.accentSoft : theme.background,
+                      borderColor: voiceOutputProvider === 'system' ? theme.accent : theme.border,
+                    },
+                  ]}
+                  onPress={() => setVoiceOutputProvider('system')}
+                  activeOpacity={0.82}
+                >
+                  <View style={styles.radioSplitFlexRow}>
+                    <View style={styles.radioCardTextCoreArea}>
+                      <Text style={[styles.radioCardTitleMain, { color: theme.text }]}>Default Device Voice</Text>
+                      <Text style={[styles.radioCardDescriptionLabel, { color: theme.mutedText }]}>Built-in iOS or Android speech. More robotic, but works without the TTS API.</Text>
+                    </View>
+                    {voiceOutputProvider === 'system' && (
+                      <Svg width="20" height="20" fill={theme.accent} viewBox="0 0 20 20">
+                        <Path fillRule="evenodd" clipRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.7-9.7a1 1 0 00-1.4-1.4L9 10.17 7.7 8.88a1 1 0 10-1.4 1.42l2 2a1 1 0 001.4 0l4-4z" />
+                      </Svg>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              </View>
+              {voiceError && (
+                <Text style={[styles.voiceErrorText, { color: theme.danger }]}>{voiceError}</Text>
+              )}
+              <TouchableOpacity
+                style={[styles.testVoiceButton, { borderColor: theme.accent, backgroundColor: themeMode === 'light' ? '#eef2ff' : 'rgba(92, 119, 255, 0.12)' }]}
+                onPress={testVoiceOutput}
+                disabled={isSpeaking}
+                activeOpacity={0.82}
+              >
+                <Text style={[styles.testVoiceButtonText, { color: theme.accent }]}>
+                  {isSpeaking ? 'Playing Voice...' : 'Test Voice Output'}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -450,6 +521,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#a1a1aa',
     lineHeight: 20,
+  },
+  voiceProviderBlock: {
+    gap: 12,
+  },
+  voiceErrorText: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  testVoiceButton: {
+    minHeight: 44,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  testVoiceButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   activeCheckBadgeAnchor: {
     marginTop: 2,

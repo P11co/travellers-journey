@@ -68,3 +68,47 @@ async def test_voice_transcribe_missing_audio_returns_422(client):
     """Missing audio file returns 422."""
     resp = await client.post("/voice/transcribe", data={"session_id": "missing-audio"})
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_voice_synthesize_deepgram_success(client, tmp_path, monkeypatch):
+    """Voice synthesis returns a playable audio artifact URL."""
+    monkeypatch.setattr("server.routers.voice._VOICE_ARTIFACT_DIR", str(tmp_path))
+
+    with patch("server.routers.voice._synthesize_with_deepgram", new_callable=AsyncMock) as mock_synthesize:
+        mock_synthesize.return_value = b"fake-mp3-bytes"
+
+        resp = await client.post(
+            "/voice/synthesize",
+            json={
+                "text": "Voice mode is ready.",
+                "session_id": "voice-session-tts",
+            },
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["provider"] == "deepgram"
+    assert data["session_id"] == "voice-session-tts"
+    assert data["model"]
+    assert data["audio_url"].startswith("/voice/audio/voice-session-tts/")
+    assert data["mime_type"] == "audio/mpeg"
+
+    audio_resp = await client.get(data["audio_url"])
+    assert audio_resp.status_code == 200
+    assert audio_resp.content == b"fake-mp3-bytes"
+
+
+@pytest.mark.asyncio
+async def test_voice_synthesize_deepgram_failure_returns_502(client):
+    """Frontend can fall back to system TTS when Deepgram synthesis fails."""
+    with patch("server.routers.voice._synthesize_with_deepgram", new_callable=AsyncMock) as mock_synthesize:
+        mock_synthesize.side_effect = RuntimeError("Deepgram unavailable")
+
+        resp = await client.post(
+            "/voice/synthesize",
+            json={"text": "Please speak this."},
+        )
+
+    assert resp.status_code == 502
+    assert "Voice synthesis failed" in resp.json()["detail"]

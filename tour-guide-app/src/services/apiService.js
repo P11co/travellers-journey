@@ -16,6 +16,12 @@ export class ApiError extends Error {
 
 const buildUrl = (path) => `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
 
+export const buildApiUrl = (pathOrUrl) => {
+  if (!pathOrUrl) return pathOrUrl;
+  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+  return buildUrl(pathOrUrl);
+};
+
 const normalizeErrorMessage = (payload, fallback) => {
   if (!payload) return fallback;
   if (typeof payload.detail === 'string') return payload.detail;
@@ -266,6 +272,27 @@ export async function transcribeAudio({
     }
     throw new ApiError(error.message || 'Unable to transcribe voice recording.');
   }
+}
+
+export async function synthesizeSpeech({
+  text,
+  sessionId,
+  model,
+}) {
+  const payload = await request('/voice/synthesize', {
+    method: 'POST',
+    timeoutMs: 60000,
+    body: {
+      text,
+      session_id: sessionId || undefined,
+      model: model || undefined,
+    },
+  });
+
+  return {
+    ...payload,
+    audio_url: buildApiUrl(payload?.audio_url),
+  };
 }
 
 export function generateItinerary({

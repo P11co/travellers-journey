@@ -162,6 +162,34 @@ class VoiceTranscribeResponse(BaseModel):
     duration_ms: int
 
 
+class VoiceSynthesizeRequest(BaseModel):
+    """Request body for POST /voice/synthesize"""
+    text: str = Field(
+        ...,
+        min_length=1,
+        max_length=2400,
+        description="Assistant text to synthesize into speech.",
+    )
+    session_id: str | None = Field(
+        None,
+        description="Existing session ID to attach synthesis trace events to.",
+    )
+    model: str | None = Field(
+        None,
+        description="Optional Deepgram Aura model override.",
+    )
+
+
+class VoiceSynthesizeResponse(BaseModel):
+    """Response from POST /voice/synthesize"""
+    provider: str
+    model: str
+    session_id: str
+    audio_url: str
+    mime_type: str = "audio/mpeg"
+    duration_ms: int
+
+
 # ---------------------------------------------------------------------------
 # Handoff (Naver Maps)
 # ---------------------------------------------------------------------------

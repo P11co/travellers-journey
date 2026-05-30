@@ -35,6 +35,7 @@ DEEPGRAM_API_KEY: str = (
     or os.getenv("DEEPGRAM_API_KEY")
     or ""
 )
+DEEPGRAM_TTS_MODEL_ID: str = os.getenv("DEEPGRAM_TTS_MODEL_ID") or "aura-2-thalia-en"
 
 TAVILY_API_KEY: str = os.getenv("TAVILY_API_KEY") or ""
 NVIDIA_API_KEY: str = os.getenv("NVIDIA_API_KEY") or ""
