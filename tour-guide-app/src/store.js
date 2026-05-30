@@ -42,6 +42,52 @@ const DEFAULT_NAVER_TARGET = {
   lng: 126.977,
 };
 
+const NAVER_APP_NAME = 'com.seoulwalk.tourguide';
+
+const AMENITY_SEARCH_TERMS = [
+  {
+    triggers: ['bathroom', 'bathrooms', 'restroom', 'restrooms', 'toilet', 'toilets', 'washroom', 'wc'],
+    query: 'bathroom',
+  },
+  {
+    triggers: ['pharmacy', 'pharmacies', 'drugstore', 'medicine'],
+    query: 'pharmacy',
+  },
+  {
+    triggers: ['convenience store', 'convenience stores', '7-eleven', 'cu store', 'gs25'],
+    query: 'convenience store',
+  },
+  {
+    triggers: ['cafe', 'cafes', 'coffee', 'coffee shop'],
+    query: 'cafe',
+  },
+];
+
+const detectAmenitySearchQuery = (message) => {
+  const normalized = String(message || '').toLowerCase();
+  return AMENITY_SEARCH_TERMS.find(({ triggers }) => (
+    triggers.some((trigger) => normalized.includes(trigger))
+  ))?.query || null;
+};
+
+const buildAmenityNaverPayload = ({ message, lat, lng }) => {
+  const query = detectAmenitySearchQuery(message);
+  if (!query) return null;
+
+  const encodedQuery = encodeURIComponent(query);
+  return {
+    place_name: query,
+    query,
+    latitude: lat ?? null,
+    longitude: lng ?? null,
+    handoff_type: 'search',
+    naver_app_url: `nmap://search?query=${encodedQuery}&appname=${NAVER_APP_NAME}`,
+    naver_web_url: lat != null && lng != null
+      ? `https://map.naver.com/v5/search/${encodedQuery}/@${lng},${lat},17z`
+      : `https://map.naver.com/v5/search/${encodedQuery}`,
+  };
+};
+
 const createLocalSessionId = () =>
   `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
@@ -779,9 +825,15 @@ const useAppStore = create((set, get) => ({
         },
       });
 
+      const actionLat = context.lat ?? waypointLat ?? location.lat;
+      const actionLng = context.lng ?? waypointLng ?? location.lng;
       let actionPayload = response.action_payload || null;
       if (response.action === 'OPEN_NAVER_MAP' && !actionPayload) {
-        actionPayload = await get().buildNaverActionPayload();
+        actionPayload = buildAmenityNaverPayload({
+          message,
+          lat: actionLat,
+          lng: actionLng,
+        }) || await get().buildNaverActionPayload();
       }
 
       const assistantMessage = {
@@ -838,9 +890,15 @@ const useAppStore = create((set, get) => ({
           waypointId: context.waypointId || waypointContext?.id || location.waypointId,
         });
 
+        const actionLat = context.lat ?? waypointLat ?? location.lat;
+        const actionLng = context.lng ?? waypointLng ?? location.lng;
         let actionPayload = response.action_payload || null;
         if (response.action === 'OPEN_NAVER_MAP' && !actionPayload) {
-          actionPayload = await get().buildNaverActionPayload();
+          actionPayload = buildAmenityNaverPayload({
+            message,
+            lat: actionLat,
+            lng: actionLng,
+          }) || await get().buildNaverActionPayload();
         }
 
         const assistantMessage = {
