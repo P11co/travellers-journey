@@ -97,6 +97,11 @@ const AMENITY_SEARCH_TERMS = [
     query: 'cafe',
     naverQuery: '카페',
   },
+  {
+    triggers: ['subway', 'subways', 'metro', 'station', 'stations', 'train', 'trains', 'transit'],
+    query: 'subway station',
+    naverQuery: '지하철역',
+  },
 ];
 
 const detectAmenitySearch = (message) => {

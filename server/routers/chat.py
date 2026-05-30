@@ -546,6 +546,11 @@ _AMENITY_SEARCH_TERMS = [
         "cafe",
         "카페",
     ),
+    (
+        ("subway", "subways", "metro", "station", "stations", "train", "trains", "transit"),
+        "subway station",
+        "지하철역",
+    ),
 ]
 
 

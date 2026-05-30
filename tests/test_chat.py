@@ -210,6 +210,34 @@ async def test_chat_amenity_request_returns_naver_search_payload(client):
     mock_geocode.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+async def test_chat_subway_request_returns_naver_search_payload(client):
+    """Transit requests use a nearby subway search handoff instead of the default palace target."""
+    with patch("server.routers.chat.classify_intent", new=AsyncMock(return_value="MAP_GEOCODE")), \
+         patch("server.routers.chat.geocode_search", new=AsyncMock()) as mock_geocode, \
+         patch("server.routers.chat.get_map_snapshot", new=AsyncMock(return_value=None)), \
+         patch("server.routers.chat._get_live_environment", new=AsyncMock(return_value="Current Time: test")), \
+         patch("server.routers.chat._call_llm", new=AsyncMock(return_value=(
+             "I can open Naver Map to find the nearest subway station."
+         ))):
+        resp = await client.post("/chat", json={
+            "message": "Which direction is to the subway? I want to go home.",
+            "latitude": 37.57865,
+            "longitude": 126.97711,
+            "waypoint_id": "geunjeongjeon",
+        })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["action"] == "OPEN_NAVER_MAP"
+    assert data["action_payload"]["handoff_type"] == "search"
+    assert data["action_payload"]["query"] == "subway station"
+    assert data["action_payload"]["naver_query"] == "지하철역"
+    assert data["action_payload"]["naver_app_url"].startswith("nmap://search")
+    assert f"/search/{quote('지하철역', safe='')}/" in data["action_payload"]["naver_web_url"]
+    mock_geocode.assert_not_awaited()
+
+
 # ---------------------------------------------------------------------------
 # POST /chat — reuses existing session
 # ---------------------------------------------------------------------------
