@@ -334,6 +334,7 @@ const useAppStore = create((set, get) => ({
 
   // Voice + appearance
   themeMode: 'dark',
+  hotspotSuggestionsEnabled: false,
   voiceModeEnabled: false,
   isRecording: false,
   isTranscribing: false,
@@ -343,6 +344,10 @@ const useAppStore = create((set, get) => ({
   voiceRecording: null,
 
   setThemeMode: (themeMode) => set({ themeMode }),
+  setHotspotSuggestionsEnabled: (hotspotSuggestionsEnabled) => {
+    set({ hotspotSuggestionsEnabled });
+    get().logTraceEvent('hotspot_suggestions_toggled', { enabled: hotspotSuggestionsEnabled });
+  },
   setVoiceModeEnabled: (voiceModeEnabled) => {
     set({ voiceModeEnabled });
     get().logTraceEvent('voice_mode_toggled', { enabled: voiceModeEnabled });

@@ -17,11 +17,12 @@ import { getTheme } from '../../src/theme';
 
 export default function SettingsConfigurationView({ navigation }) {
   const insets = useSafeAreaInsets();
-  const [hotspotSuggestions, setHotspotSuggestions] = useState(false);
   const [serverStatus, setServerStatus] = useState('checking');
   const [unavailableExpanded, setUnavailableExpanded] = useState(false);
   const themeMode = useAppStore((s) => s.themeMode);
   const setThemeMode = useAppStore((s) => s.setThemeMode);
+  const hotspotSuggestionsEnabled = useAppStore((s) => s.hotspotSuggestionsEnabled);
+  const setHotspotSuggestionsEnabled = useAppStore((s) => s.setHotspotSuggestionsEnabled);
   const voiceModeEnabled = useAppStore((s) => s.voiceModeEnabled);
   const setVoiceModeEnabled = useAppStore((s) => s.setVoiceModeEnabled);
   const resetStudySession = useAppStore((s) => s.resetStudySession);
@@ -115,8 +116,8 @@ export default function SettingsConfigurationView({ navigation }) {
                 <Text style={[styles.toggleRowSubtitleCaption, { color: theme.mutedText }]}>Receive real-time intelligence on high-activity areas.</Text>
               </View>
               <Switch
-                value={hotspotSuggestions}
-                onValueChange={(val) => setHotspotSuggestions(val)}
+                value={hotspotSuggestionsEnabled}
+                onValueChange={setHotspotSuggestionsEnabled}
                 trackColor={{ false: '#3f3f46', true: '#5c77ff' }}
                 thumbColor="#ffffff"
               />

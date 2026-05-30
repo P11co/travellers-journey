@@ -221,6 +221,7 @@ export default function ARMapNavigationView({ navigation, showBottomNav = true, 
   const [entryWaypoint, setEntryWaypoint] = useState(null);
   const lastActiveWaypointIdRef = useRef(null);
   const currentLocation = useAppStore((s) => s.currentLocation);
+  const hotspotSuggestionsEnabled = useAppStore((s) => s.hotspotSuggestionsEnabled);
   const setChatWaypointContext = useAppStore((s) => s.setChatWaypointContext);
   const logTraceEvent = useAppStore((s) => s.logTraceEvent);
   const themeMode = useAppStore((s) => s.themeMode);
@@ -273,17 +274,28 @@ export default function ARMapNavigationView({ navigation, showBottomNav = true, 
     const previousId = lastActiveWaypointIdRef.current;
 
     if (nextId && nextId !== previousId) {
-      setEntryWaypoint(activeWaypoint);
       logTraceEvent('waypoint_radius_entered', {
         waypoint_id: activeWaypoint.id,
         waypoint_name: activeWaypoint.name,
         latitude: activeWaypoint.coordinates?.latitude,
         longitude: activeWaypoint.coordinates?.longitude,
+        suggestions_enabled: hotspotSuggestionsEnabled,
       });
     }
 
+    if (!hotspotSuggestionsEnabled) {
+      setSelectedWaypoint(null);
+      setEntryWaypoint(null);
+      lastActiveWaypointIdRef.current = nextId;
+      return;
+    }
+
+    if (nextId && nextId !== previousId) {
+      setEntryWaypoint(activeWaypoint);
+    }
+
     lastActiveWaypointIdRef.current = nextId;
-  }, [activeWaypoint?.id]);
+  }, [activeWaypoint?.id, hotspotSuggestionsEnabled]);
 
   const handleMapReady = () => {
     setIsMapReady(true);
@@ -302,6 +314,8 @@ export default function ARMapNavigationView({ navigation, showBottomNav = true, 
   };
 
   const handleMapMessage = (event) => {
+    if (!hotspotSuggestionsEnabled) return;
+
     try {
       const payload = JSON.parse(event?.nativeEvent?.data || '{}');
       if (payload.type !== 'WAYPOINT_SELECTED' || !payload.waypoint?.id) return;
@@ -377,42 +391,44 @@ export default function ARMapNavigationView({ navigation, showBottomNav = true, 
         </View>
       )}
 
-      <View style={[styles.topNotificationContainer, { top: notificationTop }]}>
-        <View style={[styles.notificationPanel, { backgroundColor: theme.panel, borderColor: theme.border, shadowColor: theme.shadow }]}>
-          <Image
-            source={getWaypointImage(displayWaypoint?.id)}
-            style={[styles.notificationThumbnail, { backgroundColor: theme.iconSurface, borderColor: theme.accent }]}
-            resizeMode="cover"
-          />
-          <View style={styles.textContainer}>
-            <Text style={[styles.notificationTitle, { color: theme.text }]}>
-              {displayWaypoint ? displayWaypoint.name : 'Palace map ready'}
-            </Text>
-            <Text style={[styles.notificationSubtitle, { color: theme.mutedText }]} numberOfLines={isInspectingWaypoint ? 2 : 1}>
-              {displayWaypoint ? (displayWaypoint.summary || displayWaypoint.knowledgeSummary) : 'Move around to detect nearby waypoints.'}
-            </Text>
-            {(isInspectingWaypoint || isEntryPrompt) && (
-              <View style={styles.waypointActionRow}>
-                <TouchableOpacity style={[styles.askBuddyButton, { backgroundColor: theme.accent }]} onPress={handleReadStory}>
-                  <Text style={styles.askBuddyButtonText}>Read Story</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.askBuddyButton, { backgroundColor: theme.accent }]} onPress={handleAskBuddyAboutWaypoint}>
-                  <Text style={styles.askBuddyButtonText}>Ask Buddy about this</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.dismissWaypointButton}
-                  onPress={() => {
-                    setSelectedWaypoint(null);
-                    setEntryWaypoint(null);
-                  }}
-                >
-                  <Text style={[styles.dismissWaypointText, { color: theme.mutedText }]}>Cancel</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+      {hotspotSuggestionsEnabled && (
+        <View style={[styles.topNotificationContainer, { top: notificationTop }]}>
+          <View style={[styles.notificationPanel, { backgroundColor: theme.panel, borderColor: theme.border, shadowColor: theme.shadow }]}>
+            <Image
+              source={getWaypointImage(displayWaypoint?.id)}
+              style={[styles.notificationThumbnail, { backgroundColor: theme.iconSurface, borderColor: theme.accent }]}
+              resizeMode="cover"
+            />
+            <View style={styles.textContainer}>
+              <Text style={[styles.notificationTitle, { color: theme.text }]}>
+                {displayWaypoint ? displayWaypoint.name : 'Palace map ready'}
+              </Text>
+              <Text style={[styles.notificationSubtitle, { color: theme.mutedText }]} numberOfLines={isInspectingWaypoint ? 2 : 1}>
+                {displayWaypoint ? (displayWaypoint.summary || displayWaypoint.knowledgeSummary) : 'Move around to detect nearby waypoints.'}
+              </Text>
+              {(isInspectingWaypoint || isEntryPrompt) && (
+                <View style={styles.waypointActionRow}>
+                  <TouchableOpacity style={[styles.askBuddyButton, { backgroundColor: theme.accent }]} onPress={handleReadStory}>
+                    <Text style={styles.askBuddyButtonText}>Read Story</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.askBuddyButton, { backgroundColor: theme.accent }]} onPress={handleAskBuddyAboutWaypoint}>
+                    <Text style={styles.askBuddyButtonText}>Ask Buddy about this</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.dismissWaypointButton}
+                    onPress={() => {
+                      setSelectedWaypoint(null);
+                      setEntryWaypoint(null);
+                    }}
+                  >
+                    <Text style={[styles.dismissWaypointText, { color: theme.mutedText }]}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
           </View>
         </View>
-      </View>
+      )}
 
       {showBottomNav && (
         <TrioDock navigation={navigation} activeKey="chat" bottomOffset={32} />
