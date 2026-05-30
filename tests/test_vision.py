@@ -37,6 +37,12 @@ _TINY_JPEG_B64 = (
 )
 
 
+@pytest.fixture(autouse=True)
+def _vision_api_key(monkeypatch):
+    """Vision tests mock the HTTP client, so only a sentinel key is needed."""
+    monkeypatch.setattr("server.routers.chat.OPENROUTER_API_KEY", "test-openrouter-key")
+
+
 # ---------------------------------------------------------------------------
 # POST /chat/vision — basic
 # ---------------------------------------------------------------------------

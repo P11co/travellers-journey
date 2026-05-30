@@ -12,6 +12,8 @@ Tests:
 import pytest
 from unittest.mock import patch, AsyncMock
 import httpx
+import json
+from urllib.parse import quote
 
 
 # ---------------------------------------------------------------------------
@@ -148,6 +150,66 @@ async def test_chat_action_detection(client):
     assert data["action"] == "OPEN_NAVER_MAP"
 
 
+@pytest.mark.asyncio
+async def test_chat_geocode_returns_naver_action_payload(client):
+    """MAP_GEOCODE requests return a deterministic Naver handoff target."""
+    with patch("server.routers.chat.classify_intent", new=AsyncMock(return_value="MAP_GEOCODE")), \
+         patch("server.routers.chat.geocode_search", new=AsyncMock(return_value=[{
+             "road_address": "1 Jong-ro, Jongno-gu, Seoul",
+             "jibun_address": "",
+             "english_address": "1 Jong-ro, Jongno-gu, Seoul",
+             "building_name": "Kyobo Bookstore Gwanghwamun",
+             "longitude": 126.9779,
+             "latitude": 37.5702,
+             "distance": 450,
+         }])), \
+         patch("server.routers.chat.get_map_snapshot", new=AsyncMock(return_value=None)), \
+         patch("server.routers.chat._get_live_environment", new=AsyncMock(return_value="Current Time: test")), \
+         patch("server.routers.chat._call_llm", new=AsyncMock(return_value="Kyobo Bookstore is south of the palace area.")):
+        resp = await client.post("/chat", json={
+            "message": "How do I get to Kyobo Bookstore?",
+            "latitude": 37.57865,
+            "longitude": 126.97711,
+        })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["action"] == "OPEN_NAVER_MAP"
+    assert data["action_payload"]["place_name"] == "Kyobo Bookstore Gwanghwamun"
+    assert data["action_payload"]["latitude"] == 37.5702
+    assert data["action_payload"]["longitude"] == 126.9779
+    assert data["action_payload"]["naver_app_url"].startswith("nmap://place")
+
+
+@pytest.mark.asyncio
+async def test_chat_amenity_request_returns_naver_search_payload(client):
+    """Amenity requests use a Naver search handoff instead of hallucinating a specific POI."""
+    with patch("server.routers.chat.classify_intent", new=AsyncMock(return_value="MAP_GEOCODE")), \
+         patch("server.routers.chat.geocode_search", new=AsyncMock()) as mock_geocode, \
+         patch("server.routers.chat.get_map_snapshot", new=AsyncMock(return_value=None)), \
+         patch("server.routers.chat._get_live_environment", new=AsyncMock(return_value="Current Time: test")), \
+         patch("server.routers.chat._call_llm", new=AsyncMock(return_value=(
+             "There may be restrooms near the Donggung entrance according to palace context. "
+             "I can also search Naver for bathrooms nearby."
+         ))):
+        resp = await client.post("/chat", json={
+            "message": "Where is the closest bathroom?",
+            "latitude": 37.57865,
+            "longitude": 126.97711,
+            "waypoint_id": "geunjeongjeon",
+        })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["action"] == "OPEN_NAVER_MAP"
+    assert data["action_payload"]["handoff_type"] == "search"
+    assert data["action_payload"]["query"] == "bathroom"
+    assert data["action_payload"]["naver_query"] == "화장실"
+    assert data["action_payload"]["naver_app_url"].startswith("nmap://search")
+    assert f"/search/{quote('화장실', safe='')}/" in data["action_payload"]["naver_web_url"]
+    mock_geocode.assert_not_awaited()
+
+
 # ---------------------------------------------------------------------------
 # POST /chat — reuses existing session
 # ---------------------------------------------------------------------------
@@ -175,6 +237,60 @@ async def test_chat_reuse_session(client):
         })
 
     assert resp2.json()["session_id"] == sid
+
+
+# ---------------------------------------------------------------------------
+# POST /chat/stream — streams status, deltas, and final payload
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_chat_stream_returns_ndjson_events(client):
+    """Streaming chat emits incremental events and saves the final reply."""
+
+    async def fake_prepare(_req, status_callback=None):
+        if status_callback:
+            await status_callback("Understanding request")
+        return {
+            "provider": "nvidia",
+            "model": "test-model",
+            "session_id": "stream-session",
+            "waypoint": {"id": "geunjeongjeon", "name": "Geunjeongjeon"},
+            "gps_context": "The user is at Geunjeongjeon.",
+            "activity_context": "",
+            "itinerary_context": "",
+            "search_block": "",
+            "geocode_block": "",
+            "search_used": False,
+            "intent": "MAP_STATIC",
+            "full_system": "system prompt",
+            "map_snapshot_included": False,
+            "map_snapshot_artifact": None,
+            "naver_action_payload": None,
+            "messages": [
+                {"role": "system", "content": "system prompt"},
+                {"role": "user", "content": "Where now?"},
+            ],
+        }
+
+    async def fake_stream_llm(*_args, **_kwargs):
+        yield "Head "
+        yield "to Sajeongjeon."
+
+    with patch("server.routers.chat._prepare_chat_completion", new=fake_prepare), \
+         patch("server.routers.chat._stream_llm", new=fake_stream_llm), \
+         patch("server.routers.chat.save_chat_message", new=AsyncMock()) as mock_save:
+        resp = await client.post("/chat/stream", json={"message": "Where now?"})
+
+    assert resp.status_code == 200
+    events = [json.loads(line) for line in resp.text.splitlines() if line.strip()]
+    event_types = [event["type"] for event in events]
+    assert event_types.count("status") >= 2
+    assert event_types[-3:] == ["delta", "delta", "done"]
+    meta_event = next(event for event in events if event["type"] == "meta")
+    assert meta_event["session_id"] == "stream-session"
+    assert meta_event["waypoint_id"] == "geunjeongjeon"
+    assert events[-1]["reply"] == "Head to Sajeongjeon."
+    assert mock_save.await_count == 2
 
 
 # ---------------------------------------------------------------------------

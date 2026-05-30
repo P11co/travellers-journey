@@ -217,9 +217,16 @@ export default function BuddyAIChatOverlay({
         ]}>
           <Text style={[styles.buddyText, { color: theme.text }]}>{message.content}</Text>
           {message.action === 'OPEN_NAVER_MAP' && message.actionPayload && (
-            <TouchableOpacity style={styles.naverButton} onPress={() => handleOpenNaver(message.actionPayload)}>
-              <Text style={styles.naverButtonText}>Open in Naver</Text>
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity style={styles.naverButton} onPress={() => handleOpenNaver(message.actionPayload)}>
+                <Text style={styles.naverButtonText}>Open in Naver</Text>
+              </TouchableOpacity>
+              {message.actionPayload.handoff_type === 'search' && (
+                <Text style={[styles.naverLanguageNote, { color: theme.mutedText }]}>
+                  Tip: set Naver Map to English before opening. Search results may still show Korean place names.
+                </Text>
+              )}
+            </>
           )}
         </View>
       </View>
@@ -520,6 +527,12 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   naverButtonText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  naverLanguageNote: {
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 6,
+    maxWidth: 220,
+  },
   userRow: {
     alignItems: 'flex-end',
     marginBottom: 12,

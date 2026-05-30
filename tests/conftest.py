@@ -17,6 +17,7 @@ _TEST_DB = os.path.join(
     os.path.dirname(__file__), "..", "data", "test_seoulwalk.db"
 )
 os.environ["SEOULWALK_TEST_DB"] = _TEST_DB
+os.environ["LANGSMITH_TRACING"] = "false"
 
 # Patch the config's DATABASE_PATH before the app is loaded
 import server.config as _cfg

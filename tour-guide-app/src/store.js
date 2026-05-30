@@ -48,36 +48,41 @@ const AMENITY_SEARCH_TERMS = [
   {
     triggers: ['bathroom', 'bathrooms', 'restroom', 'restrooms', 'toilet', 'toilets', 'washroom', 'wc'],
     query: 'bathroom',
+    naverQuery: '화장실',
   },
   {
     triggers: ['pharmacy', 'pharmacies', 'drugstore', 'medicine'],
     query: 'pharmacy',
+    naverQuery: '약국',
   },
   {
     triggers: ['convenience store', 'convenience stores', '7-eleven', 'cu store', 'gs25'],
     query: 'convenience store',
+    naverQuery: '편의점',
   },
   {
     triggers: ['cafe', 'cafes', 'coffee', 'coffee shop'],
     query: 'cafe',
+    naverQuery: '카페',
   },
 ];
 
-const detectAmenitySearchQuery = (message) => {
+const detectAmenitySearch = (message) => {
   const normalized = String(message || '').toLowerCase();
   return AMENITY_SEARCH_TERMS.find(({ triggers }) => (
     triggers.some((trigger) => normalized.includes(trigger))
-  ))?.query || null;
+  )) || null;
 };
 
 const buildAmenityNaverPayload = ({ message, lat, lng }) => {
-  const query = detectAmenitySearchQuery(message);
-  if (!query) return null;
+  const amenity = detectAmenitySearch(message);
+  if (!amenity) return null;
 
-  const encodedQuery = encodeURIComponent(query);
+  const encodedQuery = encodeURIComponent(amenity.naverQuery || amenity.query);
   return {
-    place_name: query,
-    query,
+    place_name: amenity.query,
+    query: amenity.query,
+    naver_query: amenity.naverQuery || amenity.query,
     latitude: lat ?? null,
     longitude: lng ?? null,
     handoff_type: 'search',

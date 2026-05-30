@@ -151,6 +151,18 @@ class VisionChatResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Voice
+# ---------------------------------------------------------------------------
+
+class VoiceTranscribeResponse(BaseModel):
+    """Response from POST /voice/transcribe"""
+    transcript: str
+    provider: str
+    session_id: str
+    duration_ms: int
+
+
+# ---------------------------------------------------------------------------
 # Handoff (Naver Maps)
 # ---------------------------------------------------------------------------
 

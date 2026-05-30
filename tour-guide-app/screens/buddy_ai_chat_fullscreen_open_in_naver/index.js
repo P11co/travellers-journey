@@ -163,12 +163,19 @@ export default function AIChatInterface({ navigation }) {
           ]}>
             <Text style={[styles.msgTextBuddy, { color: theme.text }]}>{message.content}</Text>
             {message.action === 'OPEN_NAVER_MAP' && message.actionPayload && (
-              <TouchableOpacity style={styles.naverButton} onPress={() => handleOpenNaver(message.actionPayload)}>
-                <Svg width="18" height="18" fill="#ffffff" viewBox="0 0 24 24" style={styles.naverIcon}>
-                  <Path d="M12 2L4.5 20.29L5.21 21L12 18L18.79 21L19.5 20.29L12 2Z" />
-                </Svg>
-                <Text style={styles.naverButtonText}>Open in Naver</Text>
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity style={styles.naverButton} onPress={() => handleOpenNaver(message.actionPayload)}>
+                  <Svg width="18" height="18" fill="#ffffff" viewBox="0 0 24 24" style={styles.naverIcon}>
+                    <Path d="M12 2L4.5 20.29L5.21 21L12 18L18.79 21L19.5 20.29L12 2Z" />
+                  </Svg>
+                  <Text style={styles.naverButtonText}>Open in Naver</Text>
+                </TouchableOpacity>
+                {message.actionPayload.handoff_type === 'search' && (
+                  <Text style={[styles.naverLanguageNote, { color: theme.mutedText }]}>
+                    Tip: set Naver Map to English before opening. Search results may still show Korean place names.
+                  </Text>
+                )}
+              </>
             )}
           </View>
           <Text style={styles.timestampSubtextLeft}>BUDDY • {formatTimestamp(message.timestamp)}</Text>
@@ -454,6 +461,11 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '700',
     fontSize: 14,
+  },
+  naverLanguageNote: {
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 8,
   },
   timestampSubtextLeft: {
     fontSize: 10,
