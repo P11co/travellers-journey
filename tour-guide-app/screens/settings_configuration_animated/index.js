@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Switch,
+  Alert,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,16 +17,14 @@ import { getTheme } from '../../src/theme';
 
 export default function SettingsConfigurationView({ navigation }) {
   const insets = useSafeAreaInsets();
-  const [neuralProfile, setNeuralProfile] = useState('nova');
-  const [bgSync, setBgSync] = useState(true);
-  const [offlineCaching, setOfflineCaching] = useState(false);
   const [hotspotSuggestions, setHotspotSuggestions] = useState(false);
-  const [renderingEngine, setRenderingEngine] = useState('obsidian');
   const [serverStatus, setServerStatus] = useState('checking');
+  const [unavailableExpanded, setUnavailableExpanded] = useState(false);
   const themeMode = useAppStore((s) => s.themeMode);
   const setThemeMode = useAppStore((s) => s.setThemeMode);
   const voiceModeEnabled = useAppStore((s) => s.voiceModeEnabled);
   const setVoiceModeEnabled = useAppStore((s) => s.setVoiceModeEnabled);
+  const resetStudySession = useAppStore((s) => s.resetStudySession);
   const theme = getTheme(themeMode);
 
   useEffect(() => {
@@ -56,6 +55,24 @@ export default function SettingsConfigurationView({ navigation }) {
     navigation.navigate('Home');
   };
 
+  const handleResetStudySession = () => {
+    Alert.alert(
+      'End current participant?',
+      'This clears the local itinerary, chat, active tour, and session ID on this phone. Existing backend logs stay saved under the previous session.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'End & Reset',
+          style: 'destructive',
+          onPress: async () => {
+            await resetStudySession();
+            navigation.navigate('Home');
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={{ height: insets.top }} />
@@ -84,138 +101,17 @@ export default function SettingsConfigurationView({ navigation }) {
         <View style={[styles.sectionContainerCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <View style={styles.sectionTitleHeaderRow}>
             <View style={[styles.iconWrapperBoxMuted, { backgroundColor: theme.iconSurface }]}>
-              <Svg width="20" height="20" fill="none" stroke="#34d399" strokeWidth="2" viewBox="0 0 24 24">
-                <Path strokeLinecap="round" strokeLinejoin="round" d="M4 17l6-6 4 4 6-8" />
-              </Svg>
-            </View>
-            <Text style={[styles.sectionHeadlineTitle, { color: theme.text }]}>API Connection</Text>
-          </View>
-          <View style={styles.statusRow}>
-            <View style={[
-              styles.statusDot,
-              serverStatus === 'online' && styles.statusDotOnline,
-              serverStatus === 'offline' && styles.statusDotOffline,
-            ]} />
-            <View style={styles.statusTextWrap}>
-              <Text style={[styles.toggleRowTitleHeader, { color: theme.text }]}>{serverStatus.toUpperCase()}</Text>
-              <Text style={[styles.toggleRowSubtitleCaption, { color: theme.mutedText }]}>{API_BASE_URL}</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* NEURAL SYNTHESIS RADIO CARD SELECT SECTION */}
-        <View style={[styles.sectionContainerCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <View style={styles.sectionTitleHeaderRow}>
-            <View style={[styles.iconWrapperBoxMuted, { backgroundColor: theme.iconSurface }]}>
               <Svg width="20" height="20" fill="none" stroke="#5c77ff" strokeWidth="2" viewBox="0 0 24 24">
-                <Path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                <Path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.364 6.364l-1.414-1.414M7.05 7.05 5.636 5.636m12.728 0L16.95 7.05M7.05 16.95l-1.414 1.414" />
               </Svg>
             </View>
-            <Text style={[styles.sectionHeadlineTitle, { color: theme.text }]}>Neural Synthesis Profile</Text>
-          </View>
-
-          <View style={styles.radioBlockClusterStack}>
-            {/* Active Choice Card: Nova */}
-            <TouchableOpacity
-              style={[
-                styles.radioSelectionCardBase,
-                neuralProfile === 'nova'
-                  ? [styles.radioCardActive, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]
-                  : { backgroundColor: theme.background, borderColor: theme.border },
-              ]}
-              onPress={() => setNeuralProfile('nova')}
-            >
-              <View style={styles.radioSplitFlexRow}>
-                <View style={styles.radioCardTextCoreArea}>
-                  <Text style={[styles.radioCardTitleMain, { color: theme.text }]}>Nova (Default)</Text>
-                  <Text style={[styles.radioCardDescriptionLabel, { color: theme.mutedText }]}>Energetic, clear, slightly robotic undertone. Optimized for navigation.</Text>
-                </View>
-                {neuralProfile === 'nova' && (
-                  <View style={styles.activeCheckBadgeAnchor}>
-                    <Svg width="20" height="20" fill="#5c77ff" viewBox="0 0 20 20">
-                      <Path fillRule="evenodd" clipRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" />
-                    </Svg>
-                  </View>
-                )}
-              </View>
-            </TouchableOpacity>
-
-            {/* Inactive Choice Card: Echo */}
-            <TouchableOpacity
-              style={[
-                styles.radioSelectionCardBase,
-                neuralProfile === 'echo'
-                  ? [styles.radioCardActive, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]
-                  : { backgroundColor: theme.background, borderColor: theme.border },
-              ]}
-              onPress={() => setNeuralProfile('echo')}
-            >
-              <View style={styles.radioSplitFlexRow}>
-                <View style={styles.radioCardTextCoreArea}>
-                  <Text style={[styles.radioCardTitleMain, { color: theme.text }]}>Echo (Beta)</Text>
-                  <Text style={[styles.radioCardDescriptionLabel, { color: theme.mutedText }]}>Deep, resonant, calm. Requires persistent network connection.</Text>
-                </View>
-                {neuralProfile === 'echo' && (
-                  <View style={styles.activeCheckBadgeAnchor}>
-                    <Svg width="20" height="20" fill="#5c77ff" viewBox="0 0 20 20">
-                      <Path fillRule="evenodd" clipRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" />
-                    </Svg>
-                  </View>
-                )}
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          <View style={[styles.sectionCardLowerMetadataRow, { borderColor: theme.border }]}>
-            <Text style={[styles.monoVersionText, { color: theme.mutedText }]}>Model version: v2.4.1-stable</Text>
-            <TouchableOpacity><Text style={styles.accentTriggerTextAction}>Test Output</Text></TouchableOpacity>
-          </View>
-        </View>
-
-        {/* TELEMETRY ENGINE SYNC PREFERENCES (TOGGLE LIST) */}
-        <View style={[styles.sectionContainerCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <View style={styles.sectionTitleHeaderRow}>
-            <View style={[styles.iconWrapperBoxMuted, { backgroundColor: theme.iconSurface }]}>
-              <Svg width="20" height="20" fill="none" stroke={theme.mutedText} strokeWidth="2" viewBox="0 0 24 24">
-                <Path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </Svg>
-            </View>
-            <Text style={[styles.sectionHeadlineTitle, { color: theme.text }]}>Telemetry & Sync</Text>
+            <Text style={[styles.sectionHeadlineTitle, { color: theme.text }]}>User Settings</Text>
           </View>
 
           <View style={styles.toggleClusterContainerList}>
-            {/* Switch Input Row 1 */}
             <View style={styles.toggleActionRowLine}>
               <View style={styles.toggleRowTextLeftDesc}>
-                <Text style={[styles.toggleRowTitleHeader, { color: theme.text }]}>Background Sync</Text>
-                <Text style={[styles.toggleRowSubtitleCaption, { color: theme.mutedText }]}>Continuous location processing</Text>
-              </View>
-              <Switch
-                value={bgSync}
-                onValueChange={(val) => setBgSync(val)}
-                trackColor={{ false: '#3f3f46', true: '#5c77ff' }}
-                thumbColor="#ffffff"
-              />
-            </View>
-
-            {/* Switch Input Row 2 */}
-            <View style={styles.toggleActionRowLine}>
-              <View style={styles.toggleRowTextLeftDesc}>
-                <Text style={[styles.toggleRowTitleHeader, { color: theme.text }]}>Offline Caching</Text>
-                <Text style={[styles.toggleRowSubtitleCaption, { color: theme.mutedText }]}>Store maps up to 2GB</Text>
-              </View>
-              <Switch
-                value={offlineCaching}
-                onValueChange={(val) => setOfflineCaching(val)}
-                trackColor={{ false: '#3f3f46', true: '#5c77ff' }}
-                thumbColor="#ffffff"
-              />
-            </View>
-
-            {/* Switch Input Row 3 */}
-            <View style={styles.toggleActionRowLine}>
-              <View style={styles.toggleRowTextLeftDesc}>
-                <Text style={[styles.toggleRowTitleHeader, { color: theme.text }]}>Hot-Spot Suggestions</Text>
+                <Text style={[styles.toggleRowTitleHeader, { color: theme.text }]}>Hotspot Suggestions</Text>
                 <Text style={[styles.toggleRowSubtitleCaption, { color: theme.mutedText }]}>Receive real-time intelligence on high-activity areas.</Text>
               </View>
               <Switch
@@ -225,19 +121,6 @@ export default function SettingsConfigurationView({ navigation }) {
                 thumbColor="#ffffff"
               />
             </View>
-          </View>
-        </View>
-
-        <View style={[styles.sectionContainerCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <View style={styles.sectionTitleHeaderRow}>
-            <View style={[styles.iconWrapperBoxMuted, { backgroundColor: theme.iconSurface }]}>
-              <Svg width="20" height="20" fill="none" stroke="#5c77ff" strokeWidth="2" viewBox="0 0 24 24">
-                <Path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.364 6.364l-1.414-1.414M7.05 7.05 5.636 5.636m12.728 0L16.95 7.05M7.05 16.95l-1.414 1.414" />
-              </Svg>
-            </View>
-            <Text style={[styles.sectionHeadlineTitle, { color: theme.text }]}>Experience</Text>
-          </View>
-          <View style={styles.toggleClusterContainerList}>
             <View style={styles.toggleActionRowLine}>
               <View style={styles.toggleRowTextLeftDesc}>
                 <Text style={[styles.toggleRowTitleHeader, { color: theme.text }]}>Light Mode</Text>
@@ -265,96 +148,161 @@ export default function SettingsConfigurationView({ navigation }) {
           </View>
         </View>
 
-        {/* PRIVACY SAFETY BUTTON PROTOCOLS */}
-        <View style={[styles.sectionContainerCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <View style={styles.sectionTitleHeaderRow}>
-            <View style={[styles.iconWrapperBoxMuted, { backgroundColor: theme.iconSurface }]}>
-              <Svg width="20" height="20" fill="none" stroke="#f87171" strokeWidth="2" viewBox="0 0 24 24">
-                <Path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </Svg>
-            </View>
-            <Text style={[styles.sectionHeadlineTitle, { color: theme.text }]}>Privacy Protocols</Text>
-          </View>
-
-          <View style={styles.linkButtonStackGroup}>
-            {/* Action Action Trigger 1 */}
-            <TouchableOpacity style={[styles.rowLinkCardContainer, { backgroundColor: theme.background, borderColor: theme.border }]} onPress={() => console.log('Trigger clear pipeline data index')}>
-              <View style={styles.rowLinkLeftContentGroup}>
-                <Svg width="20" height="20" fill="none" stroke="#a1a1aa" strokeWidth="2" viewBox="0 0 24 24" style={styles.inlineIconSpace}>
-                  <Path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </Svg>
-                <Text style={[styles.rowLinkMainTextTitle, { color: theme.text }]}>Clear Routing History</Text>
-              </View>
-              <Text style={[styles.chevronArrowIndicatorChar, { color: theme.mutedText }]}>❯</Text>
-            </TouchableOpacity>
-
-            {/* Action Action Trigger 2 */}
-            <TouchableOpacity style={[styles.rowLinkCardContainer, { backgroundColor: theme.background, borderColor: theme.border }]} onPress={() => console.log('Trigger manifest data portal adjustment')}>
-              <View style={styles.rowLinkLeftContentGroup}>
-                <Svg width="20" height="20" fill="none" stroke="#a1a1aa" strokeWidth="2" viewBox="0 0 24 24" style={styles.inlineIconSpace}>
-                  <Path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                </Svg>
-                <Text style={[styles.rowLinkMainTextTitle, { color: theme.text }]}>Manage Voice Recordings</Text>
-              </View>
-              <Text style={[styles.chevronArrowIndicatorChar, { color: theme.mutedText }]}>❯</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* RENDERING MATRIX GRAPHICS SELECTOR BAR (SEGMENTED GRID MATRIX) */}
         <View style={[styles.sectionContainerCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <View style={styles.sectionTitleHeaderRow}>
             <View style={[styles.iconWrapperBoxMuted, { backgroundColor: theme.iconSurface }]}>
               <Svg width="20" height="20" fill="none" stroke="#34d399" strokeWidth="2" viewBox="0 0 24 24">
-                <Path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                <Path strokeLinecap="round" strokeLinejoin="round" d="M4 17l6-6 4 4 6-8" />
               </Svg>
             </View>
-            <Text style={[styles.sectionHeadlineTitle, { color: theme.text }]}>Rendering Engine</Text>
+            <Text style={[styles.sectionHeadlineTitle, { color: theme.text }]}>Admin Settings</Text>
           </View>
 
-          <View style={styles.segmentedControlGridCols3}>
-            {/* Tab Section Item 1 */}
-            <TouchableOpacity
-              style={[
-                styles.segmentBtnItem,
-                renderingEngine === 'obsidian'
-                  ? [styles.segmentBtnActive, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]
-                  : { backgroundColor: theme.background, borderColor: theme.border },
-              ]}
-              onPress={() => setRenderingEngine('obsidian')}
-            >
-              <Text style={styles.segmentIconCharEmoji}>🌑</Text>
-              <Text style={[styles.segmentButtonTextLabel, { color: renderingEngine === 'obsidian' ? theme.accent : theme.mutedText }]}>Obsidian</Text>
-            </TouchableOpacity>
+          <View style={styles.adminStack}>
+            <View style={styles.adminBlock}>
+              <Text style={[styles.subsectionLabel, { color: theme.mutedText }]}>API Connection</Text>
+              <View style={styles.statusRow}>
+                <View style={[
+                  styles.statusDot,
+                  serverStatus === 'online' && styles.statusDotOnline,
+                  serverStatus === 'offline' && styles.statusDotOffline,
+                ]} />
+                <View style={styles.statusTextWrap}>
+                  <Text style={[styles.toggleRowTitleHeader, { color: theme.text }]}>{serverStatus.toUpperCase()}</Text>
+                  <Text style={[styles.toggleRowSubtitleCaption, { color: theme.mutedText }]}>{API_BASE_URL}</Text>
+                </View>
+              </View>
+            </View>
 
-            {/* Tab Section Item 2 */}
-            <TouchableOpacity
-              style={[
-                styles.segmentBtnItem,
-                renderingEngine === 'satellite'
-                  ? [styles.segmentBtnActive, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]
-                  : { backgroundColor: theme.background, borderColor: theme.border },
-              ]}
-              onPress={() => setRenderingEngine('satellite')}
-            >
-              <Text style={styles.segmentIconCharEmoji}>🛰️</Text>
-              <Text style={[styles.segmentButtonTextLabel, { color: renderingEngine === 'satellite' ? theme.accent : theme.mutedText }]}>Satellite</Text>
-            </TouchableOpacity>
-
-            {/* Tab Section Item 3 */}
-            <TouchableOpacity
-              style={[
-                styles.segmentBtnItem,
-                renderingEngine === 'vector'
-                  ? [styles.segmentBtnActive, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]
-                  : { backgroundColor: theme.background, borderColor: theme.border },
-              ]}
-              onPress={() => setRenderingEngine('vector')}
-            >
-              <Text style={styles.segmentIconCharEmoji}>🕸️</Text>
-              <Text style={[styles.segmentButtonTextLabel, { color: renderingEngine === 'vector' ? theme.accent : theme.mutedText }]}>Vector Wire</Text>
-            </TouchableOpacity>
+            <View style={styles.adminBlock}>
+              <Text style={[styles.subsectionLabel, { color: theme.mutedText }]}>User Study Session</Text>
+              <Text style={[styles.resetSessionHelper, { color: theme.mutedText }]}>
+                End the current participant and return this phone to a clean start state.
+              </Text>
+              <TouchableOpacity
+                style={[styles.resetSessionButton, { borderColor: theme.danger, backgroundColor: themeMode === 'light' ? '#fef2f2' : 'rgba(248, 113, 113, 0.12)' }]}
+                onPress={handleResetStudySession}
+              >
+                <Text style={[styles.resetSessionButtonText, { color: theme.danger }]}>End Participant & Reset</Text>
+              </TouchableOpacity>
+            </View>
           </View>
+        </View>
+
+        <View style={[styles.sectionContainerCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <TouchableOpacity
+            style={styles.unavailableHeader}
+            onPress={() => setUnavailableExpanded((expanded) => !expanded)}
+            activeOpacity={0.82}
+          >
+            <View style={styles.unavailableHeaderLeft}>
+              <View style={[styles.iconWrapperBoxMuted, { backgroundColor: theme.iconSurface }]}>
+                <Svg width="20" height="20" fill="none" stroke={theme.mutedText} strokeWidth="2" viewBox="0 0 24 24">
+                  <Path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                </Svg>
+              </View>
+              <View style={styles.unavailableTitleWrap}>
+                <Text style={[styles.sectionHeadlineTitle, { color: theme.text }]}>Unavailable</Text>
+                <Text style={[styles.toggleRowSubtitleCaption, { color: theme.mutedText }]}>Placeholder controls kept for reference.</Text>
+              </View>
+            </View>
+            <Text style={[styles.chevronArrowIndicatorChar, { color: theme.mutedText }]}>
+              {unavailableExpanded ? '⌃' : '⌄'}
+            </Text>
+          </TouchableOpacity>
+
+          {unavailableExpanded && (
+            <View style={styles.unavailableBody}>
+              <View style={[styles.unavailablePanel, { borderColor: theme.border, backgroundColor: theme.background }]}>
+                <Text style={[styles.subsectionLabel, { color: theme.mutedText }]}>Neural Synthesis Profile</Text>
+                <View style={styles.radioBlockClusterStack}>
+                  <TouchableOpacity
+                    disabled
+                    style={[
+                      styles.radioSelectionCardBase,
+                      styles.disabledOption,
+                      { backgroundColor: theme.background, borderColor: theme.border },
+                    ]}
+                  >
+                    <Text style={[styles.radioCardTitleMain, { color: theme.mutedText }]}>Nova (Default)</Text>
+                    <Text style={[styles.radioCardDescriptionLabel, { color: theme.mutedText }]}>Disabled until model profile selection is connected.</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    disabled
+                    style={[
+                      styles.radioSelectionCardBase,
+                      styles.disabledOption,
+                      { backgroundColor: theme.background, borderColor: theme.border },
+                    ]}
+                  >
+                    <Text style={[styles.radioCardTitleMain, { color: theme.mutedText }]}>Echo (Beta)</Text>
+                    <Text style={[styles.radioCardDescriptionLabel, { color: theme.mutedText }]}>Disabled until voice profile routing is implemented.</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={[styles.sectionCardLowerMetadataRow, { borderColor: theme.border, opacity: 0.45 }]}>
+                  <Text style={[styles.monoVersionText, { color: theme.mutedText }]}>Model version: v2.4.1-stable</Text>
+                  <Text style={[styles.accentTriggerTextAction, { color: theme.mutedText }]}>Test Output</Text>
+                </View>
+              </View>
+
+              <View style={[styles.unavailablePanel, { borderColor: theme.border, backgroundColor: theme.background }]}>
+                <Text style={[styles.subsectionLabel, { color: theme.mutedText }]}>Telemetry & Sync</Text>
+                <View style={styles.toggleClusterContainerList}>
+                  <View style={[styles.toggleActionRowLine, styles.disabledOption]}>
+                    <View style={styles.toggleRowTextLeftDesc}>
+                      <Text style={[styles.toggleRowTitleHeader, { color: theme.mutedText }]}>Background Sync</Text>
+                      <Text style={[styles.toggleRowSubtitleCaption, { color: theme.mutedText }]}>Not wired to a background task yet.</Text>
+                    </View>
+                    <Switch disabled value={false} trackColor={{ false: '#3f3f46', true: '#5c77ff' }} thumbColor="#d4d4d8" />
+                  </View>
+                  <View style={[styles.toggleActionRowLine, styles.disabledOption]}>
+                    <View style={styles.toggleRowTextLeftDesc}>
+                      <Text style={[styles.toggleRowTitleHeader, { color: theme.mutedText }]}>Offline Caching</Text>
+                      <Text style={[styles.toggleRowSubtitleCaption, { color: theme.mutedText }]}>Map tile caching is not available in this build.</Text>
+                    </View>
+                    <Switch disabled value={false} trackColor={{ false: '#3f3f46', true: '#5c77ff' }} thumbColor="#d4d4d8" />
+                  </View>
+                </View>
+              </View>
+
+              <View style={[styles.unavailablePanel, { borderColor: theme.border, backgroundColor: theme.background }]}>
+                <Text style={[styles.subsectionLabel, { color: theme.mutedText }]}>Privacy Protocols</Text>
+                <View style={styles.linkButtonStackGroup}>
+                  <TouchableOpacity disabled style={[styles.rowLinkCardContainer, styles.disabledOption, { backgroundColor: theme.background, borderColor: theme.border }]}>
+                    <View style={styles.rowLinkLeftContentGroup}>
+                      <Svg width="20" height="20" fill="none" stroke={theme.mutedText} strokeWidth="2" viewBox="0 0 24 24" style={styles.inlineIconSpace}>
+                        <Path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </Svg>
+                      <Text style={[styles.rowLinkMainTextTitle, { color: theme.mutedText }]}>Clear Routing History</Text>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity disabled style={[styles.rowLinkCardContainer, styles.disabledOption, { backgroundColor: theme.background, borderColor: theme.border }]}>
+                    <View style={styles.rowLinkLeftContentGroup}>
+                      <Svg width="20" height="20" fill="none" stroke={theme.mutedText} strokeWidth="2" viewBox="0 0 24 24" style={styles.inlineIconSpace}>
+                        <Path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                      </Svg>
+                      <Text style={[styles.rowLinkMainTextTitle, { color: theme.mutedText }]}>Manage Voice Recordings</Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={[styles.unavailablePanel, { borderColor: theme.border, backgroundColor: theme.background }]}>
+                <Text style={[styles.subsectionLabel, { color: theme.mutedText }]}>Rendering Engine</Text>
+                <View style={styles.segmentedControlGridCols3}>
+                  {['Obsidian', 'Satellite', 'Vector Wire'].map((label) => (
+                    <TouchableOpacity
+                      key={label}
+                      disabled
+                      style={[styles.segmentBtnItem, styles.disabledOption, { backgroundColor: theme.background, borderColor: theme.border }]}
+                    >
+                      <Text style={[styles.segmentButtonTextLabel, { color: theme.mutedText }]}>{label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            </View>
+          )}
         </View>
 
       </ScrollView>
@@ -433,6 +381,18 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#e4e4e7',
+  },
+  adminStack: {
+    gap: 22,
+  },
+  adminBlock: {
+    gap: 10,
+  },
+  subsectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0,
   },
   statusRow: {
     flexDirection: 'row',
@@ -534,6 +494,23 @@ const styles = StyleSheet.create({
     color: '#a1a1aa',
     marginTop: 2,
   },
+  resetSessionHelper: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  resetSessionButton: {
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  resetSessionButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
   linkButtonStackGroup: {
     gap: 12,
   },
@@ -562,7 +539,34 @@ const styles = StyleSheet.create({
   },
   chevronArrowIndicatorChar: {
     color: '#a1a1aa',
-    fontSize: 12,
+    fontSize: 18,
+  },
+  unavailableHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  unavailableHeaderLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 12,
+  },
+  unavailableTitleWrap: {
+    flex: 1,
+  },
+  unavailableBody: {
+    gap: 14,
+    marginTop: 18,
+  },
+  unavailablePanel: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    gap: 14,
+  },
+  disabledOption: {
+    opacity: 0.48,
   },
   segmentedControlGridCols3: {
     flexDirection: 'row',

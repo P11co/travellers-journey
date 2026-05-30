@@ -36,6 +36,16 @@ const buildInitialActivities = () =>
     hotspotsData.map((hotspot) => [hotspot.id, DEFAULT_SELECTED_HOTSPOTS.has(hotspot.id)]),
   );
 
+const createInitialDraft = () => ({
+  primaryLocation: 'Gyeongbokgung Palace',
+  budgetLevel: '$50',
+  availableTime: 'Full Day (8 hrs)',
+  startTime: '09:00',
+  allowAiFill: false,
+  activities: buildInitialActivities(),
+  stops: [],
+});
+
 const DEFAULT_NAVER_TARGET = {
   placeName: 'Gyeongbokgung Palace',
   lat: 37.5796,
@@ -308,15 +318,7 @@ const useAppStore = create((set, get) => ({
   itineraryError: null,
 
   // Draft
-  draft: {
-    primaryLocation: 'Gyeongbokgung Palace',
-    budgetLevel: '$50',
-    availableTime: 'Full Day (8 hrs)',
-    startTime: '09:00',
-    allowAiFill: false,
-    activities: buildInitialActivities(),
-    stops: [],
-  },
+  draft: createInitialDraft(),
 
   // Chat
   chatMessages: [initialAssistantMessage],
@@ -347,6 +349,46 @@ const useAppStore = create((set, get) => ({
     if (!voiceModeEnabled) {
       get().stopSpeaking();
     }
+  },
+
+  resetStudySession: async () => {
+    const previousSessionId = get().sessionId;
+
+    if (previousSessionId) {
+      try {
+        await get().logTraceEvent('study_session_ended', {
+          previous_session_id: previousSessionId,
+          ended_at: new Date().toISOString(),
+        });
+      } catch (error) {
+        console.warn('Failed to log study session end', error);
+      }
+    }
+
+    get().stopSpeaking();
+
+    set({
+      sessionId: null,
+      itineraries: [],
+      generatedItinerary: null,
+      isLoadingItinerary: false,
+      itineraryError: null,
+      draft: createInitialDraft(),
+      chatMessages: [{ ...initialAssistantMessage, timestamp: new Date().toISOString() }],
+      chatWaypointContext: null,
+      isChatLoading: false,
+      chatStreamStatus: null,
+      chatError: null,
+      activeTourId: null,
+      currentLocation: null,
+      activityError: null,
+      isRecording: false,
+      isTranscribing: false,
+      isSpeaking: false,
+      voiceError: null,
+      lastTranscript: null,
+      voiceRecording: null,
+    });
   },
 
   addItinerary: (itinerary) => {
