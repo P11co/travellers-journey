@@ -137,6 +137,13 @@ const buildLeafletMapHtml = ({ center, waypoints, currentCoords }) => {
           });
         }
 
+        function postMapDismissal() {
+          if (!window.ReactNativeWebView) return;
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'MAP_DISMISSED'
+          }));
+        }
+
         function postWaypointSelection(point) {
           if (!window.ReactNativeWebView) return;
           window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -158,6 +165,7 @@ const buildLeafletMapHtml = ({ center, waypoints, currentCoords }) => {
         }).setView([center.latitude, center.longitude], data.currentCoords ? 18 : 17);
 
         L.control.zoom({ position: 'bottomright' }).addTo(map);
+        map.on('click', postMapDismissal);
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           maxZoom: 19,
@@ -177,7 +185,8 @@ const buildLeafletMapHtml = ({ center, waypoints, currentCoords }) => {
             fillOpacity: 1,
             weight: point.active ? 2 : 1
           }).addTo(map);
-          circle.on('click', function () {
+          circle.on('click', function (event) {
+            L.DomEvent.stopPropagation(event);
             postWaypointSelection(point);
           });
 
@@ -189,7 +198,8 @@ const buildLeafletMapHtml = ({ center, waypoints, currentCoords }) => {
               iconAnchor: point.active ? [11, 11] : [9, 9]
             })
           }).addTo(map);
-          marker.on('click', function () {
+          marker.on('click', function (event) {
+            L.DomEvent.stopPropagation(event);
             postWaypointSelection(point);
           });
         });
@@ -314,10 +324,12 @@ export default function ARMapNavigationView({ navigation, showBottomNav = true, 
   };
 
   const handleMapMessage = (event) => {
-    if (!hotspotSuggestionsEnabled) return;
-
     try {
       const payload = JSON.parse(event?.nativeEvent?.data || '{}');
+      if (payload.type === 'MAP_DISMISSED') {
+        setSelectedWaypoint(null);
+        return;
+      }
       if (payload.type !== 'WAYPOINT_SELECTED' || !payload.waypoint?.id) return;
       setSelectedWaypoint(payload.waypoint);
       logTraceEvent('waypoint_marker_tapped', {
@@ -391,7 +403,7 @@ export default function ARMapNavigationView({ navigation, showBottomNav = true, 
         </View>
       )}
 
-      {hotspotSuggestionsEnabled && (
+      {(hotspotSuggestionsEnabled || selectedWaypoint) && (
         <View style={[styles.topNotificationContainer, { top: notificationTop }]}>
           <View style={[styles.notificationPanel, { backgroundColor: theme.panel, borderColor: theme.border, shadowColor: theme.shadow }]}>
             <Image
