@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
-  Image,
   LayoutAnimation,
   Linking,
   Platform,
@@ -17,6 +16,8 @@ import {
 import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useAppStore from '../../src/store';
+import VisionCameraPanel from '../../src/components/VisionCameraPanel';
+import { getTheme } from '../../src/theme';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const HANDLE_H = 40;
@@ -49,8 +50,21 @@ export default function BuddyAIChatOverlay({
   const chatMessages = useAppStore((s) => s.chatMessages);
   const chatWaypointContext = useAppStore((s) => s.chatWaypointContext);
   const isChatLoading = useAppStore((s) => s.isChatLoading);
+  const isRecording = useAppStore((s) => s.isRecording);
+  const isTranscribing = useAppStore((s) => s.isTranscribing);
+  const isSpeaking = useAppStore((s) => s.isSpeaking);
+  const voiceModeEnabled = useAppStore((s) => s.voiceModeEnabled);
   const sendMessage = useAppStore((s) => s.sendMessage);
+  const sendVisionMessage = useAppStore((s) => s.sendVisionMessage);
+  const startVoiceRecording = useAppStore((s) => s.startVoiceRecording);
+  const stopVoiceRecordingAndSend = useAppStore((s) => s.stopVoiceRecordingAndSend);
+  const setVoiceModeEnabled = useAppStore((s) => s.setVoiceModeEnabled);
+  const stopSpeaking = useAppStore((s) => s.stopSpeaking);
+  const logTraceEvent = useAppStore((s) => s.logTraceEvent);
   const clearChatWaypointContext = useAppStore((s) => s.clearChatWaypointContext);
+  const themeMode = useAppStore((s) => s.themeMode);
+  const theme = getTheme(themeMode);
+  const hasStreamingMessage = chatMessages.some((message) => message.isStreaming);
 
   const halfH = Math.round(SCREEN_HEIGHT * 0.5);
 
@@ -122,25 +136,61 @@ export default function BuddyAIChatOverlay({
   const handleOpenNaver = async (payload) => {
     if (!payload) return;
 
+    logTraceEvent('naver_handoff_pressed', {
+      has_app_url: Boolean(payload.naver_app_url),
+      has_web_url: Boolean(payload.naver_web_url),
+      place_name: payload.place_name,
+    });
+
     try {
       if (payload.naver_app_url) {
+        logTraceEvent('naver_handoff_app_open_attempted', { url_scheme: 'nmap' });
         await Linking.openURL(payload.naver_app_url);
+        logTraceEvent('naver_handoff_app_opened', { url_scheme: 'nmap' });
         return;
       }
     } catch {
+      logTraceEvent('naver_handoff_web_fallback', { reason: 'app_url_failed' });
       // Fall back to web URL.
     }
 
     if (payload.naver_web_url) {
-      await Linking.openURL(payload.naver_web_url);
+      try {
+        await Linking.openURL(payload.naver_web_url);
+        logTraceEvent('naver_handoff_web_opened', { url_scheme: 'https' });
+      } catch (error) {
+        logTraceEvent('naver_handoff_failed', { error: error.message });
+      }
     }
+  };
+
+  const handleCapturePhoto = async (imageBase64) => {
+    setCameraVisible(false);
+    await sendVisionMessage(imageBase64, inputText.trim() || 'What is this?');
+    setInputText('');
+  };
+
+  const handleMicPress = async () => {
+    if (isRecording) {
+      await stopVoiceRecordingAndSend();
+      return;
+    }
+    await startVoiceRecording();
+  };
+
+  const handleSpeakerPress = () => {
+    if (isSpeaking) {
+      stopSpeaking();
+      return;
+    }
+    setVoiceModeEnabled(!voiceModeEnabled);
   };
 
   const renderMessage = (message) => {
     if (message.role === 'user') {
       return (
         <View key={message.id} style={styles.userRow}>
-          <View style={styles.userBubble}>
+          <View style={[styles.userBubble, { backgroundColor: theme.accent }]}>
             <Text style={styles.userText}>{message.content}</Text>
             {message.attachmentType === 'image' && (
               <Text style={styles.userAttachmentText}>Photo attached</Text>
@@ -155,13 +205,17 @@ export default function BuddyAIChatOverlay({
 
     return (
       <View key={message.id} style={styles.buddyRow}>
-        <View style={styles.avatar}>
-          <Svg width="16" height="16" fill="#5c77ff" viewBox="0 0 20 20">
+        <View style={[styles.avatar, { backgroundColor: theme.iconSurface, borderColor: theme.assistantBorder }]}>
+          <Svg width="16" height="16" fill={theme.accent} viewBox="0 0 20 20">
             <Path fillRule="evenodd" clipRule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" />
           </Svg>
         </View>
-        <View style={[styles.buddyBubble, message.isError && styles.errorBubble]}>
-          <Text style={styles.buddyText}>{message.content}</Text>
+        <View style={[
+          styles.buddyBubble,
+          { backgroundColor: theme.assistantBubble, borderColor: theme.assistantBorder },
+          message.isError && [styles.errorBubble, { backgroundColor: themeMode === 'light' ? '#fef2f2' : '#2a1111' }],
+        ]}>
+          <Text style={[styles.buddyText, { color: theme.text }]}>{message.content}</Text>
           {message.action === 'OPEN_NAVER_MAP' && message.actionPayload && (
             <TouchableOpacity style={styles.naverButton} onPress={() => handleOpenNaver(message.actionPayload)}>
               <Text style={styles.naverButtonText}>Open in Naver</Text>
@@ -181,36 +235,32 @@ export default function BuddyAIChatOverlay({
 
       {/* Camera viewfinder — top-right corner */}
       {cameraVisible && (
-        <View style={styles.camera}>
-          <View style={styles.liveBadge}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveText}>LIVE</Text>
-          </View>
-          <Image
-            source={{ uri: 'https://images.unsplash.com/photo-1540959733332-eab4deceeaf7?w=400' }}
-            style={styles.cameraImg}
-          />
-        </View>
+        <VisionCameraPanel
+          onCapture={handleCapturePhoto}
+          onClose={() => setCameraVisible(false)}
+          disabled={isChatLoading}
+        />
       )}
 
       {isExpanded && (
         <View
           style={[
             styles.sheet,
+            { backgroundColor: theme.background, shadowColor: theme.shadow },
             isFullScreen
               ? [styles.fullscreenSheet, { paddingTop: insets.top }]
               : { height: currentHeight, bottom: bottomOffset },
           ]}
         >
           <TouchableOpacity
-            style={styles.handleStrip}
+            style={[styles.handleStrip, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}
             onPress={handleHandleTap}
             activeOpacity={0.7}
           >
             <View style={styles.pill} />
           </TouchableOpacity>
 
-          <View style={styles.content}>
+          <View style={[styles.content, { backgroundColor: theme.background }]}>
             <View style={styles.row}>
 
               {/* Messages */}
@@ -225,15 +275,17 @@ export default function BuddyAIChatOverlay({
                 onScroll={handleScroll}
                 onContentSizeChange={handleContentSizeChange}
               >
-                <Text style={styles.timeLabel}>TODAY</Text>
+                <Text style={[styles.timeLabel, { color: theme.subtleText }]}>TODAY</Text>
                 {chatMessages.map(renderMessage)}
-                {isChatLoading && (
+                {((isChatLoading && !hasStreamingMessage) || isTranscribing) && (
                   <View style={styles.buddyRow}>
-                    <View style={styles.avatar}>
-                      <ActivityIndicator color="#5c77ff" size="small" />
+                    <View style={[styles.avatar, { backgroundColor: theme.iconSurface, borderColor: theme.assistantBorder }]}>
+                      <ActivityIndicator color={theme.accent} size="small" />
                     </View>
-                    <View style={styles.buddyBubble}>
-                      <Text style={styles.buddyText}>Typing...</Text>
+                    <View style={[styles.buddyBubble, { backgroundColor: theme.assistantBubble, borderColor: theme.assistantBorder }]}>
+                      <Text style={[styles.buddyText, { color: theme.text }]}>
+                        {isTranscribing ? 'Transcribing voice...' : 'Thinking...'}
+                      </Text>
                     </View>
                   </View>
                 )}
@@ -241,23 +293,30 @@ export default function BuddyAIChatOverlay({
 
               {/* Right sidebar for media controls */}
               {sidebarVisible && (
-                <View style={styles.sidebar}>
+                <View style={[styles.sidebar, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                   <TouchableOpacity
                     style={[styles.sideBtn, cameraVisible && styles.sideBtnActive]}
                     onPress={() => setCameraVisible(!cameraVisible)}
                   >
-                    <Svg width="22" height="22" fill="none" stroke={cameraVisible ? '#fff' : '#6b7280'} strokeWidth="2" viewBox="0 0 24 24">
+                    <Svg width="22" height="22" fill="none" stroke={cameraVisible ? '#fff' : theme.mutedText} strokeWidth="2" viewBox="0 0 24 24">
                       <Path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                       <Path d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                     </Svg>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.sideBtn}>
-                    <Svg width="22" height="22" fill="none" stroke="#6b7280" strokeWidth="2" viewBox="0 0 24 24">
+                  <TouchableOpacity
+                    style={[styles.sideBtn, isRecording && styles.sideBtnActive]}
+                    onPress={handleMicPress}
+                    disabled={isTranscribing}
+                  >
+                    <Svg width="22" height="22" fill="none" stroke={isRecording ? '#fff' : theme.mutedText} strokeWidth="2" viewBox="0 0 24 24">
                       <Path d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                     </Svg>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.sideBtn}>
-                    <Svg width="22" height="22" fill="none" stroke="#6b7280" strokeWidth="2" viewBox="0 0 24 24">
+                  <TouchableOpacity
+                    style={[styles.sideBtn, (voiceModeEnabled || isSpeaking) && styles.sideBtnActive]}
+                    onPress={handleSpeakerPress}
+                  >
+                    <Svg width="22" height="22" fill="none" stroke={(voiceModeEnabled || isSpeaking) ? '#fff' : theme.mutedText} strokeWidth="2" viewBox="0 0 24 24">
                       <Path d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                     </Svg>
                   </TouchableOpacity>
@@ -266,23 +325,23 @@ export default function BuddyAIChatOverlay({
             </View>
 
             {/* Input bar */}
-            <View style={[styles.inputBar, isFullScreen && { paddingBottom: insets.bottom + 10 }]}>
+            <View style={[styles.inputBar, { backgroundColor: theme.background, borderColor: theme.border }, isFullScreen && { paddingBottom: insets.bottom + 10 }]}>
               {chatWaypointContext && (
-                <View style={styles.contextChip}>
-                  <Text style={styles.contextChipText} numberOfLines={1}>
+                <View style={[styles.contextChip, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}>
+                  <Text style={[styles.contextChipText, { color: theme.accent }]} numberOfLines={1}>
                     {chatWaypointContext.name} attached
                   </Text>
                   <TouchableOpacity style={styles.contextChipClose} onPress={clearChatWaypointContext}>
-                    <Text style={styles.contextChipCloseText}>x</Text>
+                    <Text style={[styles.contextChipCloseText, { color: theme.accent }]}>x</Text>
                   </TouchableOpacity>
                 </View>
               )}
               <View style={styles.inputRow}>
-                <View style={styles.inputInner}>
+                <View style={[styles.inputInner, { backgroundColor: theme.input, borderColor: theme.assistantBorder }]}>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { color: theme.text }]}
                     placeholder="Ask Buddy AI..."
-                    placeholderTextColor="#6b7280"
+                    placeholderTextColor={theme.subtleText}
                     editable
                     value={inputText}
                     onChangeText={setInputText}
@@ -294,13 +353,13 @@ export default function BuddyAIChatOverlay({
                     onPress={handleSend}
                     disabled={!inputText.trim() || isChatLoading}
                   >
-                    <Svg width="16" height="16" fill="none" stroke="#5c77ff" strokeWidth="2.5" viewBox="0 0 24 24">
+                    <Svg width="16" height="16" fill="none" stroke={theme.accent} strokeWidth="2.5" viewBox="0 0 24 24">
                       <Path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
                     </Svg>
                   </TouchableOpacity>
                 </View>
                 <TouchableOpacity
-                  style={[styles.menuBtn, sidebarVisible && styles.menuBtnActive]}
+                  style={[styles.menuBtn, { backgroundColor: theme.accent }, sidebarVisible && styles.menuBtnActive]}
                   onPress={() => setSidebarVisible(!sidebarVisible)}
                 >
                   <Svg width="20" height="20" fill="none" stroke="#fff" strokeWidth="2.5" viewBox="0 0 24 24">

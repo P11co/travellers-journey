@@ -11,6 +11,7 @@ import {
 import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useAppStore from '../../src/store';
+import { getTheme } from '../../src/theme';
 
 export default function CurrentItineraryView({ navigation, route }) {
   const insets = useSafeAreaInsets();
@@ -22,6 +23,8 @@ export default function CurrentItineraryView({ navigation, route }) {
   const startTour = useAppStore((s) => s.startTour);
   const isLoadingItinerary = useAppStore((s) => s.isLoadingItinerary);
   const itineraryError = useAppStore((s) => s.itineraryError);
+  const themeMode = useAppStore((s) => s.themeMode);
+  const theme = getTheme(themeMode);
   const itineraryId = route?.params?.itineraryId;
   const itinerary =
     itineraries.find((item) => item.id === itineraryId) ||
@@ -65,13 +68,17 @@ export default function CurrentItineraryView({ navigation, route }) {
 
     return (
       <View key={stop.id || `${stop.name}-${index}`} style={styles.timelineNodeRow}>
-        <View style={[styles.timelineIconUnit, isActive && styles.activeNodeIcon]}>
-          <Svg width="16" height="16" fill="none" stroke={isActive ? '#ffffff' : '#9ca3af'} strokeWidth="2" viewBox="0 0 24 24">
+        <View style={[
+          styles.timelineIconUnit,
+          { backgroundColor: theme.iconSurface, borderColor: theme.border },
+          isActive && [styles.activeNodeIcon, { backgroundColor: theme.accent }],
+        ]}>
+          <Svg width="16" height="16" fill="none" stroke={isActive ? '#ffffff' : theme.mutedText} strokeWidth="2" viewBox="0 0 24 24">
             <Path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
             <Path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
           </Svg>
         </View>
-        <View style={[styles.cardBg, hasImage ? styles.overflowClipCard : [styles.cardPaddingArea, styles.radiusPatch]]}>
+        <View style={[styles.cardBg, { backgroundColor: theme.surface, borderColor: theme.border }, hasImage ? styles.overflowClipCard : [styles.cardPaddingArea, styles.radiusPatch]]}>
           {hasImage && (
             <Image
               source={{ uri: stop.image }}
@@ -80,17 +87,17 @@ export default function CurrentItineraryView({ navigation, route }) {
           )}
           <View style={hasImage ? styles.cardPaddingArea : null}>
             <View style={styles.cardHeaderRow}>
-              <Text style={styles.cardNodeTitle}>{stop.name}</Text>
-              <Text style={isActive ? styles.monoTimeActive : styles.monoTimeMuted}>{stop.time}</Text>
+              <Text style={[styles.cardNodeTitle, { color: theme.text }]}>{stop.name}</Text>
+              <Text style={isActive ? styles.monoTimeActive : [styles.monoTimeMuted, { color: theme.subtleText }]}>{stop.time}</Text>
             </View>
-            <Text style={styles.cardBodyDescription}>{stop.description}</Text>
+            <Text style={[styles.cardBodyDescription, { color: theme.mutedText }]}>{stop.description}</Text>
             <View style={styles.badgeClusterRow}>
-              <View style={styles.grayTagBadge}>
-                <Text style={styles.grayTagText}>{stop.duration}</Text>
+              <View style={[styles.grayTagBadge, { backgroundColor: theme.elevated, borderColor: theme.border }]}>
+                <Text style={[styles.grayTagText, { color: theme.mutedText }]}>{stop.duration}</Text>
               </View>
               {(stop.tags || []).slice(0, 1).map((tag) => (
-                <View key={tag} style={styles.grayTagBadge}>
-                  <Text style={styles.grayTagText}>{tag}</Text>
+                <View key={tag} style={[styles.grayTagBadge, { backgroundColor: theme.elevated, borderColor: theme.border }]}>
+                  <Text style={[styles.grayTagText, { color: theme.mutedText }]}>{tag}</Text>
                 </View>
               ))}
             </View>
@@ -101,13 +108,13 @@ export default function CurrentItineraryView({ navigation, route }) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={{ height: insets.top }} />
 
       {/* 1. FIXED CONTENT SYSTEM HEADER */}
-      <View style={styles.header}>
+      <View style={[styles.header, { borderColor: theme.border }]}>
         <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
-          <Svg width="18" height="18" fill="none" stroke="#a1a1aa" strokeWidth="2" viewBox="0 0 24 24">
+          <Svg width="18" height="18" fill="none" stroke={theme.mutedText} strokeWidth="2" viewBox="0 0 24 24">
             <Path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </Svg>
         </TouchableOpacity>
@@ -119,46 +126,46 @@ export default function CurrentItineraryView({ navigation, route }) {
         contentContainerStyle={styles.scrollPadding}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.screenHeadline}>Current Itinerary</Text>
+        <Text style={[styles.screenHeadline, { color: theme.text }]}>Current Itinerary</Text>
 
         {/* SUMMARY INTERFACE CARD HIGHLIGHT */}
-        <View style={styles.cardBg}>
+        <View style={[styles.cardBg, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <View style={styles.summaryTopRow}>
-            <View style={styles.summaryIconWrapper}>
-              <Svg width="20" height="20" fill="none" stroke="#5c77ff" strokeWidth="2" viewBox="0 0 24 24">
+            <View style={[styles.summaryIconWrapper, { backgroundColor: theme.iconSurface }]}>
+              <Svg width="20" height="20" fill="none" stroke={theme.accent} strokeWidth="2" viewBox="0 0 24 24">
                 <Path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                 <Path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
               </Svg>
             </View>
             <View style={styles.summaryTextWrap}>
-              <Text style={styles.summaryTitle}>{itinerary?.name || 'Gyeongbokgung Palace Tour'}</Text>
-              <Text style={styles.textMuted}>{itinerary?.location || 'Gyeongbokgung Palace, Seoul'}</Text>
+              <Text style={[styles.summaryTitle, { color: theme.text }]}>{itinerary?.name || 'Gyeongbokgung Palace Tour'}</Text>
+              <Text style={[styles.textMuted, { color: theme.mutedText }]}>{itinerary?.location || 'Gyeongbokgung Palace, Seoul'}</Text>
             </View>
           </View>
 
-          <View style={styles.timeTagBadge}>
+          <View style={[styles.timeTagBadge, { backgroundColor: theme.elevated }]}>
             <Svg width="16" height="16" fill="none" stroke="#4ade80" strokeWidth="2" viewBox="0 0 24 24" style={styles.tagIconSpace}>
               <Path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </Svg>
-            <Text style={styles.timeBadgeText}>{itinerary?.duration || '8 Hours'}</Text>
+            <Text style={[styles.timeBadgeText, { color: theme.text }]}>{itinerary?.duration || '8 Hours'}</Text>
           </View>
         </View>
 
         {/* TIMELINE ARCHITECTURE WRAPPER */}
         <View style={styles.timelineWrapper}>
 
-          <View style={styles.timelineLine} pointerEvents="none" />
+          <View style={[styles.timelineLine, { backgroundColor: theme.border }]} pointerEvents="none" />
 
           {stops.length ? (
             stops.map(renderTimelineStop)
           ) : isLoadingItinerary ? (
-            <View style={[styles.cardBg, styles.cardPaddingArea, styles.radiusPatch, styles.loadingCard]}>
-              <ActivityIndicator color="#5c77ff" />
-              <Text style={styles.cardBodyDescription}>Loading itinerary...</Text>
+            <View style={[styles.cardBg, styles.cardPaddingArea, styles.radiusPatch, styles.loadingCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <ActivityIndicator color={theme.accent} />
+              <Text style={[styles.cardBodyDescription, { color: theme.mutedText }]}>Loading itinerary...</Text>
             </View>
           ) : (
-            <View style={[styles.cardBg, styles.cardPaddingArea, styles.radiusPatch]}>
-              <Text style={styles.cardBodyDescription}>
+            <View style={[styles.cardBg, styles.cardPaddingArea, styles.radiusPatch, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <Text style={[styles.cardBodyDescription, { color: theme.mutedText }]}>
                 {itineraryError || 'Generate an itinerary to review the route here.'}
               </Text>
             </View>
@@ -168,9 +175,9 @@ export default function CurrentItineraryView({ navigation, route }) {
 
       </ScrollView>
 
-      <View style={[styles.bottomStickyActionTray, { paddingBottom: insets.bottom + 16 }]}>
+      <View style={[styles.bottomStickyActionTray, { paddingBottom: insets.bottom + 16, backgroundColor: theme.panel, borderColor: theme.border }]}>
         <TouchableOpacity
-          style={[styles.primaryActionButton, (!itinerary || isLoadingItinerary) && styles.disabledButton]}
+          style={[styles.primaryActionButton, { backgroundColor: theme.accent }, (!itinerary || isLoadingItinerary) && styles.disabledButton]}
           onPress={handlePrimaryAction}
           disabled={!itinerary || isLoadingItinerary}
         >

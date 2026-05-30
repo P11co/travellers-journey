@@ -1,5 +1,12 @@
 import { create } from 'zustand';
 import {
+  AudioModule,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+} from 'expo-audio';
+import * as Speech from 'expo-speech';
+import {
   generateItinerary as generateItineraryRequest,
   getItinerary as getItineraryRequest,
   reorderItinerary as reorderItineraryRequest,
@@ -8,7 +15,9 @@ import {
   logActivity as logActivityRequest,
   logTraceEvent as logTraceEventRequest,
   sendChatMessage,
+  sendChatMessageStream,
   sendVisionChat,
+  transcribeAudio,
 } from './services/apiService';
 import hotspotsData from './data/hotspots.json';
 
@@ -262,12 +271,32 @@ const useAppStore = create((set, get) => ({
   chatMessages: [initialAssistantMessage],
   chatWaypointContext: null,
   isChatLoading: false,
+  chatStreamStatus: null,
   chatError: null,
 
   // Active tour
   activeTourId: null,
   currentLocation: null,
   activityError: null,
+
+  // Voice + appearance
+  themeMode: 'dark',
+  voiceModeEnabled: false,
+  isRecording: false,
+  isTranscribing: false,
+  isSpeaking: false,
+  voiceError: null,
+  lastTranscript: null,
+  voiceRecording: null,
+
+  setThemeMode: (themeMode) => set({ themeMode }),
+  setVoiceModeEnabled: (voiceModeEnabled) => {
+    set({ voiceModeEnabled });
+    get().logTraceEvent('voice_mode_toggled', { enabled: voiceModeEnabled });
+    if (!voiceModeEnabled) {
+      get().stopSpeaking();
+    }
+  },
 
   addItinerary: (itinerary) => {
     const id = itinerary.id || itinerary.sessionId || createClientId('itinerary');
@@ -522,6 +551,135 @@ const useAppStore = create((set, get) => ({
     }
   },
 
+  speakAssistantReply: async (text) => {
+    const content = String(text || '').trim();
+    if (!content) return;
+
+    try {
+      await Speech.stop();
+      set({ isSpeaking: true, voiceError: null });
+      get().logTraceEvent('voice_tts_started', { text_length: content.length });
+      Speech.speak(content.replace(/[*_`~]/g, ''), {
+        language: 'en-US',
+        rate: 0.95,
+        pitch: 1,
+        onDone: () => {
+          set({ isSpeaking: false });
+          get().logTraceEvent('voice_tts_completed', { text_length: content.length });
+        },
+        onStopped: () => set({ isSpeaking: false }),
+        onError: (error) => {
+          set({
+            isSpeaking: false,
+            voiceError: error?.message || 'Text-to-speech failed.',
+          });
+        },
+      });
+    } catch (error) {
+      set({
+        isSpeaking: false,
+        voiceError: error.message || 'Text-to-speech failed.',
+      });
+    }
+  },
+
+  stopSpeaking: async () => {
+    try {
+      await Speech.stop();
+    } finally {
+      set({ isSpeaking: false });
+    }
+  },
+
+  startVoiceRecording: async () => {
+    const current = get();
+    if (current.isRecording || current.isTranscribing) return null;
+
+    try {
+      await get().stopSpeaking();
+      const permission = await requestRecordingPermissionsAsync();
+      if (!permission.granted) {
+        throw new Error('Microphone permission was not granted.');
+      }
+
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+      });
+
+      const recording = new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY);
+      await recording.prepareToRecordAsync();
+      recording.record();
+      set({
+        voiceRecording: recording,
+        isRecording: true,
+        voiceError: null,
+      });
+      get().logTraceEvent('voice_recording_started', {});
+      return recording;
+    } catch (error) {
+      set({
+        isRecording: false,
+        voiceRecording: null,
+        voiceError: error.message || 'Could not start voice recording.',
+      });
+      return null;
+    }
+  },
+
+  stopVoiceRecordingAndSend: async () => {
+    const { voiceRecording, sessionId } = get();
+    if (!voiceRecording) return null;
+
+    set({ isRecording: false, isTranscribing: true, voiceError: null });
+    try {
+      await voiceRecording.stop();
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+      });
+
+      const uri = voiceRecording.uri || voiceRecording.getStatus?.()?.url;
+      if (!uri) {
+        throw new Error('Recording file was not created.');
+      }
+
+      get().logTraceEvent('voice_recording_stopped', { uri });
+      const response = await transcribeAudio({
+        uri,
+        mimeType: 'audio/m4a',
+        sessionId,
+      });
+      const transcript = response.transcript?.trim();
+      if (!transcript) {
+        throw new Error('No speech was detected.');
+      }
+
+      set({
+        sessionId: response.session_id || sessionId,
+        lastTranscript: transcript,
+        voiceRecording: null,
+        isTranscribing: false,
+      });
+      get().logTraceEvent('voice_transcription_received', {
+        provider: response.provider,
+        transcript_length: transcript.length,
+        duration_ms: response.duration_ms,
+      });
+      return await get().sendMessage(transcript);
+    } catch (error) {
+      set({
+        voiceRecording: null,
+        isTranscribing: false,
+        voiceError: error.message || 'Voice transcription failed.',
+      });
+      get().logTraceEvent('voice_transcription_failed', {
+        error: error.message || 'Voice transcription failed.',
+      });
+      return null;
+    }
+  },
+
   sendMessage: async (text, context = {}) => {
     const message = text.trim();
     if (!message) return null;
@@ -542,10 +700,35 @@ const useAppStore = create((set, get) => ({
         ? { id: waypointContext.id, name: waypointContext.name }
         : null,
     };
+    const assistantId = createClientId('assistant-stream');
+    const updateAssistantMessage = (patch) => {
+      set((current) => ({
+        chatMessages: current.chatMessages.map((chatMessage) => (
+          chatMessage.id === assistantId
+            ? {
+                ...chatMessage,
+                ...(typeof patch === 'function' ? patch(chatMessage) : patch),
+              }
+            : chatMessage
+        )),
+      }));
+    };
 
     set((current) => ({
-      chatMessages: [...current.chatMessages, userMessage],
+      chatMessages: [
+        ...current.chatMessages,
+        userMessage,
+        {
+          id: assistantId,
+          role: 'assistant',
+          content: 'Preparing context...',
+          timestamp: new Date().toISOString(),
+          isStreaming: true,
+          isStatus: true,
+        },
+      ],
       isChatLoading: true,
+      chatStreamStatus: 'Preparing context',
       chatError: null,
     }));
 
@@ -558,12 +741,42 @@ const useAppStore = create((set, get) => ({
     });
 
     try {
-      const response = await sendChatMessage({
+      let streamedReply = '';
+      const response = await sendChatMessageStream({
         message,
         sessionId,
         lat: context.lat ?? waypointLat ?? location.lat,
         lng: context.lng ?? waypointLng ?? location.lng,
         waypointId: context.waypointId || waypointContext?.id || location.waypointId,
+        onEvent: (event) => {
+          if (event.type === 'status') {
+            const label = event.label || 'Thinking';
+            set({ chatStreamStatus: label });
+            if (!streamedReply) {
+              updateAssistantMessage({
+                content: `${label}...`,
+                isStatus: true,
+              });
+            }
+            return;
+          }
+
+          if (event.type === 'meta') {
+            if (event.session_id) {
+              set({ sessionId: event.session_id });
+            }
+            return;
+          }
+
+          if (event.type === 'delta' && event.text) {
+            streamedReply += event.text;
+            updateAssistantMessage({
+              content: streamedReply,
+              isStreaming: true,
+              isStatus: false,
+            });
+          }
+        },
       });
 
       let actionPayload = response.action_payload || null;
@@ -572,7 +785,7 @@ const useAppStore = create((set, get) => ({
       }
 
       const assistantMessage = {
-        id: createClientId('assistant'),
+        id: assistantId,
         role: 'assistant',
         content: response.reply,
         timestamp: new Date().toISOString(),
@@ -582,10 +795,17 @@ const useAppStore = create((set, get) => ({
         webSearchUsed: response.web_search_used,
       };
 
-      set((current) => ({
+      set(() => ({
         sessionId: response.session_id,
-        chatMessages: [...current.chatMessages, assistantMessage],
+        chatStreamStatus: null,
+        chatMessages: get().chatMessages.map((chatMessage) => (
+          chatMessage.id === assistantId ? assistantMessage : chatMessage
+        )),
       }));
+
+      if (get().voiceModeEnabled && !context.suppressSpeech) {
+        get().speakAssistantReply(response.reply);
+      }
 
       get().logTraceEvent('chat_message_response_received', {
         response_waypoint_id: response.waypoint_id,
@@ -597,25 +817,89 @@ const useAppStore = create((set, get) => ({
 
       return assistantMessage;
     } catch (error) {
-      const errorMessage = {
-        id: createClientId('assistant-error'),
-        role: 'assistant',
-        content: `I could not reach the SeoulWalk server. ${error.message}`,
-        timestamp: new Date().toISOString(),
-        isError: true,
-      };
-      set((current) => ({
-        chatError: error.message,
-        chatMessages: [...current.chatMessages, errorMessage],
-      }));
-      get().logTraceEvent('chat_message_failed', {
+      get().logTraceEvent('chat_stream_failed_falling_back', {
         message,
         error: error.message,
         waypoint_id: waypointContext?.id || location.waypointId || null,
       });
+
+      try {
+        updateAssistantMessage({
+          content: 'Finishing response...',
+          isStreaming: true,
+          isStatus: true,
+        });
+
+        const response = await sendChatMessage({
+          message,
+          sessionId,
+          lat: context.lat ?? waypointLat ?? location.lat,
+          lng: context.lng ?? waypointLng ?? location.lng,
+          waypointId: context.waypointId || waypointContext?.id || location.waypointId,
+        });
+
+        let actionPayload = response.action_payload || null;
+        if (response.action === 'OPEN_NAVER_MAP' && !actionPayload) {
+          actionPayload = await get().buildNaverActionPayload();
+        }
+
+        const assistantMessage = {
+          id: assistantId,
+          role: 'assistant',
+          content: response.reply,
+          timestamp: new Date().toISOString(),
+          action: response.action,
+          actionPayload,
+          waypointId: response.waypoint_id,
+          webSearchUsed: response.web_search_used,
+        };
+
+        set(() => ({
+          sessionId: response.session_id,
+          chatStreamStatus: null,
+          chatMessages: get().chatMessages.map((chatMessage) => (
+            chatMessage.id === assistantId ? assistantMessage : chatMessage
+          )),
+        }));
+
+        if (get().voiceModeEnabled && !context.suppressSpeech) {
+          get().speakAssistantReply(response.reply);
+        }
+
+        get().logTraceEvent('chat_message_response_received', {
+          response_waypoint_id: response.waypoint_id,
+          action: response.action,
+          web_search_used: response.web_search_used,
+          reply_length: response.reply?.length || 0,
+          backend_intent: response.debug_trace?.intent,
+          fallback_from_stream: true,
+        });
+
+        return assistantMessage;
+      } catch (fallbackError) {
+      const errorMessage = {
+        id: assistantId,
+        role: 'assistant',
+        content: `I could not reach the SeoulWalk server. ${fallbackError.message}`,
+        timestamp: new Date().toISOString(),
+        isError: true,
+      };
+      set((current) => ({
+        chatError: fallbackError.message,
+        chatStreamStatus: null,
+        chatMessages: current.chatMessages.map((chatMessage) => (
+          chatMessage.id === assistantId ? errorMessage : chatMessage
+        )),
+      }));
+      get().logTraceEvent('chat_message_failed', {
+        message,
+        error: fallbackError.message,
+        waypoint_id: waypointContext?.id || location.waypointId || null,
+      });
       return errorMessage;
+      }
     } finally {
-      set({ isChatLoading: false });
+      set({ isChatLoading: false, chatStreamStatus: null });
     }
   },
 
@@ -643,6 +927,14 @@ const useAppStore = create((set, get) => ({
       chatError: null,
     }));
 
+    get().logTraceEvent('vision_message_submitted', {
+      message,
+      waypoint_id: waypointContext?.id || location.waypointId || null,
+      waypoint_name: waypointContext?.name || null,
+      has_coordinates: Boolean((waypointLat ?? location.lat) && (waypointLng ?? location.lng)),
+      image_base64_chars: imageBase64?.length || 0,
+    });
+
     try {
       const response = await sendVisionChat({
         imageBase64,
@@ -668,6 +960,16 @@ const useAppStore = create((set, get) => ({
         chatMessages: [...current.chatMessages, assistantMessage],
       }));
 
+      if (get().voiceModeEnabled && !context.suppressSpeech) {
+        get().speakAssistantReply(response.reply);
+      }
+
+      get().logTraceEvent('vision_message_response_received', {
+        response_waypoint_id: response.waypoint_id,
+        identified_subject: response.identified_subject,
+        reply_length: response.reply?.length || 0,
+      });
+
       return assistantMessage;
     } catch (error) {
       const errorMessage = {
@@ -681,6 +983,11 @@ const useAppStore = create((set, get) => ({
         chatError: error.message,
         chatMessages: [...current.chatMessages, errorMessage],
       }));
+      get().logTraceEvent('vision_message_failed', {
+        message,
+        error: error.message,
+        waypoint_id: waypointContext?.id || location.waypointId || null,
+      });
       return errorMessage;
     } finally {
       set({ isChatLoading: false });
@@ -710,8 +1017,19 @@ const useAppStore = create((set, get) => ({
         : DEFAULT_NAVER_TARGET;
 
     try {
-      return await getNaverMapLink(target);
+      const payload = await getNaverMapLink(target);
+      get().logTraceEvent('naver_handoff_payload_created', {
+        place_name: target.placeName,
+        latitude: target.lat,
+        longitude: target.lng,
+      });
+      return payload;
     } catch {
+      get().logTraceEvent('naver_handoff_payload_fallback', {
+        place_name: target.placeName,
+        latitude: target.lat,
+        longitude: target.lng,
+      });
       return {
         place_name: target.placeName,
         naver_web_url: `https://map.naver.com/v5/search/${encodeURIComponent(target.placeName)}`,

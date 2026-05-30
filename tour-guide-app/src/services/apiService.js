@@ -105,6 +105,96 @@ export function sendChatMessage({
   });
 }
 
+export function sendChatMessageStream({
+  message,
+  sessionId,
+  lat,
+  lng,
+  waypointId,
+  provider,
+  modelOverride,
+  onEvent,
+}) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    let seenLength = 0;
+    let buffer = '';
+    let finalPayload = null;
+
+    const processText = (text) => {
+      buffer += text;
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      lines.forEach((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        let event;
+        try {
+          event = JSON.parse(trimmed);
+        } catch {
+          return;
+        }
+        onEvent?.(event);
+        if (event.type === 'done') {
+          finalPayload = event;
+        }
+        if (event.type === 'error') {
+          throw new ApiError(event.message || 'Streaming chat failed.');
+        }
+      });
+    };
+
+    xhr.open('POST', buildUrl('/chat/stream'));
+    xhr.setRequestHeader('Accept', 'application/x-ndjson');
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.timeout = DEFAULT_TIMEOUT_MS;
+
+    xhr.onprogress = () => {
+      try {
+        const nextText = xhr.responseText.slice(seenLength);
+        seenLength = xhr.responseText.length;
+        processText(nextText);
+      } catch (error) {
+        xhr.abort();
+        reject(error);
+      }
+    };
+
+    xhr.onload = () => {
+      try {
+        const nextText = xhr.responseText.slice(seenLength);
+        seenLength = xhr.responseText.length;
+        processText(nextText);
+        if (xhr.status < 200 || xhr.status >= 300) {
+          reject(new ApiError(`Streaming chat failed with status ${xhr.status}.`, { status: xhr.status }));
+          return;
+        }
+        if (!finalPayload) {
+          reject(new ApiError('Streaming chat ended before the assistant finished.'));
+          return;
+        }
+        resolve(finalPayload);
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    xhr.onerror = () => reject(new ApiError('Unable to reach the SeoulWalk streaming API.'));
+    xhr.ontimeout = () => reject(new ApiError('Streaming chat timed out.'));
+
+    xhr.send(JSON.stringify({
+      message,
+      session_id: sessionId || undefined,
+      latitude: lat ?? undefined,
+      longitude: lng ?? undefined,
+      waypoint_id: waypointId || undefined,
+      provider: provider || undefined,
+      model_override: modelOverride || undefined,
+    }));
+  });
+}
+
 export function sendVisionChat({
   imageBase64,
   message = 'What is this?',
@@ -126,6 +216,56 @@ export function sendVisionChat({
       waypoint_id: waypointId || undefined,
     },
   });
+}
+
+export async function transcribeAudio({
+  uri,
+  mimeType = 'audio/m4a',
+  sessionId,
+}) {
+  const formData = new FormData();
+  formData.append('audio', {
+    uri,
+    name: `seoulwalk-voice-${Date.now()}.m4a`,
+    type: mimeType,
+  });
+  if (sessionId) {
+    formData.append('session_id', sessionId);
+  }
+
+  try {
+    const response = await fetch(buildUrl('/voice/transcribe'), {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+      },
+      body: formData,
+    });
+
+    const text = await response.text();
+    let payload = null;
+    if (text) {
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        payload = { detail: text };
+      }
+    }
+
+    if (!response.ok) {
+      throw new ApiError(
+        normalizeErrorMessage(payload, `Request failed with status ${response.status}`),
+        { status: response.status, payload },
+      );
+    }
+
+    return payload;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    throw new ApiError(error.message || 'Unable to transcribe voice recording.');
+  }
 }
 
 export function generateItinerary({
@@ -214,7 +354,9 @@ export default {
   API_BASE_URL,
   healthCheck,
   sendChatMessage,
+  sendChatMessageStream,
   sendVisionChat,
+  transcribeAudio,
   generateItinerary,
   getItinerary,
   reorderItinerary,

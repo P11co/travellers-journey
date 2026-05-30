@@ -11,19 +11,42 @@ import TourMapScreen from './screens/tour_map';
 import AIChatInterface from './screens/buddy_ai_chat_fullscreen_open_in_naver';
 import SettingsConfigurationView from './screens/settings_configuration_animated';
 import HotspotDetailScreen from './screens/hotspot_detail';
+import WaypointArticleScreen from './screens/waypoint_article';
+import useAppStore from './src/store';
+import { getTheme } from './src/theme';
 
 const Stack = createNativeStackNavigator();
 
 export default function App() {
+  const themeMode = useAppStore((s) => s.themeMode);
+  const theme = getTheme(themeMode);
+  const navigationTheme = {
+    dark: themeMode === 'dark',
+    colors: {
+      primary: theme.accent,
+      background: theme.background,
+      card: theme.surface,
+      text: theme.text,
+      border: theme.border,
+      notification: theme.accent,
+    },
+    fonts: {
+      regular: { fontFamily: undefined, fontWeight: '400' },
+      medium: { fontFamily: undefined, fontWeight: '500' },
+      bold: { fontFamily: undefined, fontWeight: '700' },
+      heavy: { fontFamily: undefined, fontWeight: '900' },
+    },
+  };
+
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
+      <NavigationContainer theme={navigationTheme}>
         <Stack.Navigator
           initialRouteName="Home"
           screenOptions={{
             headerShown: false,
             animation: 'slide_from_right',
-            contentStyle: { backgroundColor: '#0F0F12' },
+            contentStyle: { backgroundColor: theme.background },
           }}
         >
           <Stack.Screen name="Home" component={HomeScreen} />
@@ -35,6 +58,11 @@ export default function App() {
           />
           <Stack.Screen name="ConfirmItinerary" component={CurrentItineraryView} />
           <Stack.Screen name="TourMap" component={TourMapScreen} />
+          <Stack.Screen
+            name="WaypointArticle"
+            component={WaypointArticleScreen}
+            options={{ gestureEnabled: true, animation: 'slide_from_right' }}
+          />
           <Stack.Screen name="Chat" component={AIChatInterface} options={{ animation: 'slide_from_bottom' }} />
           <Stack.Screen name="Settings" component={SettingsConfigurationView} />
         </Stack.Navigator>

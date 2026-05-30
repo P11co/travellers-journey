@@ -1,11 +1,13 @@
-import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, TouchableOpacity, View, Text, StyleSheet } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Image, TouchableOpacity, View, Text, StyleSheet } from 'react-native';
 import { WebView } from 'react-native-webview';
 import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useAppStore from '../../src/store';
 import waypointsData from '../../src/data/waypoints.json';
+import { getWaypointImage } from '../../src/data/waypointImages';
 import TrioDock from '../../src/components/TrioDock';
+import { getTheme } from '../../src/theme';
 
 const PALACE_CENTER = {
   latitude: 37.5796,
@@ -216,9 +218,13 @@ export default function ARMapNavigationView({ navigation, showBottomNav = true, 
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapError, setMapError] = useState(null);
   const [selectedWaypoint, setSelectedWaypoint] = useState(null);
+  const [entryWaypoint, setEntryWaypoint] = useState(null);
+  const lastActiveWaypointIdRef = useRef(null);
   const currentLocation = useAppStore((s) => s.currentLocation);
   const setChatWaypointContext = useAppStore((s) => s.setChatWaypointContext);
   const logTraceEvent = useAppStore((s) => s.logTraceEvent);
+  const themeMode = useAppStore((s) => s.themeMode);
+  const theme = getTheme(themeMode);
   const currentCoords = getCurrentCoords(currentLocation);
   const notificationTop = Math.max(92, insets.top + 42);
 
@@ -262,6 +268,23 @@ export default function ARMapNavigationView({ navigation, showBottomNav = true, 
     mapWaypoints,
   ]);
 
+  useEffect(() => {
+    const nextId = activeWaypoint?.id || null;
+    const previousId = lastActiveWaypointIdRef.current;
+
+    if (nextId && nextId !== previousId) {
+      setEntryWaypoint(activeWaypoint);
+      logTraceEvent('waypoint_radius_entered', {
+        waypoint_id: activeWaypoint.id,
+        waypoint_name: activeWaypoint.name,
+        latitude: activeWaypoint.coordinates?.latitude,
+        longitude: activeWaypoint.coordinates?.longitude,
+      });
+    }
+
+    lastActiveWaypointIdRef.current = nextId;
+  }, [activeWaypoint?.id]);
+
   const handleMapReady = () => {
     setIsMapReady(true);
     setMapError(null);
@@ -295,14 +318,28 @@ export default function ARMapNavigationView({ navigation, showBottomNav = true, 
   };
 
   const handleAskBuddyAboutWaypoint = () => {
-    if (!selectedWaypoint) return;
-    setChatWaypointContext(selectedWaypoint);
+    const targetWaypoint = selectedWaypoint || entryWaypoint || activeWaypoint;
+    if (!targetWaypoint) return;
+    setChatWaypointContext(targetWaypoint);
     setSelectedWaypoint(null);
-    onAskWaypoint?.(selectedWaypoint);
+    setEntryWaypoint(null);
+    onAskWaypoint?.(targetWaypoint);
   };
 
-  const displayWaypoint = selectedWaypoint || activeWaypoint;
+  const handleReadStory = () => {
+    const targetWaypoint = selectedWaypoint || entryWaypoint || activeWaypoint;
+    if (!targetWaypoint) return;
+    logTraceEvent('waypoint_article_opened', {
+      waypoint_id: targetWaypoint.id,
+      waypoint_name: targetWaypoint.name,
+      source: selectedWaypoint ? 'marker_card' : 'entry_popup',
+    });
+    navigation.navigate('WaypointArticle', { waypointId: targetWaypoint.id });
+  };
+
+  const displayWaypoint = selectedWaypoint || entryWaypoint || activeWaypoint;
   const isInspectingWaypoint = Boolean(selectedWaypoint);
+  const isEntryPrompt = Boolean(entryWaypoint && !selectedWaypoint);
 
   return (
     <View style={styles.container}>
@@ -322,15 +359,15 @@ export default function ARMapNavigationView({ navigation, showBottomNav = true, 
         onHttpError={handleMapError}
         renderLoading={() => (
           <View style={styles.webMapLoading}>
-            <ActivityIndicator size="large" color="#8ca1ff" />
+            <ActivityIndicator size="large" color={theme.accent} />
           </View>
         )}
       />
 
       {!isMapReady && (
         <View style={styles.mapLoadingBadge} pointerEvents="none">
-          <ActivityIndicator size="small" color="#8ca1ff" />
-          <Text style={styles.mapLoadingText}>Loading map</Text>
+          <ActivityIndicator size="small" color={theme.accent} />
+          <Text style={[styles.mapLoadingText, { color: theme.text }]}>Loading map</Text>
         </View>
       )}
 
@@ -341,27 +378,35 @@ export default function ARMapNavigationView({ navigation, showBottomNav = true, 
       )}
 
       <View style={[styles.topNotificationContainer, { top: notificationTop }]}>
-        <View style={styles.notificationPanel}>
-          <View style={styles.iconContainer}>
-            <Svg width="24" height="24" fill="none" stroke="#8ca1ff" strokeWidth="1.5" viewBox="0 0 24 24">
-              <Path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              <Path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-            </Svg>
-          </View>
+        <View style={[styles.notificationPanel, { backgroundColor: theme.panel, borderColor: theme.border, shadowColor: theme.shadow }]}>
+          <Image
+            source={getWaypointImage(displayWaypoint?.id)}
+            style={[styles.notificationThumbnail, { backgroundColor: theme.iconSurface, borderColor: theme.accent }]}
+            resizeMode="cover"
+          />
           <View style={styles.textContainer}>
-            <Text style={styles.notificationTitle}>
+            <Text style={[styles.notificationTitle, { color: theme.text }]}>
               {displayWaypoint ? displayWaypoint.name : 'Palace map ready'}
             </Text>
-            <Text style={styles.notificationSubtitle} numberOfLines={isInspectingWaypoint ? 2 : 1}>
+            <Text style={[styles.notificationSubtitle, { color: theme.mutedText }]} numberOfLines={isInspectingWaypoint ? 2 : 1}>
               {displayWaypoint ? (displayWaypoint.summary || displayWaypoint.knowledgeSummary) : 'Move around to detect nearby waypoints.'}
             </Text>
-            {isInspectingWaypoint && (
+            {(isInspectingWaypoint || isEntryPrompt) && (
               <View style={styles.waypointActionRow}>
-                <TouchableOpacity style={styles.askBuddyButton} onPress={handleAskBuddyAboutWaypoint}>
+                <TouchableOpacity style={[styles.askBuddyButton, { backgroundColor: theme.accent }]} onPress={handleReadStory}>
+                  <Text style={styles.askBuddyButtonText}>Read Story</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.askBuddyButton, { backgroundColor: theme.accent }]} onPress={handleAskBuddyAboutWaypoint}>
                   <Text style={styles.askBuddyButtonText}>Ask Buddy about this</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.dismissWaypointButton} onPress={() => setSelectedWaypoint(null)}>
-                  <Text style={styles.dismissWaypointText}>Cancel</Text>
+                <TouchableOpacity
+                  style={styles.dismissWaypointButton}
+                  onPress={() => {
+                    setSelectedWaypoint(null);
+                    setEntryWaypoint(null);
+                  }}
+                >
+                  <Text style={[styles.dismissWaypointText, { color: theme.mutedText }]}>Cancel</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -415,15 +460,13 @@ const styles = StyleSheet.create({
     shadowRadius: 32,
     elevation: 8,
   },
-  iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(92, 119, 255, 0.14)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  notificationThumbnail: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#111827',
     borderWidth: 1,
-    borderColor: 'rgba(92, 119, 255, 0.28)',
+    borderColor: 'rgba(140, 161, 255, 0.55)',
   },
   textContainer: {
     flex: 1,

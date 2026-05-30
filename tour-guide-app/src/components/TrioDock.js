@@ -2,6 +2,8 @@ import React from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import useAppStore from '../store';
+import { getTheme } from '../theme';
 
 const ITEMS = [
   {
@@ -36,6 +38,8 @@ export default function TrioDock({
   style,
 }) {
   const insets = useSafeAreaInsets();
+  const themeMode = useAppStore((s) => s.themeMode);
+  const theme = getTheme(themeMode);
 
   const handlePress = (item) => {
     if (item.key === 'itinerary' && onItineraryPress) {
@@ -59,16 +63,16 @@ export default function TrioDock({
 
   return (
     <View pointerEvents="box-none" style={[styles.wrapper, positionStyle, style]}>
-      <View style={styles.dock}>
+      <View style={[styles.dock, { backgroundColor: theme.dock, borderColor: theme.border, shadowColor: theme.shadow }]}>
         {ITEMS.map((item) => {
           const active = item.key === activeKey;
-          const stroke = active ? '#ffffff' : '#a1a1aa';
+          const stroke = active ? '#ffffff' : theme.mutedText;
           const paths = item.paths || [item.path];
 
           return (
             <TouchableOpacity
               key={item.key}
-              style={[styles.button, active && styles.activeButton]}
+              style={[styles.button, active && [styles.activeButton, { backgroundColor: theme.accent, shadowColor: theme.accent }]]}
               onPress={() => handlePress(item)}
               activeOpacity={0.82}
               hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}

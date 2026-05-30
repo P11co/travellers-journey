@@ -8,9 +8,17 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.tourguideapp"
+      "bundleIdentifier": "com.anonymous.tourguideapp",
+      "infoPlist": {
+        "NSCameraUsageDescription": "SeoulWalk uses the camera so Buddy can explain what you are looking at.",
+        "NSMicrophoneUsageDescription": "SeoulWalk uses the microphone for push-to-talk voice questions."
+      }
     },
     "android": {
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO"
+      ],
       "package": "com.anonymous.tourguideapp",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -21,6 +29,9 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-audio"
+    ]
   }
 }

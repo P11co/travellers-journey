@@ -428,7 +428,7 @@ export default function PlanYourJourneyView({ navigation }) {
             <View style={styles.generationNoticeTextWrap}>
               <Text style={styles.generationNoticeTitle}>Generating itinerary</Text>
               <Text style={styles.generationNoticeSubtitle}>
-                Please wait while we generate your itinerary. This may take a while. Feel free to click into the locations you are about to visit to learn more
+                This may take a while. Click into (...) to learn more
               </Text>
             </View>
           </View>

@@ -8,12 +8,13 @@ import {
   TextInput,
   StyleSheet,
   Dimensions,
-  Image,
   Linking
 } from 'react-native';
 import Svg, { Path, Line } from 'react-native-svg';
 import useAppStore from '../../src/store';
 import TrioDock from '../../src/components/TrioDock';
+import VisionCameraPanel from '../../src/components/VisionCameraPanel';
+import { getTheme } from '../../src/theme';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -26,8 +27,21 @@ export default function AIChatInterface({ navigation }) {
   const chatMessages = useAppStore((s) => s.chatMessages);
   const chatWaypointContext = useAppStore((s) => s.chatWaypointContext);
   const isChatLoading = useAppStore((s) => s.isChatLoading);
+  const isRecording = useAppStore((s) => s.isRecording);
+  const isTranscribing = useAppStore((s) => s.isTranscribing);
+  const isSpeaking = useAppStore((s) => s.isSpeaking);
+  const voiceModeEnabled = useAppStore((s) => s.voiceModeEnabled);
   const sendMessage = useAppStore((s) => s.sendMessage);
+  const sendVisionMessage = useAppStore((s) => s.sendVisionMessage);
+  const startVoiceRecording = useAppStore((s) => s.startVoiceRecording);
+  const stopVoiceRecordingAndSend = useAppStore((s) => s.stopVoiceRecordingAndSend);
+  const setVoiceModeEnabled = useAppStore((s) => s.setVoiceModeEnabled);
+  const stopSpeaking = useAppStore((s) => s.stopSpeaking);
+  const logTraceEvent = useAppStore((s) => s.logTraceEvent);
   const clearChatWaypointContext = useAppStore((s) => s.clearChatWaypointContext);
+  const themeMode = useAppStore((s) => s.themeMode);
+  const theme = getTheme(themeMode);
+  const hasStreamingMessage = chatMessages.some((message) => message.isStreaming);
 
   const scrollToBottom = (animated = true) => {
     scrollViewRef.current?.scrollToEnd({ animated });
@@ -60,18 +74,54 @@ export default function AIChatInterface({ navigation }) {
   const handleOpenNaver = async (payload) => {
     if (!payload) return;
 
+    logTraceEvent('naver_handoff_pressed', {
+      has_app_url: Boolean(payload.naver_app_url),
+      has_web_url: Boolean(payload.naver_web_url),
+      place_name: payload.place_name,
+    });
+
     try {
       if (payload.naver_app_url) {
+        logTraceEvent('naver_handoff_app_open_attempted', { url_scheme: 'nmap' });
         await Linking.openURL(payload.naver_app_url);
+        logTraceEvent('naver_handoff_app_opened', { url_scheme: 'nmap' });
         return;
       }
     } catch {
+      logTraceEvent('naver_handoff_web_fallback', { reason: 'app_url_failed' });
       // Fall back to the web URL below.
     }
 
     if (payload.naver_web_url) {
-      await Linking.openURL(payload.naver_web_url);
+      try {
+        await Linking.openURL(payload.naver_web_url);
+        logTraceEvent('naver_handoff_web_opened', { url_scheme: 'https' });
+      } catch (error) {
+        logTraceEvent('naver_handoff_failed', { error: error.message });
+      }
     }
+  };
+
+  const handleCapturePhoto = async (imageBase64) => {
+    setCameraVisible(false);
+    await sendVisionMessage(imageBase64, inputText.trim() || 'What is this?');
+    setInputText('');
+  };
+
+  const handleMicPress = async () => {
+    if (isRecording) {
+      await stopVoiceRecordingAndSend();
+      return;
+    }
+    await startVoiceRecording();
+  };
+
+  const handleSpeakerPress = () => {
+    if (isSpeaking) {
+      stopSpeaking();
+      return;
+    }
+    setVoiceModeEnabled(!voiceModeEnabled);
   };
 
   const formatTimestamp = (value) => {
@@ -84,7 +134,7 @@ export default function AIChatInterface({ navigation }) {
     if (message.role === 'user') {
       return (
         <View key={message.id} style={styles.userMessageRow}>
-          <View style={styles.msgUserPill}>
+          <View style={[styles.msgUserPill, { backgroundColor: theme.accent }]}>
             <Text style={styles.msgTextUser}>{message.content}</Text>
             {message.attachmentType === 'image' && (
               <Text style={styles.userAttachmentText}>Photo attached</Text>
@@ -100,14 +150,18 @@ export default function AIChatInterface({ navigation }) {
 
     return (
       <View key={message.id} style={styles.buddyMessageRow}>
-        <View style={styles.avatarContainer}>
-          <Svg width="16" height="16" fill="#5c77ff" viewBox="0 0 20 20">
+        <View style={[styles.avatarContainer, { backgroundColor: theme.iconSurface, borderColor: theme.assistantBorder }]}>
+          <Svg width="16" height="16" fill={theme.accent} viewBox="0 0 20 20">
             <Path fillRule="evenodd" clipRule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" />
           </Svg>
         </View>
         <View style={styles.msgBuddyPillContainer}>
-          <View style={[styles.msgBuddyPill, message.isError && styles.errorBubble]}>
-            <Text style={styles.msgTextBuddy}>{message.content}</Text>
+          <View style={[
+            styles.msgBuddyPill,
+            { backgroundColor: theme.assistantBubble, borderColor: theme.assistantBorder, shadowColor: theme.shadow },
+            message.isError && [styles.errorBubble, { backgroundColor: themeMode === 'light' ? '#fef2f2' : '#2a1111' }],
+          ]}>
+            <Text style={[styles.msgTextBuddy, { color: theme.text }]}>{message.content}</Text>
             {message.action === 'OPEN_NAVER_MAP' && message.actionPayload && (
               <TouchableOpacity style={styles.naverButton} onPress={() => handleOpenNaver(message.actionPayload)}>
                 <Svg width="18" height="18" fill="#ffffff" viewBox="0 0 24 24" style={styles.naverIcon}>
@@ -124,11 +178,11 @@ export default function AIChatInterface({ navigation }) {
   };
 
   return (
-    <View style={styles.deviceWrapper}>
+    <View style={[styles.deviceWrapper, { backgroundColor: theme.background }]}>
       {/* 1. IMMERSIVE GRADIENT & GRID BACKGROUND PATTERN */}
       <View style={styles.backgroundContainer}>
-        <View style={styles.radialGlowOverlay} />
-        <Svg style={styles.gridOverlay} pointerEvents="none">
+        <View style={[styles.radialGlowOverlay, { backgroundColor: theme.background, opacity: themeMode === 'light' ? 1 : 0.95 }]} />
+        <Svg style={[styles.gridOverlay, { opacity: themeMode === 'light' ? 0.12 : 0.25 }]} pointerEvents="none">
           {/* Custom Matrix Grid Emulation */}
           {Array.from({ length: 15 }).map((_, i) => (
             <Line key={`h-${i}`} x1="0" y1={i * 60} x2={screenWidth} y2={i * 60} stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
@@ -159,15 +213,17 @@ export default function AIChatInterface({ navigation }) {
         onScroll={handleScroll}
         onContentSizeChange={handleContentSizeChange}
       >
-        <Text style={styles.dateStamp}>TODAY</Text>
+        <Text style={[styles.dateStamp, { color: theme.subtleText }]}>TODAY</Text>
         {chatMessages.map(renderMessage)}
-        {isChatLoading && (
+        {((isChatLoading && !hasStreamingMessage) || isTranscribing) && (
           <View style={styles.buddyMessageRow}>
-            <View style={styles.avatarContainer}>
-              <ActivityIndicator color="#5c77ff" size="small" />
+            <View style={[styles.avatarContainer, { backgroundColor: theme.iconSurface, borderColor: theme.assistantBorder }]}>
+              <ActivityIndicator color={theme.accent} size="small" />
             </View>
-            <View style={styles.msgBuddyPill}>
-              <Text style={styles.msgTextBuddy}>Typing...</Text>
+            <View style={[styles.msgBuddyPill, { backgroundColor: theme.assistantBubble, borderColor: theme.assistantBorder }]}>
+              <Text style={[styles.msgTextBuddy, { color: theme.text }]}>
+                {isTranscribing ? 'Transcribing voice...' : 'Thinking...'}
+              </Text>
             </View>
           </View>
         )}
@@ -175,27 +231,17 @@ export default function AIChatInterface({ navigation }) {
 
       {/* 4. CAMERA VIEWFINDER FLOATING LIVE-PANEL OVERLAY */}
       {cameraVisible && (
-        <View style={styles.cameraViewfinder}>
-          {/* Custom Layout Framing Corner Brackets */}
-          <View style={[styles.focusBracket, styles.bracketTL]} />
-          <View style={[styles.focusBracket, styles.bracketTR]} />
-          <View style={[styles.focusBracket, styles.bracketBL]} />
-          <View style={[styles.focusBracket, styles.bracketBR]} />
-
-          <View style={styles.liveTagBadge}>
-            <View style={styles.redPulseDot} />
-            <Text style={styles.liveTagText}>LIVE</Text>
-          </View>
-          <Image
-            source={{ uri: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=400' }}
-            style={styles.povCameraFrame}
-          />
-        </View>
+        <VisionCameraPanel
+          style={styles.cameraViewfinder}
+          onCapture={handleCapturePhoto}
+          onClose={() => setCameraVisible(false)}
+          disabled={isChatLoading}
+        />
       )}
 
       {/* 5. FLOATING HUD FUNCTION SIDEBAR */}
       {sidebarVisible && (
-        <View style={styles.actionSidebar}>
+        <View style={[styles.actionSidebar, { backgroundColor: theme.surface, shadowColor: theme.shadow }]}>
           <TouchableOpacity
             style={styles.sidebarActionButton}
             onPress={() => setCameraVisible(!cameraVisible)}
@@ -206,14 +252,21 @@ export default function AIChatInterface({ navigation }) {
             </Svg>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.sidebarActionButton}>
-            <Svg width="22" height="22" fill="none" stroke="#9ca3af" strokeWidth="2" viewBox="0 0 24 24">
+          <TouchableOpacity
+            style={[styles.sidebarActionButton, isRecording && styles.sidebarActionButtonActive]}
+            onPress={handleMicPress}
+            disabled={isTranscribing}
+          >
+            <Svg width="22" height="22" fill="none" stroke={isRecording ? '#ffffff' : '#9ca3af'} strokeWidth="2" viewBox="0 0 24 24">
               <Path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
             </Svg>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.sidebarActionButton}>
-            <Svg width="22" height="22" fill="none" stroke="#9ca3af" strokeWidth="2" viewBox="0 0 24 24">
+          <TouchableOpacity
+            style={[styles.sidebarActionButton, (voiceModeEnabled || isSpeaking) && styles.sidebarActionButtonActive]}
+            onPress={handleSpeakerPress}
+          >
+            <Svg width="22" height="22" fill="none" stroke={(voiceModeEnabled || isSpeaking) ? '#ffffff' : '#9ca3af'} strokeWidth="2" viewBox="0 0 24 24">
               <Path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
             </Svg>
           </TouchableOpacity>
@@ -221,29 +274,29 @@ export default function AIChatInterface({ navigation }) {
       )}
 
       {/* 6. BOTTOM CONTEXT INPUT FOOTER BAR */}
-      <View style={styles.bottomDockInputBar}>
+      <View style={[styles.bottomDockInputBar, { backgroundColor: theme.background, borderColor: theme.border }]}>
         {chatWaypointContext && (
-          <View style={styles.contextChip}>
-            <Text style={styles.contextChipText} numberOfLines={1}>
+          <View style={[styles.contextChip, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}>
+            <Text style={[styles.contextChipText, { color: theme.accent }]} numberOfLines={1}>
               {chatWaypointContext.name} attached
             </Text>
             <TouchableOpacity style={styles.contextChipClose} onPress={clearChatWaypointContext}>
-              <Text style={styles.contextChipCloseText}>x</Text>
+              <Text style={[styles.contextChipCloseText, { color: theme.accent }]}>x</Text>
             </TouchableOpacity>
           </View>
         )}
 
         <View style={styles.bottomInputRow}>
-          <View style={styles.inputFieldContainer}>
+          <View style={[styles.inputFieldContainer, { backgroundColor: theme.input, borderColor: theme.assistantBorder }]}>
             <TouchableOpacity style={styles.audioAttachButton}>
               <Svg width="20" height="20" fill="none" stroke="#5c77ff" strokeWidth="2" viewBox="0 0 24 24">
                 <Path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
               </Svg>
             </TouchableOpacity>
             <TextInput
-              style={styles.textInputBox}
+              style={[styles.textInputBox, { color: theme.text }]}
               placeholder="Ask AI..."
-              placeholderTextColor="#4b5563"
+              placeholderTextColor={theme.subtleText}
               editable={true}
               value={inputText}
               onChangeText={setInputText}
@@ -251,11 +304,11 @@ export default function AIChatInterface({ navigation }) {
               returnKeyType="send"
             />
             <TouchableOpacity
-              style={[styles.sendActionButton, (!inputText.trim() || isChatLoading) && styles.sendActionButtonDisabled]}
+              style={[styles.sendActionButton, { backgroundColor: theme.iconSurface }, (!inputText.trim() || isChatLoading) && styles.sendActionButtonDisabled]}
               onPress={handleSend}
               disabled={!inputText.trim() || isChatLoading}
             >
-              <Svg width="14" height="14" fill="none" stroke="#5c77ff" strokeWidth="2.5" viewBox="0 0 24 24">
+              <Svg width="14" height="14" fill="none" stroke={theme.accent} strokeWidth="2.5" viewBox="0 0 24 24">
                 <Path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
               </Svg>
             </TouchableOpacity>
@@ -263,7 +316,7 @@ export default function AIChatInterface({ navigation }) {
 
           {/* Toggle Menu Toggle Launcher */}
           <TouchableOpacity
-            style={styles.menuDockToggle}
+            style={[styles.menuDockToggle, { backgroundColor: theme.accent, shadowColor: theme.accent }]}
             onPress={() => setSidebarVisible(!sidebarVisible)}
           >
             <Svg width="20" height="20" fill="none" stroke="#ffffff" strokeWidth="2.5" viewBox="0 0 24 24">
@@ -437,6 +490,10 @@ const styles = StyleSheet.create({
   },
   sidebarActionButton: {
     padding: 4,
+    borderRadius: 10,
+  },
+  sidebarActionButtonActive: {
+    backgroundColor: 'rgba(92, 119, 255, 0.28)',
   },
   cameraViewfinder: {
     position: 'absolute',
