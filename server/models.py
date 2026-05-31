@@ -138,11 +138,43 @@ class VisionChatRequest(BaseModel):
     waypoint_id: str | None = None
 
 
+class VisionImageAnalysis(BaseModel):
+    """Internal first-pass interpretation of a submitted image."""
+    identified_subject: str | None = None
+    confidence: str | None = Field(
+        None,
+        description="Low, medium, or high confidence in the identified subject.",
+    )
+    visual_summary: str = Field(
+        "",
+        description="Brief description of what is visible in the image.",
+    )
+    visible_text: str | None = Field(
+        None,
+        description="Any visible Korean or English text and translation if applicable.",
+    )
+    safety_or_weather_cues: str | None = Field(
+        None,
+        description="Only cues directly visible in the photo, if any.",
+    )
+    draft_answer: str = Field(
+        "",
+        description="Vision model's draft answer before final SeoulWalk policy pass.",
+    )
+    uncertainties: list[str] = Field(
+        default_factory=list,
+        description="Reasons the image interpretation may be uncertain.",
+    )
+
+
 class VisionChatResponse(BaseModel):
     """Response from POST /chat/vision"""
     reply: str
     session_id: str
     waypoint_id: str | None = None
+    action: str | None = None
+    action_payload: dict | None = None
+    web_search_used: bool = False
     identified_subject: str | None = Field(
         None,
         description="Best guess at what was identified in the photo (e.g. 'Geunjeongjeon Throne Hall')",

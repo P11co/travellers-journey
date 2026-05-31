@@ -1218,11 +1218,24 @@ const useAppStore = create((set, get) => ({
         imageMimeType,
       });
 
+      const actionLat = context.lat ?? waypointLat ?? location.lat;
+      const actionLng = context.lng ?? waypointLng ?? location.lng;
+      let actionPayload = response.action_payload || null;
+      if (response.action === 'OPEN_NAVER_MAP' && !actionPayload) {
+        actionPayload = buildAmenityNaverPayload({
+          message,
+          lat: actionLat,
+          lng: actionLng,
+        }) || await get().buildNaverActionPayload();
+      }
+
       const assistantMessage = {
         id: createClientId('assistant-vision'),
         role: 'assistant',
         content: response.reply,
         timestamp: new Date().toISOString(),
+        action: response.action,
+        actionPayload,
         waypointId: response.waypoint_id,
         identifiedSubject: response.identified_subject,
       };
@@ -1239,6 +1252,8 @@ const useAppStore = create((set, get) => ({
       get().logTraceEvent('vision_message_response_received', {
         response_waypoint_id: response.waypoint_id,
         identified_subject: response.identified_subject,
+        action: response.action,
+        has_action_payload: Boolean(actionPayload),
         reply_length: response.reply?.length || 0,
       });
 

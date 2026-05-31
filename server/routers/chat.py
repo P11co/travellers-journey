@@ -3,10 +3,11 @@ chat.py — Chat & Vision Router
 
 Endpoints:
   POST /chat         — Text chat with web search augmentation
-  POST /chat/vision  — Multimodal image + text analysis
+  POST /chat/vision  — Multimodal image analysis + SeoulWalk finalization
 
-Both share the same spatial context logic and use the single unified
-LLM model (google/gemma-4-26b-a4b-it:free).
+Both share the same spatial context logic. Text chat uses the configured NVIDIA
+NIM text model; vision uses a vision-capable NVIDIA model for first-pass
+evidence and the text model for final response policy.
 
 Web Search Flow (Task 3):
   1. LLM classifier decides if the query needs live data (temperature=0)
@@ -14,9 +15,9 @@ Web Search Flow (Task 3):
   3. LLM generates a cited, grounded answer
 
 Vision Flow (Task 4):
-  1. Base64 image + text message → sent as multimodal content array
-  2. Vision LLM identifies subject, explains significance, translates Korean text
-  3. Returns TTS-friendly plain text reply
+  1. Base64 image + text message → vision model produces structured evidence
+  2. Evidence is passed into the standard text-chat policy prompt
+  3. Returns one TTS-friendly SeoulWalk reply
 """
 
 import re
@@ -43,6 +44,7 @@ from server.config import (
 from server.models import (
     ChatRequest,
     ChatResponse,
+    VisionImageAnalysis,
     VisionChatRequest,
     VisionChatResponse,
 )
@@ -147,20 +149,26 @@ a photo of something they see while walking through the palace grounds.
 ### 1. TEMPORAL & ENVIRONMENTAL CONTEXT
 {temporal_context}
 
-Your task:
-1. IDENTIFY what is in the photo (building, gate, decoration, sign, artifact, etc.)
-2. State its Korean name (if applicable) and English translation or common name.
-3. Explain its historical or cultural significance in 2-3 sentences.
-4. If there is Korean text (한글) visible in the photo, translate it to English.
-5. If you cannot confidently identify the subject, say so honestly — never guess.
+Your task is first-pass visual analysis only. You are not the final user-facing
+assistant. The standard SeoulWalk chat model will make the final response using
+route, itinerary, Naver handoff, safety, and anti-hallucination policies.
+
+Analyze the submitted image and the user's image question. Capture evidence that
+the final assistant can use. If you cannot confidently identify the subject, say
+so honestly. Do not invent names, directions, open hours, route decisions, or
+live availability.
 
 CURRENT CONTEXT:
 {gps_context}
 
-Rules — your output will be read aloud via Text-to-Speech:
-- Plain text only. No markdown, no bullet points, no asterisks.
-- 2-4 sentences total. Keep it brief and conversational.
-- Do not describe image quality or camera angles — focus on the subject.
+Return compact JSON only with these keys:
+- identified_subject: likely building, gate, object, sign, or artifact name; null if uncertain
+- confidence: "low", "medium", or "high"
+- visual_summary: one short sentence describing what is visible
+- visible_text: visible Korean or English text and translation; null if none
+- safety_or_weather_cues: only visible hazards or weather cues; null if none
+- draft_answer: a brief first-pass answer to the user's image question
+- uncertainties: short list of uncertainty notes
 """
 
 
@@ -356,6 +364,114 @@ def _strip_thinking(text: str | None) -> str:
     if not text:
         return ""
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+
+
+def _extract_json_object(text: str) -> dict | None:
+    """Best-effort JSON object extraction for LLM responses."""
+    if not text:
+        return None
+
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+
+    candidates = [cleaned]
+    match = re.search(r"\{[\s\S]*\}", cleaned)
+    if match:
+        candidates.append(match.group(0))
+
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return None
+
+
+def _string_or_none(value) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or text.lower() in {"none", "null", "n/a"}:
+        return None
+    return text
+
+
+def _parse_vision_analysis(raw: str) -> VisionImageAnalysis:
+    """Convert a vision LLM response into the internal analysis contract."""
+    payload = _extract_json_object(raw) or {}
+    if not payload:
+        return VisionImageAnalysis(
+            confidence="low",
+            visual_summary=raw.strip()[:500] if raw else "",
+            draft_answer=raw.strip() if raw else "I could not confidently analyze the image.",
+            uncertainties=["Vision model returned unstructured output."],
+        )
+
+    uncertainties = payload.get("uncertainties") or []
+    if isinstance(uncertainties, str):
+        uncertainties = [uncertainties]
+    elif not isinstance(uncertainties, list):
+        uncertainties = []
+
+    confidence = _string_or_none(payload.get("confidence")) or "low"
+    confidence = confidence.lower()
+    if confidence not in {"low", "medium", "high"}:
+        confidence = "low"
+
+    visual_summary = _string_or_none(payload.get("visual_summary")) or ""
+    draft_answer = _string_or_none(payload.get("draft_answer")) or visual_summary
+
+    return VisionImageAnalysis(
+        identified_subject=_string_or_none(payload.get("identified_subject")),
+        confidence=confidence,
+        visual_summary=visual_summary,
+        visible_text=_string_or_none(payload.get("visible_text")),
+        safety_or_weather_cues=_string_or_none(payload.get("safety_or_weather_cues")),
+        draft_answer=draft_answer,
+        uncertainties=[str(item).strip() for item in uncertainties if str(item).strip()],
+    )
+
+
+def _format_vision_context_for_text_prompt(
+    original_message: str,
+    analysis: VisionImageAnalysis,
+    image_artifact: dict | None,
+) -> str:
+    """Build the evidence block passed into the standard SeoulWalk text prompt."""
+    uncertainty_text = "; ".join(analysis.uncertainties) if analysis.uncertainties else "None stated."
+    image_path = image_artifact.get("path") if image_artifact else None
+    return (
+        "The user just submitted an image. Treat the following vision analysis as evidence, "
+        "not as ground truth. If it conflicts with CURRENT CONTEXT, ITINERARY CONTEXT, "
+        "or trusted search/geocoding results, explain the uncertainty briefly.\n\n"
+        f"ORIGINAL USER MESSAGE:\n{original_message}\n\n"
+        "IMAGE CONTEXT:\n"
+        f"- Identified subject: {analysis.identified_subject or 'Uncertain'}\n"
+        f"- Confidence: {analysis.confidence or 'low'}\n"
+        f"- Visual summary: {analysis.visual_summary or 'No visual summary available.'}\n"
+        f"- Visible text: {analysis.visible_text or 'None detected.'}\n"
+        f"- Visible safety/weather cues: {analysis.safety_or_weather_cues or 'None detected.'}\n"
+        f"- Vision draft answer: {analysis.draft_answer or 'No draft answer available.'}\n"
+        f"- Vision uncertainties: {uncertainty_text}\n"
+        f"- Local image artifact: {image_path or 'not saved'}"
+    )
+
+
+def _build_vision_routing_message(original_message: str, analysis: VisionImageAnalysis) -> str:
+    """Keep intent/geocode classification grounded when the user refers to the image."""
+    subject = analysis.identified_subject
+    if not subject:
+        return original_message
+
+    lower = original_message.lower()
+    image_references = (" this", " that", " there", " it", " here", "photo", "image", "picture")
+    if any(token in f" {lower}" for token in image_references):
+        return f"{original_message}\nImage identified subject: {subject}"
+    return original_message
 
 
 @traceable(
@@ -585,7 +701,11 @@ def _build_naver_action_payload_from_search(
     }
 
 
-async def _prepare_chat_completion(req: ChatRequest, status_callback=None) -> dict:
+async def _prepare_chat_completion(
+    req: ChatRequest,
+    status_callback=None,
+    prompt_user_message: str | None = None,
+) -> dict:
     """Build all context needed for either normal or streaming chat completion."""
     provider = "nvidia"
     model = req.model_override or LLM_MODEL_ID
@@ -769,10 +889,11 @@ async def _prepare_chat_completion(req: ChatRequest, status_callback=None) -> di
             {"included": map_snapshot_b64 is not None, "artifact": map_snapshot_artifact},
         )
 
-    user_content = req.message
+    user_prompt_text = prompt_user_message or req.message
+    user_content = user_prompt_text
     if map_snapshot_b64:
         user_content = [
-            {"type": "text", "text": req.message},
+            {"type": "text", "text": user_prompt_text},
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{map_snapshot_b64}"}},
         ]
 
@@ -797,28 +918,17 @@ async def _prepare_chat_completion(req: ChatRequest, status_callback=None) -> di
         "map_snapshot_artifact": map_snapshot_artifact,
         "naver_action_payload": naver_action_payload,
         "messages": messages,
+        "prompt_user_message": user_prompt_text,
     }
 
 
-# ---------------------------------------------------------------------------
-# POST /chat — Text chat with optional web search augmentation
-# ---------------------------------------------------------------------------
-
-@router.post("", response_model=ChatResponse)
-@traceable(
-    name="SeoulWalk Text Chat",
-    run_type="chain",
-    process_inputs=sanitize_trace_payload,
-    process_outputs=sanitize_trace_payload,
-)
-async def chat(req: ChatRequest):
-    """
-    Process a user text message.
-    Automatically determines whether live web search is needed,
-    fetches results if so, and injects them into the LLM context.
-    Text chat uses NVIDIA NIM.
-    """
-    prepared = await _prepare_chat_completion(req)
+async def _complete_prepared_chat(
+    prepared: dict,
+    history_user_message: str,
+    trace_event_base: str = "chat_llm_response",
+    debug_extra: dict | None = None,
+) -> ChatResponse:
+    """Run the policy-bearing text LLM pass and build a ChatResponse."""
     session_id = prepared["session_id"]
     waypoint = prepared["waypoint"]
     model = prepared["model"]
@@ -826,9 +936,10 @@ async def chat(req: ChatRequest):
     intent = prepared["intent"]
     messages = prepared["messages"]
     started_at = time.perf_counter()
+
     await _trace_chat_event(
         session_id,
-        "chat_llm_response_started",
+        f"{trace_event_base}_started",
         {
             "provider": provider,
             "model": model,
@@ -846,7 +957,7 @@ async def chat(req: ChatRequest):
     except Exception as exc:
         await _trace_chat_event(
             session_id,
-            "chat_llm_response_failed",
+            f"{trace_event_base}_failed",
             {
                 "provider": provider,
                 "model": model,
@@ -857,15 +968,14 @@ async def chat(req: ChatRequest):
         )
         raise
 
-    # Save to history
-    await save_chat_message(session_id, "user", req.message)
+    await save_chat_message(session_id, "user", history_user_message)
     await save_chat_message(session_id, "assistant", reply)
 
     naver_action_payload = prepared["naver_action_payload"]
     action = "OPEN_NAVER_MAP" if naver_action_payload or "naver map" in reply.lower() else None
     await _trace_chat_event(
         session_id,
-        "chat_llm_response_completed",
+        f"{trace_event_base}_completed",
         {
             "provider": provider,
             "model": model,
@@ -888,7 +998,10 @@ async def chat(req: ChatRequest):
         "map_snapshot_included": prepared["map_snapshot_included"],
         "map_snapshot_artifact": prepared["map_snapshot_artifact"],
         "messages_sent": sanitize_trace_payload(messages),
+        "finalization_pipeline": "text_chat",
     }
+    if debug_extra:
+        debug_trace.update(debug_extra)
 
     return ChatResponse(
         reply=reply,
@@ -899,6 +1012,28 @@ async def chat(req: ChatRequest):
         web_search_used=prepared["search_used"],
         debug_trace=debug_trace,
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /chat — Text chat with optional web search augmentation
+# ---------------------------------------------------------------------------
+
+@router.post("", response_model=ChatResponse)
+@traceable(
+    name="SeoulWalk Text Chat",
+    run_type="chain",
+    process_inputs=sanitize_trace_payload,
+    process_outputs=sanitize_trace_payload,
+)
+async def chat(req: ChatRequest):
+    """
+    Process a user text message.
+    Automatically determines whether live web search is needed,
+    fetches results if so, and injects them into the LLM context.
+    Text chat uses NVIDIA NIM.
+    """
+    prepared = await _prepare_chat_completion(req)
+    return await _complete_prepared_chat(prepared, history_user_message=req.message)
 
 
 def _stream_event(event_type: str, **payload) -> str:
@@ -1035,8 +1170,8 @@ async def chat_stream(req: ChatRequest):
 async def chat_vision(req: VisionChatRequest):
     """
     Process a user photo + optional text question.
-    Uses a NVIDIA NIM vision-language model to identify and explain what is in the image.
-    Returns a TTS-friendly plain text reply.
+    Uses a NVIDIA NIM vision-language model for first-pass visual evidence,
+    then routes the final answer through the standard SeoulWalk text-chat policy.
     """
     if not NVIDIA_API_KEY:
         raise HTTPException(status_code=500, detail="Missing NVIDIA_API_KEY")
@@ -1080,7 +1215,16 @@ async def chat_vision(req: VisionChatRequest):
         gps_context=gps_context
     )
 
-    reply = await _call_llm(
+    await _trace_chat_event(
+        session_id,
+        "vision_analysis_started",
+        {
+            "model": VISION_MODEL_ID,
+            "waypoint_id": waypoint["id"] if waypoint else None,
+            "image_artifact": image_artifact,
+        },
+    )
+    vision_raw = await _call_llm(
         messages=[
             {"role": "system", "content": vision_system},
             {"role": "user", "content": user_content},
@@ -1089,28 +1233,59 @@ async def chat_vision(req: VisionChatRequest):
         temperature=0.4,
         provider="nvidia",
     )
+    analysis = _parse_vision_analysis(vision_raw)
+    await _trace_chat_event(
+        session_id,
+        "vision_analysis_completed",
+        {
+            "identified_subject": analysis.identified_subject,
+            "confidence": analysis.confidence,
+            "has_visible_text": bool(analysis.visible_text),
+            "uncertainty_count": len(analysis.uncertainties),
+        },
+    )
 
-    # Try to extract the identified subject from the first sentence of the reply
-    identified = None
-    if reply:
-        first_sentence = reply.split(".")[0].strip()
-        if len(first_sentence) < 80:  # Plausibly a name, not a paragraph
-            identified = first_sentence
+    final_prompt_message = _format_vision_context_for_text_prompt(
+        req.message,
+        analysis,
+        image_artifact,
+    )
+    routing_message = _build_vision_routing_message(req.message, analysis)
+    final_req = ChatRequest(
+        message=routing_message,
+        session_id=session_id,
+        latitude=req.latitude,
+        longitude=req.longitude,
+        waypoint_id=req.waypoint_id,
+    )
 
-    # Save text conversation to history
-    await save_chat_message(session_id, "user", f"[Photo attached] {req.message}")
-    await save_chat_message(session_id, "assistant", reply)
+    prepared = await _prepare_chat_completion(
+        final_req,
+        prompt_user_message=final_prompt_message,
+    )
+    final_response = await _complete_prepared_chat(
+        prepared,
+        history_user_message=f"[Photo attached] {req.message}",
+        trace_event_base="vision_final_llm_response",
+        debug_extra={
+            "vision_pipeline": "vision_analysis_then_text_chat",
+            "vision_model": VISION_MODEL_ID,
+            "vision_raw_response": vision_raw,
+            "vision_analysis": analysis.model_dump(),
+            "vision_prompt": vision_system,
+            "image_artifact": image_artifact,
+        },
+    )
 
-    debug_trace = {
-        "gps_context": gps_context,
-        "full_prompt": vision_system,
-        "image_artifact": image_artifact,
-    }
+    debug_trace = final_response.debug_trace or {}
 
     return VisionChatResponse(
-        reply=reply,
-        session_id=session_id,
-        waypoint_id=waypoint["id"] if waypoint else None,
-        identified_subject=identified,
+        reply=final_response.reply,
+        session_id=final_response.session_id,
+        waypoint_id=final_response.waypoint_id,
+        action=final_response.action,
+        action_payload=final_response.action_payload,
+        web_search_used=final_response.web_search_used,
+        identified_subject=analysis.identified_subject,
         debug_trace=debug_trace,
     )
