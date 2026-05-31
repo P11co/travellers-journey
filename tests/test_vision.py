@@ -15,14 +15,14 @@ from unittest.mock import AsyncMock, patch
 import httpx
 
 
-def _make_openrouter_response(text: str) -> httpx.Response:
+def _make_nvidia_response(text: str) -> httpx.Response:
     return httpx.Response(
         status_code=200,
         json={"choices": [{"message": {"content": text}}]},
     )
 
 
-def _make_openrouter_error(status: int = 500) -> httpx.Response:
+def _make_nvidia_error(status: int = 500) -> httpx.Response:
     return httpx.Response(status_code=status, text="Internal Server Error")
 
 
@@ -39,8 +39,9 @@ _TINY_JPEG_B64 = (
 
 @pytest.fixture(autouse=True)
 def _vision_api_key(monkeypatch):
-    """Vision tests mock the HTTP client, so only a sentinel key is needed."""
-    monkeypatch.setattr("server.routers.chat.OPENROUTER_API_KEY", "test-openrouter-key")
+    """Vision tests mock the HTTP client, so only a sentinel NVIDIA key is needed."""
+    monkeypatch.setattr("server.routers.chat.NVIDIA_API_KEY", "test-nvidia-key")
+    monkeypatch.setattr("server.routers.chat.VISION_MODEL_ID", "meta/llama-3.2-11b-vision-instruct")
 
 
 # ---------------------------------------------------------------------------
@@ -54,7 +55,7 @@ async def test_vision_basic(client):
 
     with patch("server.routers.chat.httpx.AsyncClient") as MockClient:
         mock = AsyncMock()
-        mock.post.return_value = _make_openrouter_response(mock_reply)
+        mock.post.return_value = _make_nvidia_response(mock_reply)
         mock.__aenter__ = AsyncMock(return_value=mock)
         mock.__aexit__ = AsyncMock(return_value=False)
         MockClient.return_value = mock
@@ -77,7 +78,7 @@ async def test_vision_with_waypoint(client):
 
     with patch("server.routers.chat.httpx.AsyncClient") as MockClient:
         mock = AsyncMock()
-        mock.post.return_value = _make_openrouter_response(mock_reply)
+        mock.post.return_value = _make_nvidia_response(mock_reply)
         mock.__aenter__ = AsyncMock(return_value=mock)
         mock.__aexit__ = AsyncMock(return_value=False)
         MockClient.return_value = mock
@@ -100,7 +101,7 @@ async def test_vision_with_coordinates(client):
 
     with patch("server.routers.chat.httpx.AsyncClient") as MockClient:
         mock = AsyncMock()
-        mock.post.return_value = _make_openrouter_response(mock_reply)
+        mock.post.return_value = _make_nvidia_response(mock_reply)
         mock.__aenter__ = AsyncMock(return_value=mock)
         mock.__aexit__ = AsyncMock(return_value=False)
         MockClient.return_value = mock
@@ -125,7 +126,7 @@ async def test_vision_identified_subject_extracted(client):
 
     with patch("server.routers.chat.httpx.AsyncClient") as MockClient:
         mock = AsyncMock()
-        mock.post.return_value = _make_openrouter_response(mock_reply)
+        mock.post.return_value = _make_nvidia_response(mock_reply)
         mock.__aenter__ = AsyncMock(return_value=mock)
         mock.__aexit__ = AsyncMock(return_value=False)
         MockClient.return_value = mock
@@ -154,7 +155,7 @@ async def test_vision_llm_error_returns_502(client):
     """LLM API error returns 502 Bad Gateway."""
     with patch("server.routers.chat.httpx.AsyncClient") as MockClient:
         mock = AsyncMock()
-        mock.post.return_value = _make_openrouter_error(500)
+        mock.post.return_value = _make_nvidia_error(500)
         mock.__aenter__ = AsyncMock(return_value=mock)
         mock.__aexit__ = AsyncMock(return_value=False)
         MockClient.return_value = mock
@@ -173,7 +174,7 @@ async def test_vision_reuses_session(client):
 
     with patch("server.routers.chat.httpx.AsyncClient") as MockClient:
         mock = AsyncMock()
-        mock.post.return_value = _make_openrouter_response(mock_reply)
+        mock.post.return_value = _make_nvidia_response(mock_reply)
         mock.__aenter__ = AsyncMock(return_value=mock)
         mock.__aexit__ = AsyncMock(return_value=False)
         MockClient.return_value = mock

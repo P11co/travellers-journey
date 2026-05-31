@@ -373,7 +373,7 @@ async def _call_llm(
     """
     Call the LLM via the selected provider.
     - provider='nvidia'     → NVIDIA NIM (default)
-    - provider='openrouter' → OpenRouter, reserved for vision
+    - provider='openrouter' → OpenRouter fallback for compatible models
     Reasoning traces (<think>...</think>) are always stripped before returning.
     """
     if provider == "nvidia":
@@ -816,7 +816,7 @@ async def chat(req: ChatRequest):
     Process a user text message.
     Automatically determines whether live web search is needed,
     fetches results if so, and injects them into the LLM context.
-    Text chat uses NVIDIA NIM. OpenRouter is reserved for vision.
+    Text chat uses NVIDIA NIM.
     """
     prepared = await _prepare_chat_completion(req)
     session_id = prepared["session_id"]
@@ -1035,11 +1035,11 @@ async def chat_stream(req: ChatRequest):
 async def chat_vision(req: VisionChatRequest):
     """
     Process a user photo + optional text question.
-    Uses the vision-capable Gemma model to identify and explain what is in the image.
+    Uses a NVIDIA NIM vision-language model to identify and explain what is in the image.
     Returns a TTS-friendly plain text reply.
     """
-    if not OPENROUTER_API_KEY:
-        raise HTTPException(status_code=500, detail="Missing OpenRouter API key")
+    if not NVIDIA_API_KEY:
+        raise HTTPException(status_code=500, detail="Missing NVIDIA_API_KEY")
 
     # Session management
     session_id = req.session_id or str(uuid.uuid4())
@@ -1066,7 +1066,7 @@ async def chat_vision(req: VisionChatRequest):
         },
     )
 
-    # Build multimodal message — OpenRouter uses the OpenAI content array format
+    # Build multimodal message using the OpenAI-compatible content array format.
     data_url = f"data:{req.image_mime_type};base64,{req.image_base64}"
 
     user_content = [
@@ -1087,7 +1087,7 @@ async def chat_vision(req: VisionChatRequest):
         ],
         model=VISION_MODEL_ID,
         temperature=0.4,
-        provider="openrouter",  # Vision always uses OpenRouter (NIM vision uses different endpoint)
+        provider="nvidia",
     )
 
     # Try to extract the identified subject from the first sentence of the reply

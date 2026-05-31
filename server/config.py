@@ -54,10 +54,10 @@ NAVER_MAP_CLIENT_SECRET: str = os.getenv("NAVER_MAP_CLIENT_SECRET") or ""
 # ---------------------------------------------------------------------------
 # LLM Config
 # ---------------------------------------------------------------------------
-# Default model used for all tasks: chat, itinerary generation, and vision
+# Default text model used for chat and itinerary generation.
 LLM_MODEL_ID: str = "google/gemma-4-31b-it"
-# Separate vision model that accepts image inputs (same provider)
-VISION_MODEL_ID: str = "google/gemma-4-31b-it"
+# Separate NVIDIA NIM vision-language model that accepts image inputs.
+VISION_MODEL_ID: str = os.getenv("NVIDIA_VISION_MODEL_ID") or "meta/llama-3.2-11b-vision-instruct"
 OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1/chat/completions"
 NVIDIA_BASE_URL: str = "https://integrate.api.nvidia.com/v1/chat/completions"
 
