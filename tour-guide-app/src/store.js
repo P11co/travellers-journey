@@ -464,7 +464,7 @@ const useAppStore = create((set, get) => ({
     });
   },
 
-  endTour: () => set({ activeTourId: null }),
+  endTour: () => set({ activeTourId: null, generatedItinerary: null }),
 
   getActiveItinerary: () => {
     const { itineraries, activeTourId, generatedItinerary } = get();

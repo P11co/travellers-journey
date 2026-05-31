@@ -21,6 +21,7 @@ export default function CurrentItineraryView({ navigation, route }) {
   const loadItinerary = useAppStore((s) => s.loadItinerary);
   const commitItinerary = useAppStore((s) => s.commitItinerary);
   const startTour = useAppStore((s) => s.startTour);
+  const endTour = useAppStore((s) => s.endTour);
   const isLoadingItinerary = useAppStore((s) => s.isLoadingItinerary);
   const itineraryError = useAppStore((s) => s.itineraryError);
   const themeMode = useAppStore((s) => s.themeMode);
@@ -60,6 +61,11 @@ export default function CurrentItineraryView({ navigation, route }) {
       return;
     }
     navigation.navigate('Home');
+  };
+
+  const handleEndTourAndPlanNew = () => {
+    endTour();
+    navigation.navigate('PlanJourney');
   };
 
   const renderTimelineStop = (stop, index) => {
@@ -176,6 +182,17 @@ export default function CurrentItineraryView({ navigation, route }) {
       </ScrollView>
 
       <View style={[styles.bottomStickyActionTray, { paddingBottom: insets.bottom + 16, backgroundColor: theme.panel, borderColor: theme.border }]}>
+        {isViewingActiveTour && (
+          <TouchableOpacity
+            style={[styles.secondaryActionButton, { borderColor: theme.border, backgroundColor: theme.surface }]}
+            onPress={handleEndTourAndPlanNew}
+          >
+            <Svg width="17" height="17" fill="none" stroke={theme.mutedText} strokeWidth="2" viewBox="0 0 24 24" style={styles.tagIconSpace}>
+              <Path strokeLinecap="round" strokeLinejoin="round" d="M4 4v6h6M20 20v-6h-6M20 9A8 8 0 006.7 5.7L4 10m0 5a8 8 0 0013.3 3.3L20 14" />
+            </Svg>
+            <Text style={[styles.secondaryButtonText, { color: theme.text }]}>End Tour & Plan New Route</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={[styles.primaryActionButton, { backgroundColor: theme.accent }, (!itinerary || isLoadingItinerary) && styles.disabledButton]}
           onPress={handlePrimaryAction}
@@ -439,6 +456,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  secondaryActionButton: {
+    width: '100%',
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  secondaryButtonText: {
+    fontWeight: '600',
+    fontSize: 14,
   },
   disabledButton: {
     opacity: 0.55,
