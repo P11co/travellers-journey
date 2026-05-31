@@ -1176,12 +1176,18 @@ const useAppStore = create((set, get) => ({
     const waypointContext = context.waypoint || state.chatWaypointContext || null;
     const waypointLat = waypointContext?.lat ?? waypointContext?.latitude ?? waypointContext?.coordinates?.latitude;
     const waypointLng = waypointContext?.lng ?? waypointContext?.longitude ?? waypointContext?.coordinates?.longitude;
+    const imageMimeType = context.imageMimeType || 'image/jpeg';
+    const imagePreviewUri = context.imageUri || (
+      imageBase64 ? `data:${imageMimeType};base64,${imageBase64}` : null
+    );
     const userMessage = {
       id: createClientId('user-vision'),
       role: 'user',
       content: message,
       timestamp: new Date().toISOString(),
       attachmentType: 'image',
+      attachmentUri: imagePreviewUri,
+      attachmentMimeType: imageMimeType,
       contextWaypoint: waypointContext
         ? { id: waypointContext.id, name: waypointContext.name }
         : null,
@@ -1209,7 +1215,7 @@ const useAppStore = create((set, get) => ({
         lat: context.lat ?? waypointLat ?? location.lat,
         lng: context.lng ?? waypointLng ?? location.lng,
         waypointId: context.waypointId || waypointContext?.id || location.waypointId,
-        imageMimeType: context.imageMimeType,
+        imageMimeType,
       });
 
       const assistantMessage = {

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
+  Image,
   LayoutAnimation,
   Linking,
   Platform,
@@ -164,9 +165,9 @@ export default function BuddyAIChatOverlay({
     }
   };
 
-  const handleCapturePhoto = async (imageBase64) => {
+  const handleCapturePhoto = async (imageBase64, imageUri) => {
     setCameraVisible(false);
-    await sendVisionMessage(imageBase64, inputText.trim() || 'What is this?');
+    await sendVisionMessage(imageBase64, inputText.trim() || 'What is this?', { imageUri });
     setInputText('');
   };
 
@@ -192,7 +193,13 @@ export default function BuddyAIChatOverlay({
         <View key={message.id} style={styles.userRow}>
           <View style={[styles.userBubble, { backgroundColor: theme.accent }]}>
             <Text style={styles.userText}>{message.content}</Text>
-            {message.attachmentType === 'image' && (
+            {message.attachmentType === 'image' && message.attachmentUri ? (
+              <Image
+                source={{ uri: message.attachmentUri }}
+                style={styles.userImageAttachment}
+                resizeMode="cover"
+              />
+            ) : message.attachmentType === 'image' && (
               <Text style={styles.userAttachmentText}>Photo attached</Text>
             )}
             {message.contextWaypoint && (
@@ -550,6 +557,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     marginTop: 6,
+  },
+  userImageAttachment: {
+    width: '100%',
+    height: 118,
+    borderRadius: 12,
+    marginTop: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
   },
   // Sidebar
   sidebar: {

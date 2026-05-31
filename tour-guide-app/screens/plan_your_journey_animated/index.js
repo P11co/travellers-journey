@@ -14,6 +14,8 @@ import useAppStore from '../../src/store';
 import hotspotsData from '../../src/data/hotspots.json';
 import hotspotImages from '../../src/data/hotspotImages';
 
+const primaryLocationImage = require('../../assets/images/hotspots/gyeongbokgung-primary-location.png');
+
 const BUDGET_OPTIONS = ['$25', '$50', '$100', '$200'];
 const TIME_OPTIONS = ['Half Day (4 hrs)', 'Full Day (8 hrs)', 'Two Days (16 hrs)'];
 
@@ -303,8 +305,9 @@ export default function PlanYourJourneyView({ navigation }) {
 
           <View style={styles.parallaxCardWrapper}>
             <Image
-              source={{ uri: 'https://images.unsplash.com/photo-1540959733332-eab4deceeaf7?w=500' }}
+              source={primaryLocationImage}
               style={styles.parallaxHeroImage}
+              resizeMode="cover"
             />
             <View style={styles.imageDimOverlay} />
             <View style={styles.parallaxCardTextOverlay}>

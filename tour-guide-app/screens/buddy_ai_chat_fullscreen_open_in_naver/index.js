@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   View,
   Text,
   TouchableOpacity,
@@ -102,9 +103,9 @@ export default function AIChatInterface({ navigation }) {
     }
   };
 
-  const handleCapturePhoto = async (imageBase64) => {
+  const handleCapturePhoto = async (imageBase64, imageUri) => {
     setCameraVisible(false);
-    await sendVisionMessage(imageBase64, inputText.trim() || 'What is this?');
+    await sendVisionMessage(imageBase64, inputText.trim() || 'What is this?', { imageUri });
     setInputText('');
   };
 
@@ -136,7 +137,13 @@ export default function AIChatInterface({ navigation }) {
         <View key={message.id} style={styles.userMessageRow}>
           <View style={[styles.msgUserPill, { backgroundColor: theme.accent }]}>
             <Text style={styles.msgTextUser}>{message.content}</Text>
-            {message.attachmentType === 'image' && (
+            {message.attachmentType === 'image' && message.attachmentUri ? (
+              <Image
+                source={{ uri: message.attachmentUri }}
+                style={styles.userImageAttachment}
+                resizeMode="cover"
+              />
+            ) : message.attachmentType === 'image' && (
               <Text style={styles.userAttachmentText}>Photo attached</Text>
             )}
             {message.contextWaypoint && (
@@ -439,6 +446,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     marginTop: 6,
+  },
+  userImageAttachment: {
+    width: '100%',
+    height: 132,
+    borderRadius: 14,
+    marginTop: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
   },
   naverButton: {
     backgroundColor: '#00c73c',
