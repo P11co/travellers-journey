@@ -7,12 +7,17 @@
 .venv/
 __pycache__/
 *.pyc
+*.pyo
+.pytest_cache/
 
 # Node
 node_modules/
+package-lock.json
 
 # Expo / React Native
 .expo/
+dist/
+web-build/
 ios/build/
 android/build/
 android/.gradle/
@@ -21,17 +26,24 @@ android/.gradle/
 .DS_Store
 Thumbs.db
 
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
 # documentation
 .documents/
 
-# vscode
-.vscode/
-
-data/test_reports/*
+# Data artifacts (keep source .md, ignore generated DBs and reports)
+data/test_reports/
 data/trace_artifacts/
-tour-guide-app/node_modules/*
-tour-guide-app/node_modules/.package-lock.json
+data/chroma_db/
+*.sqlite3
 
 # Local user-study runtime artifacts
 .runtime/
 logs/
+
+# Claude / AI agent config
+.claude/
