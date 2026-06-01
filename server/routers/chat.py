@@ -532,7 +532,7 @@ async def _call_llm(
                 }
             elif model == "xiaomi/mimo-v2.5":
                 payload["provider"] = {
-                    "only": ["Xiaomi"],
+                    "only": ["xiaomi"],
                     "allow_fallbacks": False
                 }
 
@@ -603,7 +603,7 @@ async def _stream_llm(
                 }
             elif model == "xiaomi/mimo-v2.5":
                 active_payload["provider"] = {
-                    "only": ["Xiaomi"],
+                    "only": ["xiaomi"],
                     "allow_fallbacks": False
                 }
 
@@ -1077,7 +1077,8 @@ async def _prepare_chat_completion(
 
     map_snapshot_b64 = None
     map_snapshot_artifact = None
-    if lat is not None and lng is not None:
+    should_attach_map_snapshot = intent in {"MAP_STATIC", "MAP_GEOCODE"}
+    if should_attach_map_snapshot and lat is not None and lng is not None:
         await _emit_prepare_status(status_callback, "Processing map context")
         await _trace_chat_event(session_id, "chat_map_snapshot_started", {"latitude": lat, "longitude": lng})
         map_snapshot_b64 = await get_map_snapshot(lat, lng)
@@ -1103,6 +1104,7 @@ async def _prepare_chat_completion(
     user_prompt_text = prompt_user_message or req.message
     user_content = user_prompt_text
     if map_snapshot_b64:
+        model = VISION_MODEL_ID
         user_content = [
             {"type": "text", "text": user_prompt_text},
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{map_snapshot_b64}"}},

@@ -519,17 +519,13 @@ async def test_chat_with_activity_logs(client):
 
 @pytest.mark.asyncio
 async def test_chat_with_map_snapshot(client):
-    """Chat endpoint fetches and includes map snapshot base64 image in LLM request when coords are supplied."""
+    """MAP_STATIC chat fetches and includes a map snapshot image when coords are supplied."""
     session_id = "chat-map-test"
     mock_reply = "Looking at the map, you are near Gwanghwamun gate."
 
-    with patch("server.routers.chat.httpx.AsyncClient") as MockClient:
-        mock_instance = AsyncMock()
-        mock_instance.post.return_value = _make_mock_openrouter_response(mock_reply)
-        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
-        mock_instance.__aexit__ = AsyncMock(return_value=False)
-        MockClient.return_value = mock_instance
-
+    with patch("server.routers.chat.classify_intent", new=AsyncMock(return_value="MAP_STATIC")), \
+         patch("server.routers.chat.get_map_snapshot", new=AsyncMock(return_value="ZmFrZS1wbmc=")), \
+         patch("server.routers.chat._call_llm", new=AsyncMock(return_value=mock_reply)):
         resp = await client.post("/chat", json={
             "message": "Tell me what is around me.",
             "session_id": session_id,
@@ -557,6 +553,67 @@ async def test_chat_with_map_snapshot(client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("intent", ["RAG", "WEB_SEARCH"])
+async def test_non_map_intents_do_not_attach_snapshot_with_coords(client, monkeypatch, intent):
+    """RAG and WEB_SEARCH keep coordinates as text context without sending a map image."""
+    monkeypatch.setattr("server.routers.chat.LLM_MODEL_ID", "deepseek/deepseek-v4-flash")
+    monkeypatch.setattr("server.routers.chat.VISION_MODEL_ID", "xiaomi/mimo-v2.5")
+
+    with patch("server.routers.chat.classify_intent", new=AsyncMock(return_value=intent)), \
+         patch("server.routers.chat.get_map_snapshot", new=AsyncMock()) as mock_snapshot, \
+         patch("server.routers.chat.search_rag", return_value="PALACE_KNOWLEDGE: history"), \
+         patch("server.routers.chat.search_with_fallback", new=AsyncMock(return_value=[])), \
+         patch("server.routers.chat._call_llm", new=AsyncMock(return_value="Text-only answer.")) as mock_call:
+        resp = await client.post("/chat", json={
+            "message": "What should I know here?",
+            "session_id": f"coords-{intent.lower()}-test",
+            "latitude": 37.57602,
+            "longitude": 126.97685,
+        })
+
+    assert resp.status_code == 200
+    mock_snapshot.assert_not_awaited()
+    assert mock_call.await_args.kwargs["model"] == "deepseek/deepseek-v4-flash"
+
+    messages = mock_call.await_args.kwargs["messages"]
+    user_msg = messages[-1]
+    assert isinstance(user_msg["content"], str)
+
+
+@pytest.mark.asyncio
+async def test_map_snapshot_uses_vision_model_for_final_answer(client, monkeypatch):
+    """Map-image chat should classify with the text model, then answer with the vision model."""
+    monkeypatch.setattr("server.routers.chat.LLM_MODEL_ID", "deepseek/deepseek-v4-flash")
+    monkeypatch.setattr("server.routers.chat.VISION_MODEL_ID", "xiaomi/mimo-v2.5")
+
+    with patch(
+        "server.routers.chat.classify_intent",
+        new=AsyncMock(return_value={
+            "intent": "MAP_STATIC",
+            "naver_search_query": None,
+            "display_query": None,
+        }),
+    ) as mock_classify, \
+         patch("server.routers.chat.get_map_snapshot", new=AsyncMock(return_value="ZmFrZS1wbmc=")), \
+         patch("server.routers.chat._call_llm", new=AsyncMock(return_value="Use the path ahead.")) as mock_call:
+        resp = await client.post("/chat", json={
+            "message": "Where should I go from here?",
+            "session_id": "map-static-mimo-test",
+            "latitude": 37.57602,
+            "longitude": 126.97685,
+        })
+
+    assert resp.status_code == 200
+    assert mock_classify.await_args.kwargs["model"] == "deepseek/deepseek-v4-flash"
+    assert mock_call.await_args.kwargs["model"] == "xiaomi/mimo-v2.5"
+
+    messages = mock_call.await_args.kwargs["messages"]
+    user_msg = messages[-1]
+    assert isinstance(user_msg["content"], list)
+    assert user_msg["content"][1]["type"] == "image_url"
+
+
+@pytest.mark.asyncio
 async def test_chat_kyobo_bookstore_with_map(client):
     """
     Test asking if Kyobo Bookstore exists near Gwanghwamun Station Exit 9.
@@ -568,13 +625,10 @@ async def test_chat_kyobo_bookstore_with_map(client):
     mock_reply = "Yes, Kyobo Bookstore is located right next to Gwanghwamun Station Exit 9."
     
     # --- Case A: Coordinates provided (Static map image sent) ---
-    with patch("server.routers.chat.httpx.AsyncClient") as MockClient:
-        mock_instance = AsyncMock()
-        mock_instance.post.return_value = _make_mock_openrouter_response(mock_reply)
-        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
-        mock_instance.__aexit__ = AsyncMock(return_value=False)
-        MockClient.return_value = mock_instance
-
+    with patch("server.routers.chat.classify_intent", new=AsyncMock(return_value="MAP_GEOCODE")), \
+         patch("server.routers.chat.geocode_search", new=AsyncMock(return_value=[])), \
+         patch("server.routers.chat.get_map_snapshot", new=AsyncMock(return_value="ZmFrZS1wbmc=")), \
+         patch("server.routers.chat._call_llm", new=AsyncMock(return_value=mock_reply)):
         resp = await client.post("/chat", json={
             "message": "Does Kyobo Bookstore (교보문고) exist near Gwanghwamun Station Exit 9?",
             "session_id": session_id,
@@ -593,13 +647,12 @@ async def test_chat_kyobo_bookstore_with_map(client):
         assert any(item["type"] == "image_url" for item in user_msg["content"])
 
     # --- Case B: No coordinates provided (No map image sent) ---
-    with patch("server.routers.chat.httpx.AsyncClient") as MockClient:
-        mock_instance = AsyncMock()
-        mock_instance.post.return_value = _make_mock_openrouter_response("I cannot see a map of your location, so I'm not sure.")
-        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
-        mock_instance.__aexit__ = AsyncMock(return_value=False)
-        MockClient.return_value = mock_instance
-
+    with patch("server.routers.chat.classify_intent", new=AsyncMock(return_value="MAP_GEOCODE")), \
+         patch("server.routers.chat.geocode_search", new=AsyncMock(return_value=[])), \
+         patch("server.routers.chat.get_map_snapshot", new=AsyncMock()) as mock_snapshot, \
+         patch("server.routers.chat._call_llm", new=AsyncMock(return_value=(
+             "I cannot see a map of your location, so I'm not sure."
+         ))):
         resp_no_coords = await client.post("/chat", json={
             "message": "Does Kyobo Bookstore (교보문고) exist near Gwanghwamun Station Exit 9?",
             "session_id": session_id,
@@ -612,3 +665,4 @@ async def test_chat_kyobo_bookstore_with_map(client):
         # Verify only a single text string was passed (not a multimodal image list)
         user_msg_no_coords = data_no_coords["debug_trace"]["messages_sent"][-1]
         assert isinstance(user_msg_no_coords["content"], str)
+        mock_snapshot.assert_not_awaited()
