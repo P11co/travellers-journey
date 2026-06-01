@@ -214,3 +214,62 @@ def test_prompt_optimization_rules():
     assert "The selected hotspot list is unordered" in user_prompt
     assert "most efficient walking route" in user_prompt
 
+
+@pytest.mark.asyncio
+@patch("server.routers.itinerary.call_llm_for_itinerary", _mock_llm)
+async def test_generate_itinerary_over_budget(client):
+    """If hotspots + walking buffer exceed available hours, return 400."""
+    resp = await client.post("/itinerary/generate", json={
+        "location": "Gwanghwamun",
+        # Gyeongbokgung Palace is estimated at 120 minutes.
+        # National Palace Museum of Korea is estimated at 60 minutes.
+        # Tosokchon Samgyetang is estimated at 90 minutes.
+        # Total duration = 120 + 60 + 90 = 270 mins.
+        # Walking buffer = 15 * (3 - 1) = 30 mins.
+        # Total min time required = 300 mins (5.0 hours).
+        # We request available_hours = 4.0 (240 mins). This should fail.
+        "hotspots": ["Gyeongbokgung Palace", "National Palace Museum of Korea", "Tosokchon Samgyetang"],
+        "available_hours": 4.0,
+        "start_time": "10:00",
+    })
+    assert resp.status_code == 400
+    assert "Too many stops for a 4-hour itinerary" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+@patch("server.routers.itinerary.call_llm_for_itinerary", _mock_llm)
+async def test_generate_itinerary_under_budget(client):
+    """If hotspots + walking buffer is within available hours, succeed and call LLM."""
+    resp = await client.post("/itinerary/generate", json={
+        "location": "Gwanghwamun",
+        # Gyeongbokgung Palace (120m) + Tosokchon Samgyetang (90m) = 210 mins.
+        # Walking buffer = 15 mins.
+        # Total min time required = 225 mins (3.75 hours).
+        # We request available_hours = 4.0 (240 mins). This should succeed.
+        "hotspots": ["Gyeongbokgung Palace", "Tosokchon Samgyetang"],
+        "available_hours": 4.0,
+        "start_time": "10:00",
+    })
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+@patch("server.routers.itinerary.call_llm_for_itinerary", _mock_llm)
+async def test_generate_itinerary_allow_ai_fill_under_budget(client):
+    """AI fill mode enabled does not trigger preflight error if selected hotspots are under budget."""
+    resp = await client.post("/itinerary/generate", json={
+        "location": "Gwanghwamun",
+        # Selected hotspots: Gyeongbokgung Palace (120m) = 120 mins.
+        # Walking buffer = 0 mins.
+        # Total min time = 120 mins (2.0 hours).
+        # We request available_hours = 2.0 (120 mins) with allow_ai_fill=True.
+        # This is valid because only the selected hotspot is counted, not the potential fill pool.
+        "hotspots": ["Gyeongbokgung Palace"],
+        "available_hours": 2.0,
+        "start_time": "10:00",
+        "allow_ai_fill": True,
+    })
+    assert resp.status_code == 200
+
+
+

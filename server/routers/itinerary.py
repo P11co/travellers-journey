@@ -341,6 +341,21 @@ async def call_llm_for_itinerary(req: ItineraryGenerateRequest) -> list[dict]:
 @traceable(name="Itinerary Generate API", run_type="chain")
 async def generate_itinerary(req: ItineraryGenerateRequest):
     """Generate an AI-powered itinerary and persist it."""
+    # Preflight check for available hours vs selected stops duration + buffer
+    selected_hotspots = _resolve_hotspots(req.hotspots)
+    if selected_hotspots:
+        total_duration = sum(int(h.get("est_duration_mins", 60)) for h in selected_hotspots)
+        num_stops = len(selected_hotspots)
+        walking_buffer = 15 * (num_stops - 1)
+        min_time_required = total_duration + walking_buffer
+        available_minutes = req.available_hours * 60
+        if min_time_required > available_minutes:
+            hours_str = str(int(req.available_hours)) if req.available_hours.is_integer() else f"{req.available_hours:.1f}"
+            raise HTTPException(
+                status_code=400,
+                detail=f"Too many stops for a {hours_str}-hour itinerary. Please increase your time budget or remove some hotspots."
+            )
+
     # 1. Create or reuse session
     session_id = req.session_id or str(uuid.uuid4())
     existing = await get_session(session_id)

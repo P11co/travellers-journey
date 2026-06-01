@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   View,
   Text,
   StyleSheet,
@@ -72,8 +73,11 @@ export default function PlanYourJourneyView({ navigation }) {
       setTimeout(() => {
         scrollViewRef.current?.scrollToEnd({ animated: true });
       }, 80);
-    } catch {
-      // Error state is already stored for rendering below.
+    } catch (err) {
+      const errMsg = err?.message || '';
+      if (errMsg.includes('Too many stops for a')) {
+        Alert.alert('Impossible Itinerary', errMsg);
+      }
     }
   };
 
