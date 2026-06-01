@@ -55,13 +55,12 @@ NAVER_MAP_CLIENT_SECRET: str = os.getenv("NAVER_MAP_CLIENT_SECRET") or ""
 # LLM Config
 # ---------------------------------------------------------------------------
 # Default text model used for chat and itinerary generation.
-LLM_MODEL_ID: str = "google/gemma-4-31b-it"
-# Vision requests default to the same OpenRouter model, with the older NVIDIA
-# env var still honored for local overrides.
+LLM_MODEL_ID: str = os.getenv("LLM_MODEL_ID") or "deepseek/deepseek-v4-flash"
+# Vision requests default to the Xiaomi MiMo model.
 VISION_MODEL_ID: str = (
     os.getenv("VISION_MODEL_ID")
     or os.getenv("NVIDIA_VISION_MODEL_ID")
-    or LLM_MODEL_ID
+    or "xiaomi/mimo-v2.5"
 )
 OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1/chat/completions"
 NVIDIA_BASE_URL: str = "https://integrate.api.nvidia.com/v1/chat/completions"

@@ -524,6 +524,17 @@ async def _call_llm(
             "temperature": temperature,
             **extra,
         }
+        if active_provider == "openrouter":
+            if model == "deepseek/deepseek-v4-flash":
+                payload["provider"] = {
+                    "only": ["Alibaba Cloud"],
+                    "allow_fallbacks": False
+                }
+            elif model == "xiaomi/mimo-v2.5":
+                payload["provider"] = {
+                    "only": ["Xiaomi"],
+                    "allow_fallbacks": False
+                }
 
         try:
             async with httpx.AsyncClient(timeout=90.0) as client:
@@ -578,11 +589,23 @@ async def _stream_llm(
         ("nvidia", NVIDIA_BASE_URL, NVIDIA_API_KEY),
     ]
     last_error: HTTPException | None = None
-
     for active_provider, url, api_key in providers:
         if not api_key:
             last_error = HTTPException(status_code=500, detail=f"Missing {active_provider} API key")
             continue
+
+        active_payload = dict(payload)
+        if active_provider == "openrouter":
+            if model == "deepseek/deepseek-v4-flash":
+                active_payload["provider"] = {
+                    "only": ["Alibaba Cloud"],
+                    "allow_fallbacks": False
+                }
+            elif model == "xiaomi/mimo-v2.5":
+                active_payload["provider"] = {
+                    "only": ["Xiaomi"],
+                    "allow_fallbacks": False
+                }
 
         try:
             async with httpx.AsyncClient(timeout=None) as client:
@@ -594,7 +617,7 @@ async def _stream_llm(
                         "Content-Type": "application/json",
                         "Accept": "text/event-stream",
                     },
-                    json=payload,
+                    json=active_payload,
                 ) as resp:
                     if resp.status_code != 200:
                         text = await resp.aread()
