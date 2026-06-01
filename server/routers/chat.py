@@ -527,7 +527,7 @@ async def _call_llm(
         if active_provider == "openrouter":
             if model == "deepseek/deepseek-v4-flash":
                 payload["provider"] = {
-                    "only": ["Alibaba Cloud"],
+                    "only": ["alibaba"],
                     "allow_fallbacks": False
                 }
             elif model == "xiaomi/mimo-v2.5":
@@ -598,7 +598,7 @@ async def _stream_llm(
         if active_provider == "openrouter":
             if model == "deepseek/deepseek-v4-flash":
                 active_payload["provider"] = {
-                    "only": ["Alibaba Cloud"],
+                    "only": ["alibaba"],
                     "allow_fallbacks": False
                 }
             elif model == "xiaomi/mimo-v2.5":

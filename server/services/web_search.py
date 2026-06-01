@@ -153,7 +153,7 @@ async def classify_intent(
                             ],
                             "temperature": 0.0,  # Deterministic classification
                             "max_tokens": 120,
-                            **({"provider": {"only": ["Alibaba Cloud"], "allow_fallbacks": False}} if active_provider == "openrouter" and model == "deepseek/deepseek-v4-flash" else {}),
+                            **({"provider": {"only": ["alibaba"], "allow_fallbacks": False}} if active_provider == "openrouter" and model == "deepseek/deepseek-v4-flash" else {}),
                         },
                     )
 
