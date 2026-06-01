@@ -729,6 +729,33 @@ const useAppStore = create((set, get) => ({
     }
   },
 
+  addAssistantNotice: async (content, { speak = false, eventType = 'assistant_notice_added' } = {}) => {
+    const message = String(content || '').trim();
+    if (!message) return null;
+
+    const assistantMessage = {
+      id: createClientId('assistant-notice'),
+      role: 'assistant',
+      content: message,
+      timestamp: new Date().toISOString(),
+    };
+
+    set((current) => ({
+      chatMessages: [...current.chatMessages, assistantMessage],
+    }));
+
+    get().logTraceEvent(eventType, {
+      message_length: message.length,
+      spoke: Boolean(speak),
+    });
+
+    if (speak) {
+      await get().speakAssistantReply(message);
+    }
+
+    return assistantMessage;
+  },
+
   speakSystemAssistantReply: async (text, { fallbackFrom } = {}) => {
     const content = String(text || '').trim();
     if (!content) return;
