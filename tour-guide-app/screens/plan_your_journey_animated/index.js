@@ -215,7 +215,7 @@ function TimeBudgetWarningModal({ visible, detail, onClose }) {
   const budgetStr = formatMins(detail.available_minutes);
   const totalStr = formatMins(detail.required_minutes);
   const overStr = formatMins(detail.over_by_minutes);
-  const bufferStr = formatMins(detail.travel_buffer_minutes);
+  const travelStr = formatMins(detail.travel_minutes || detail.travel_buffer_minutes);
 
   return (
     <Modal
@@ -240,8 +240,8 @@ function TimeBudgetWarningModal({ visible, detail, onClose }) {
               </View>
             ))}
             <View style={styles.stopDurationRow}>
-              <Text style={styles.stopNameTextSubtle}>Travel buffer</Text>
-              <Text style={styles.stopDurationTextSubtle}>{bufferStr}</Text>
+              <Text style={styles.stopNameTextSubtle}>Travel time</Text>
+              <Text style={styles.stopDurationTextSubtle}>{travelStr}</Text>
             </View>
           </View>
 
@@ -292,6 +292,7 @@ export default function PlanYourJourneyView({ navigation }) {
   const hasGeneratedRoute = Boolean(generatedItinerary);
   const isPlanLocked = isLoadingItinerary || hasGeneratedRoute;
   const routeStops = hasGeneratedRoute ? generatedItinerary.stops || [] : [];
+  const routeHasTravelLegs = routeStops.some((stop) => stop.isTravelLeg);
   const bottomError = reviewError || itineraryError;
 
   const toggleActivity = (key) => {
@@ -349,39 +350,84 @@ export default function PlanYourJourneyView({ navigation }) {
     updateDraft({ allowAiFill: !draft.allowAiFill });
   };
 
-  const renderMoveControls = (index) => (
-    <View style={styles.reorderControls}>
-      <TouchableOpacity
-        style={[styles.reorderMoveButton, index === 0 && styles.reorderMoveButtonDisabled]}
-        onPress={() => reorderGeneratedStop(index, index - 1)}
-        disabled={index === 0}
-        activeOpacity={0.75}
-        accessibilityLabel="Move stop up"
-      >
-        <Text style={[styles.reorderMoveText, index === 0 && styles.reorderMoveTextDisabled]}>↑</Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={[styles.reorderMoveButton, index === routeStops.length - 1 && styles.reorderMoveButtonDisabled]}
-        onPress={() => reorderGeneratedStop(index, index + 1)}
-        disabled={index === routeStops.length - 1}
-        activeOpacity={0.75}
-        accessibilityLabel="Move stop down"
-      >
-        <Text style={[styles.reorderMoveText, index === routeStops.length - 1 && styles.reorderMoveTextDisabled]}>↓</Text>
-      </TouchableOpacity>
-    </View>
-  );
+  // Destination-only index: how many destination stops are before this flat index.
+  // Travel legs are skipped so the index passed to reorderGeneratedStop is
+  // relative to the destination-only list the store now operates on.
+  const destIndexOf = (flatIndex) =>
+    routeStops.slice(0, flatIndex).filter((s) => !s.isTravelLeg).length;
 
-  const renderRouteStop = (stop, index) => {
+  const destCount = routeStops.filter((s) => !s.isTravelLeg).length;
+
+  const renderMoveControls = (flatIndex, destIdx) => {
+    if (routeHasTravelLegs) return null;
+
+    return (
+      <View style={styles.reorderControls}>
+        <TouchableOpacity
+          style={[styles.reorderMoveButton, destIdx === 0 && styles.reorderMoveButtonDisabled]}
+          onPress={() => reorderGeneratedStop(destIdx, destIdx - 1)}
+          disabled={destIdx === 0}
+          activeOpacity={0.75}
+          accessibilityLabel="Move stop up"
+        >
+          <Text style={[styles.reorderMoveText, destIdx === 0 && styles.reorderMoveTextDisabled]}>↑</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.reorderMoveButton, destIdx === destCount - 1 && styles.reorderMoveButtonDisabled]}
+          onPress={() => reorderGeneratedStop(destIdx, destIdx + 1)}
+          disabled={destIdx === destCount - 1}
+          activeOpacity={0.75}
+          accessibilityLabel="Move stop down"
+        >
+          <Text style={[styles.reorderMoveText, destIdx === destCount - 1 && styles.reorderMoveTextDisabled]}>↓</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderRouteStop = (stop, flatIndex) => {
+    if (stop.isTravelLeg) {
+      const isTaxi = /^taxi to /i.test(stop.name || stop.place || '');
+
+      return (
+        <View key={stop.id || `${stop.name}-${flatIndex}`} style={styles.stopsTimelineRow}>
+          <View style={styles.travelNodeCircle}>
+            <Text style={styles.travelNodeText}>{isTaxi ? 'T' : 'W'}</Text>
+          </View>
+          <View style={[styles.stopInfoDataCard, styles.travelInfoDataCard]}>
+            <View style={styles.stopInfoCardCoreBody}>
+              <View style={styles.stopCardHeaderSplitRow}>
+                <Text style={styles.travelNodeTitle}>{stop.name}</Text>
+                <Text style={styles.stopNodeTimeLabel}>{stop.time}</Text>
+              </View>
+              <Text style={styles.stopCardTextExcerpt} numberOfLines={2}>
+                {stop.description || stop.activity || (isTaxi ? 'Taxi to the next stop.' : 'Walk to the next stop.')}
+              </Text>
+              <View style={styles.tagPillsContainerCluster}>
+                <View style={styles.travelCardTagPill}>
+                  <Text style={styles.interiorPillText}>{stop.duration}</Text>
+                </View>
+                <View style={styles.travelCardTagPill}>
+                  <Text style={styles.interiorPillText}>{isTaxi ? 'TAXI' : 'WALK'}</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+      );
+    }
+
+    const destIdx = destIndexOf(flatIndex);
     const isLunch = /lunch|food|meal|restaurant/i.test(`${stop.name} ${stop.description || ''}`);
+
     if (isLunch) {
       return (
-        <View key={stop.id || `${stop.name}-${index}`} style={styles.stopsTimelineRow}>
+        <View key={stop.id || `${stop.name}-${flatIndex}`} style={styles.stopsTimelineRow}>
           <View style={styles.lunchIconCircleNodeElement}>
             <Text style={styles.lunchIconChar}>🍴</Text>
           </View>
           <View style={styles.lunchSegmentBannerBox}>
-            {renderMoveControls(index)}
+            {renderMoveControls(flatIndex, destIdx)}
             <View style={styles.lunchBannerTextWrap}>
               <Text style={styles.lunchBannerMainText}>{stop.name}</Text>
               <Text style={styles.lunchBannerTimeText}>{stop.time}</Text>
@@ -392,14 +438,14 @@ export default function PlanYourJourneyView({ navigation }) {
     }
 
     return (
-      <View key={stop.id || `${stop.name}-${index}`} style={styles.stopsTimelineRow}>
-        <View style={[styles.circleNodeCountElement, index === 0 && styles.activeBorderHighlightCircle]}>
-          <Text style={index === 0 ? styles.nodeCountActiveText : styles.nodeCountMutedText}>
-            {String(index + 1).padStart(2, '0')}
+      <View key={stop.id || `${stop.name}-${flatIndex}`} style={styles.stopsTimelineRow}>
+        <View style={[styles.circleNodeCountElement, destIdx === 0 && styles.activeBorderHighlightCircle]}>
+          <Text style={destIdx === 0 ? styles.nodeCountActiveText : styles.nodeCountMutedText}>
+            {String(destIdx + 1).padStart(2, '0')}
           </Text>
         </View>
         <View style={styles.stopInfoDataCard}>
-          {renderMoveControls(index)}
+          {renderMoveControls(flatIndex, destIdx)}
           <View style={styles.stopInfoCardCoreBody}>
             <View style={styles.stopCardHeaderSplitRow}>
               <Text style={styles.stopNodeTitle}>{stop.name}</Text>
@@ -613,7 +659,9 @@ export default function PlanYourJourneyView({ navigation }) {
                       <Text style={styles.aiBadgeText}>AI OPTIMIZED</Text>
                     </View>
                   </View>
-                  <Text style={styles.dragSubtextHelper}>Use the move controls to reorder your schedule.</Text>
+                  <Text style={styles.dragSubtextHelper}>
+                    {routeHasTravelLegs ? 'Travel time is included between stops.' : 'Use the move controls to reorder your schedule.'}
+                  </Text>
                 </View>
                 <View style={styles.rightAlignSummaryBlock}>
                   <Text style={styles.durationSummaryText}>
@@ -1162,6 +1210,25 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     fontSize: 14,
   },
+  travelNodeCircle: {
+    position: 'absolute',
+    left: -34,
+    top: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#374151',
+    backgroundColor: '#202126',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  travelNodeText: {
+    color: '#9ca3af',
+    fontSize: 11,
+    fontWeight: '800',
+  },
   stopInfoDataCard: {
     flex: 1,
     minWidth: 0,
@@ -1173,6 +1240,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     zIndex: 3,
+  },
+  travelInfoDataCard: {
+    backgroundColor: '#151515',
+    borderColor: '#242936',
+    paddingVertical: 12,
   },
   reorderControls: {
     width: 36,
@@ -1221,6 +1293,14 @@ const styles = StyleSheet.create({
     minWidth: 0,
     lineHeight: 20,
   },
+  travelNodeTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#d1d5db',
+    flex: 1,
+    minWidth: 0,
+    lineHeight: 18,
+  },
   stopNodeTimeLabel: {
     fontSize: 11,
     color: '#6b7280',
@@ -1242,6 +1322,14 @@ const styles = StyleSheet.create({
   interiorCardTagPill: {
     backgroundColor: '#131313',
     borderColor: '#374151',
+    borderWidth: 1,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  travelCardTagPill: {
+    backgroundColor: '#101113',
+    borderColor: '#2f3746',
     borderWidth: 1,
     paddingVertical: 4,
     paddingHorizontal: 8,

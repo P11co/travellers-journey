@@ -233,7 +233,7 @@ async def reorder_itinerary(session_id: str, new_order: list[int]) -> bool:
     try:
         # Fetch existing items
         cursor = await db.execute(
-            """SELECT id, item_order, time_slot, duration_minutes
+            """SELECT id, item_order, time_slot, place, duration_minutes, latitude, longitude
                FROM itinerary_items
                WHERE session_id = ?
                ORDER BY item_order""",
@@ -241,6 +241,16 @@ async def reorder_itinerary(session_id: str, new_order: list[int]) -> bool:
         )
         rows = await cursor.fetchall()
         if len(rows) != len(new_order):
+            return False
+
+        def is_generated_travel_leg(row) -> bool:
+            place = (row["place"] or "").lower()
+            has_no_coords = row["latitude"] is None and row["longitude"] is None
+            return has_no_coords and (place.startswith("walk to ") or place.startswith("taxi to "))
+
+        # Calculated travel legs depend on adjacent destinations and cannot be
+        # safely shuffled by this legacy row-order endpoint.
+        if any(is_generated_travel_leg(row) for row in rows):
             return False
 
         def parse_time_to_minutes(value: str | None) -> int:

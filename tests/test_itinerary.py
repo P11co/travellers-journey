@@ -10,6 +10,7 @@ Tests:
 """
 
 import pytest
+import pytest_asyncio
 from unittest.mock import AsyncMock, patch
 
 # ---------------------------------------------------------------------------
@@ -49,6 +50,35 @@ _MOCK_LLM_ITEMS = [
 ]
 
 _mock_llm = AsyncMock(return_value=_MOCK_LLM_ITEMS)
+
+
+# ---------------------------------------------------------------------------
+# Routing stub — isolates all tests from Naver API credentials.
+# Every pair of hotspots gets a fixed 15-min walk leg so durations and
+# route order are deterministic across environments.
+# ---------------------------------------------------------------------------
+_FIXED_LEG = {
+    "mode": "walk",
+    "duration_minutes": 10,
+    "distance_meters": 670,
+    "routing_source": "fallback",
+}
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def mock_travel_leg():
+    """Patch get_travel_leg at both the source module and the local binding
+    in the router so asyncio.gather always gets the stub."""
+    with patch(
+        "server.services.routing.get_travel_leg",
+        new=AsyncMock(return_value=_FIXED_LEG),
+    ), patch(
+        "server.routers.itinerary.get_travel_leg",
+        new=AsyncMock(return_value=_FIXED_LEG),
+    ) as mock:
+        yield mock
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -193,41 +223,28 @@ async def test_delete_nonexistent(client):
 
 
 def test_prompt_optimization_rules():
-    """Verify that itinerary generation prompts include walking route optimization and arbitrary order rules."""
-    from server.routers.itinerary import _build_user_prompt, _ITINERARY_SYSTEM_PROMPT
-    from server.models import ItineraryGenerateRequest
+    """Verify that itinerary system prompt contains copy editor preservation rules."""
+    from server.routers.itinerary import _ITINERARY_SYSTEM_PROMPT
 
-    req = ItineraryGenerateRequest(
-        location="Gyeongbokgung",
-        hotspots=["National Palace Museum of Korea", "Bukchon Hanok Village"],
-        budget_krw=30000,
-        available_hours=6.0,
-        start_time="09:00 AM",
-    )
-    user_prompt = _build_user_prompt(req)
-
-    # Assert system prompt has the walking optimization rule
-    assert "The order of selected hotspots in the request is arbitrary" in _ITINERARY_SYSTEM_PROMPT
-    assert "minimizes total walking/travel distance" in _ITINERARY_SYSTEM_PROMPT
-
-    # Assert user prompt has the unordered notification
-    assert "The selected hotspot list is unordered" in user_prompt
-    assert "most efficient walking route" in user_prompt
+    # Assert system prompt has the strict copy editor rules
+    assert "SeoulWalk Itinerary Copy Editor" in _ITINERARY_SYSTEM_PROMPT
+    assert "You must preserve:" in _ITINERARY_SYSTEM_PROMPT
+    assert "duration_minutes" in _ITINERARY_SYSTEM_PROMPT
+    assert "estimated_cost_krw" in _ITINERARY_SYSTEM_PROMPT
+    assert "latitude" in _ITINERARY_SYSTEM_PROMPT
+    assert "longitude" in _ITINERARY_SYSTEM_PROMPT
+    assert "You may only rewrite the activity field" in _ITINERARY_SYSTEM_PROMPT
 
 
 @pytest.mark.asyncio
 @patch("server.routers.itinerary.call_llm_for_itinerary", _mock_llm)
 async def test_generate_itinerary_over_budget(client):
-    """If hotspots + walking buffer exceed available hours, return 400."""
+    """If hotspots + exact travel legs exceed available hours, return 400."""
     resp = await client.post("/itinerary/generate", json={
         "location": "Gwanghwamun",
-        # Gyeongbokgung Palace is estimated at 120 minutes.
-        # National Palace Museum of Korea is estimated at 60 minutes.
-        # Tosokchon Samgyetang is estimated at 90 minutes.
-        # Total duration = 120 + 60 + 90 = 270 mins.
-        # Walking buffer = 15 * (3 - 1) = 30 mins.
-        # Total min time required = 300 mins (5.0 hours).
-        # We request available_hours = 4.0 (240 mins). This should fail.
+        # Gyeongbokgung Palace (120 min), National Palace Museum (60 min), Tosokchon Samgyetang (90 min).
+        # Stub routing gives 2 travel legs × 10 min each = 20 min total travel.
+        # Total required = 270 + 20 = 290 min; budget = 4.0 h = 240 min. Should fail.
         "hotspots": ["Gyeongbokgung Palace", "National Palace Museum of Korea", "Tosokchon Samgyetang"],
         "available_hours": 4.0,
         "start_time": "10:00",
@@ -236,10 +253,10 @@ async def test_generate_itinerary_over_budget(client):
     detail = resp.json()["detail"]
     assert detail["code"] == "itinerary_time_budget_exceeded"
     assert detail["available_minutes"] == 240
-    assert detail["required_minutes"] == 300
-    assert detail["over_by_minutes"] == 60
-    assert detail["travel_buffer_minutes"] == 30
-    assert len(detail["stops"]) == 3
+    assert detail["required_minutes"] == 290
+    assert detail["over_by_minutes"] == 50
+    assert detail["travel_buffer_minutes"] == 20
+    assert len(detail["stops"]) == 5
 
 
 @pytest.mark.asyncio
@@ -276,6 +293,208 @@ async def test_generate_itinerary_allow_ai_fill_under_budget(client):
         "allow_ai_fill": True,
     })
     assert resp.status_code == 200
+
+
+def test_validate_llm_itinerary_helper():
+    from server.routers.itinerary import _validate_llm_itinerary
+    
+    skeleton = [
+        {
+            "order": 1,
+            "time": "09:00 AM",
+            "place": "Gyeongbokgung Palace",
+            "activity": "Visit Gyeongbokgung Palace.",
+            "duration_minutes": 120,
+            "estimated_cost_krw": 0,
+            "latitude": 37.5796,
+            "longitude": 126.977
+        },
+        {
+            "order": 2,
+            "time": "11:00 AM",
+            "place": "Walk to Bukchon Hanok Village",
+            "activity": "Walk to the next stop.",
+            "duration_minutes": 20,
+            "estimated_cost_krw": 0,
+            "latitude": None,
+            "longitude": None
+        }
+    ]
+    
+    # 1. Valid case (only activity field changed)
+    valid_output = [
+        {
+            "order": 1,
+            "time": "09:00 AM",
+            "place": "Gyeongbokgung Palace",
+            "activity": "Explore the royal palace halls and watch the guard changing ceremony.",
+            "duration_minutes": 120,
+            "estimated_cost_krw": 0,
+            "latitude": 37.5796,
+            "longitude": 126.977
+        },
+        {
+            "order": 2,
+            "time": "11:00 AM",
+            "place": "Walk to Bukchon Hanok Village",
+            "activity": "Enjoy a pleasant walk up the hill to Bukchon.",
+            "duration_minutes": 20,
+            "estimated_cost_krw": 0,
+            "latitude": None,
+            "longitude": None
+        }
+    ]
+    assert _validate_llm_itinerary(valid_output, skeleton) is not None
+    
+    # 2. Invalid: Count mismatch
+    invalid_count = valid_output[:-1]
+    assert _validate_llm_itinerary(invalid_count, skeleton) is None
+    
+    # 3. Invalid: Order mismatch
+    invalid_order = [dict(item) for item in valid_output]
+    invalid_order[0]["order"] = 99
+    assert _validate_llm_itinerary(invalid_order, skeleton) is None
+    
+    # 4. Invalid: Duration mismatch
+    invalid_duration = [dict(item) for item in valid_output]
+    invalid_duration[0]["duration_minutes"] = 130
+    assert _validate_llm_itinerary(invalid_duration, skeleton) is None
+    
+    # 5. Invalid: Time mismatch
+    invalid_time = [dict(item) for item in valid_output]
+    invalid_time[0]["time"] = "09:15 AM"
+    assert _validate_llm_itinerary(invalid_time, skeleton) is None
+    
+    # 6. Invalid: Place mismatch
+    invalid_place = [dict(item) for item in valid_output]
+    invalid_place[0]["place"] = "Gyeongbokgung Palace Palace"
+    assert _validate_llm_itinerary(invalid_place, skeleton) is None
+    
+    # 7. Invalid: Cost mismatch
+    invalid_cost = [dict(item) for item in valid_output]
+    invalid_cost[0]["estimated_cost_krw"] = 5000
+    assert _validate_llm_itinerary(invalid_cost, skeleton) is None
+    
+    # 8. Invalid: Lat/Lng mismatch
+    invalid_coords = [dict(item) for item in valid_output]
+    invalid_coords[0]["latitude"] = 37.58
+    assert _validate_llm_itinerary(invalid_coords, skeleton) is None
+
+
+@pytest.mark.asyncio
+async def test_generate_itinerary_includes_travel_legs(client):
+    async def _mock_passthrough(req, skeleton):
+        return skeleton
+
+    with patch("server.routers.itinerary.call_llm_for_itinerary", _mock_passthrough):
+        resp = await client.post("/itinerary/generate", json={
+            "location": "Gwanghwamun",
+            "hotspots": ["Gyeongbokgung Palace", "National Palace Museum of Korea"],
+            "available_hours": 4.0,
+            "start_time": "10:00",
+        })
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        # Should have: Stop 1, Travel leg, Stop 2
+        assert len(items) == 3
+        assert items[0]["place"] == "Gyeongbokgung Palace"
+        assert items[1]["place"] == "Walk to National Palace Museum of Korea"
+        assert items[1]["latitude"] is None
+        assert items[1]["longitude"] is None
+        assert items[1]["routing_source"] is not None
+        assert items[2]["place"] == "National Palace Museum of Korea"
+
+
+@pytest.mark.asyncio
+async def test_reorder_rejects_itinerary_with_generated_travel_legs(client):
+    async def _mock_passthrough(req, skeleton):
+        return skeleton
+
+    with patch("server.routers.itinerary.call_llm_for_itinerary", _mock_passthrough):
+        gen_resp = await client.post("/itinerary/generate", json={
+            "location": "Gwanghwamun",
+            "hotspots": ["Gyeongbokgung Palace", "National Palace Museum of Korea"],
+            "available_hours": 4.0,
+            "start_time": "10:00",
+        })
+
+    assert gen_resp.status_code == 200
+    data = gen_resp.json()
+    item_order = [item["order"] for item in reversed(data["items"])]
+
+    resp = await client.put(f"/itinerary/{data['session_id']}/reorder", json={
+        "item_order": item_order,
+    })
+
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+@patch("server.routers.itinerary.call_llm_for_itinerary", _mock_llm)
+async def test_over_budget_error_includes_breakdown(client):
+    resp = await client.post("/itinerary/generate", json={
+        "location": "Gwanghwamun",
+        "hotspots": ["Gyeongbokgung Palace", "National Palace Museum of Korea", "Tosokchon Samgyetang"],
+        "available_hours": 4.0,
+        "start_time": "10:00",
+    })
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert detail["travel_minutes"] == 20  # 2 legs × 10 min stub each
+    assert "breakdown" in detail
+    breakdown = detail["breakdown"]
+    assert len(breakdown) == 5
+    assert breakdown[0]["type"] == "visit"
+    assert breakdown[0]["name"] == "Gyeongbokgung Palace"
+    assert breakdown[1]["type"] == "walk"
+    assert breakdown[1]["name"] == "Walk to National Palace Museum of Korea"
+    assert breakdown[2]["type"] == "visit"
+    assert breakdown[2]["name"] == "National Palace Museum of Korea"
+    assert breakdown[3]["type"] == "walk"
+    assert breakdown[3]["name"] == "Walk to Tosokchon Samgyetang"
+    assert breakdown[4]["type"] == "visit"
+    assert breakdown[4]["name"] == "Tosokchon Samgyetang"
+
+
+@pytest.mark.asyncio
+async def test_llm_cannot_remove_travel_legs():
+    from server.routers.itinerary import _validate_llm_itinerary
+    skeleton = [
+        {"order": 1, "time": "09:00 AM", "place": "Gyeongbokgung Palace", "duration_minutes": 120, "estimated_cost_krw": 0, "latitude": 37.5, "longitude": 126.9},
+        {"order": 2, "time": "11:00 AM", "place": "Walk to Bukchon", "duration_minutes": 20, "estimated_cost_krw": 0, "latitude": None, "longitude": None},
+        {"order": 3, "time": "11:20 AM", "place": "Bukchon Hanok Village", "duration_minutes": 60, "estimated_cost_krw": 0, "latitude": 37.6, "longitude": 127.0}
+    ]
+    # LLM output tries to omit the Walk travel leg
+    llm_output = [
+        {"order": 1, "time": "09:00 AM", "place": "Gyeongbokgung Palace", "duration_minutes": 120, "estimated_cost_krw": 0, "latitude": 37.5, "longitude": 126.9},
+        {"order": 2, "time": "11:00 AM", "place": "Bukchon Hanok Village", "duration_minutes": 60, "estimated_cost_krw": 0, "latitude": 37.6, "longitude": 127.0}
+    ]
+    assert _validate_llm_itinerary(llm_output, skeleton) is None
+
+
+@pytest.mark.asyncio
+@patch("server.routers.itinerary.call_llm_for_itinerary", _mock_llm)
+async def test_generate_itinerary_permutation_cap(client):
+    resp = await client.post("/itinerary/generate", json={
+        "location": "Gwanghwamun",
+        "hotspots": [
+            "Gyeongbokgung Palace",
+            "Gwanghwamun Square",
+            "Deoksugung Palace",
+            "Deoksugung Stone-wall Road",
+            "Cheong Wa Dae (The Blue House)",
+            "National Palace Museum of Korea",
+            "Bukchon Hanok Village",
+            "Seochon Village"
+        ], # 8 valid hotspots -> exceeds cap of 7
+        "available_hours": 8.0,
+        "start_time": "10:00",
+    })
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert detail["code"] == "too_many_hotspots"
+    assert "Too many selected stops" in detail["message"]
+
 
 
 

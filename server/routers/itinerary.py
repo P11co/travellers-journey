@@ -10,6 +10,8 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
+import itertools
 import json
 import re
 import uuid
@@ -33,36 +35,27 @@ from server.database import (
 from server.routers.handoff import build_naver_urls
 from server.routers.chat import _call_llm
 from server.services.langsmith_tracing import traceable
+from server.services.routing import get_travel_leg
 
 router = APIRouter(prefix="/itinerary", tags=["Itinerary"])
 
 
-# ---------------------------------------------------------------------------
-# LLM prompt for itinerary generation
-# ---------------------------------------------------------------------------
 _ITINERARY_SYSTEM_PROMPT = """\
-You are SeoulWalk Itinerary Planner. Given a tourist's constraints, generate \
-a structured walking route as a JSON array.
+You are SeoulWalk Itinerary Copy Editor.
 
-RULES:
-- Output ONLY a valid JSON array — no markdown, no extra text.
-- Each element must have exactly these keys:
-  "order" (int, starting at 1),
-  "time" (string, e.g. "10:00 AM"),
-  "place" (string, the location name),
-  "activity" (string, what to do there),
-  "duration_minutes" (int),
-  "estimated_cost_krw" (int, 0 if free),
-  "latitude" (float or null),
-  "longitude" (float or null)
-- Include travel/walking time between locations as separate items if needed.
-- Treat available time as a maximum, not a target to fill.
-- Selected hotspots are hard constraints, not loose suggestions.
-- The order of selected hotspots in the request is arbitrary, not user preference. Choose the stop order that minimizes total walking/travel distance while still respecting time, budget, opening-hour, and meal/rest constraints.
-- Do not invent new places, restaurants, cafes, museums, palaces, streets, or parks.
-- If fill mode is disabled, use only selected hotspots plus utility items like "Walking to X" or generic "Rest break".
-- If fill mode is enabled, extra stops must come only from the provided fill pool of known hotspots.
-- Use the exact provided coordinates for hotspot stops. Utility items must use null coordinates.
+You will receive a fixed itinerary skeleton. You must preserve:
+- item count
+- item order
+- time
+- place
+- duration_minutes
+- estimated_cost_krw
+- latitude
+- longitude
+
+You may only rewrite the activity field for destination stops.
+For travel legs such as "Walk to X" or "Taxi to X", keep the activity short and do not change duration.
+Return only valid JSON.
 """
 
 _REQUIRED_ITEM_KEYS = {
@@ -117,116 +110,157 @@ def _resolve_hotspots(names: list[str]) -> list[dict]:
     return resolved
 
 
-def _estimate_selected_route_budget(req: ItineraryGenerateRequest) -> dict | None:
-    selected_hotspots = _resolve_hotspots(req.hotspots)
-    if not selected_hotspots:
-        return None
-    total_duration = sum(int(h.get("est_duration_mins", 60)) for h in selected_hotspots)
-    num_stops = len(selected_hotspots)
-    walking_buffer = 15 * (num_stops - 1)
-    min_time_required = total_duration + walking_buffer
-    available_minutes = req.available_hours * 60
-    if min_time_required > available_minutes:
-        over_by_minutes = min_time_required - available_minutes
-        return {
-            "code": "itinerary_time_budget_exceeded",
-            "message": "Not enough time for this itinerary.",
-            "available_minutes": int(available_minutes),
-            "required_minutes": int(min_time_required),
-            "over_by_minutes": int(over_by_minutes),
-            "stops": [
-                {
-                    "name": h.get("name", ""),
-                    "duration_minutes": int(h.get("est_duration_mins", 60))
-                }
-                for h in selected_hotspots
-            ],
-            "travel_buffer_minutes": int(walking_buffer)
-        }
-    return None
+async def _build_travel_matrix(hotspots: list[dict]) -> dict:
+    """
+    Builds a matrix (dict of dicts) mapping (from_id, to_id) -> leg_dict.
+    Uses asyncio.gather to resolve all leg requests concurrently.
+    """
+    matrix = {}
+    if not hotspots or len(hotspots) <= 1:
+        return matrix
+    
+    pairs = []
+    for h1, h2 in itertools.permutations(hotspots, 2):
+        pairs.append((h1, h2))
+        
+    legs = await asyncio.gather(*[
+        get_travel_leg(h1["lat"], h1["lng"], h2["lat"], h2["lng"])
+        for h1, h2 in pairs
+    ])
+    
+    for (h1, h2), leg in zip(pairs, legs):
+        if h1["id"] not in matrix:
+            matrix[h1["id"]] = {}
+        matrix[h1["id"]][h2["id"]] = leg
+        
+    return matrix
 
 
-def _format_hotspot_lines(hotspots: list[dict]) -> str:
-    if not hotspots:
-        return "- None"
-    return "\n".join(
-        (
-            f'- {hotspot["name"]}: duration={hotspot["est_duration_mins"]} min, '
-            f'lat={hotspot["lat"]}, lng={hotspot["lng"]}, '
-            f'description="{hotspot["short_desc"]}"'
-        )
-        for hotspot in hotspots
-    )
+async def _optimize_hotspot_route(hotspots: list[dict], travel_matrix: dict) -> list[dict]:
+    """
+    Finds the permutation of resolved hotspots that minimizes total travel time.
+    """
+    if len(hotspots) <= 1:
+        return hotspots
+        
+    best_perm = list(hotspots)
+    min_travel_time = float("inf")
+    
+    for perm in itertools.permutations(hotspots):
+        current_travel = 0
+        for i in range(len(perm) - 1):
+            h_from = perm[i]
+            h_to = perm[i+1]
+            leg = travel_matrix.get(h_from["id"], {}).get(h_to["id"], {})
+            current_travel += leg.get("duration_minutes", 15)
+            
+        if current_travel < min_travel_time:
+            min_travel_time = current_travel
+            best_perm = list(perm)
+            
+    return best_perm
+
+
+def _build_deterministic_skeleton(
+    ordered_hotspots: list[dict], start_time: str, travel_matrix: dict
+) -> list[dict]:
+    """
+    Builds the deterministic schedule items containing stops and travel legs.
+    """
+    if not ordered_hotspots:
+        return []
+        
+    items = []
+    running_minutes = _parse_time_to_minutes(start_time)
+    
+    for idx, hotspot in enumerate(ordered_hotspots):
+        # 1. Add the hotspot itself
+        visit_duration = int(hotspot.get("est_duration_mins", 60))
+        items.append({
+            "order": len(items) + 1,
+            "time": _format_minutes_as_time(running_minutes),
+            "place": hotspot["name"],
+            "activity": hotspot["short_desc"],
+            "duration_minutes": visit_duration,
+            "estimated_cost_krw": 0,
+            "latitude": float(hotspot["lat"]),
+            "longitude": float(hotspot["lng"]),
+            "routing_source": None,
+        })
+        running_minutes += visit_duration
+        
+        # 2. Add the travel leg if there is a next hotspot
+        if idx < len(ordered_hotspots) - 1:
+            h_next = ordered_hotspots[idx + 1]
+            leg = travel_matrix.get(hotspot["id"], {}).get(h_next["id"], {})
+            mode = leg.get("mode", "walk")
+            leg_duration = leg.get("duration_minutes", 15)
+            routing_src = leg.get("routing_source", "fallback")
+            
+            mode_cap = mode.capitalize()
+            items.append({
+                "order": len(items) + 1,
+                "time": _format_minutes_as_time(running_minutes),
+                "place": f"{mode_cap} to {h_next['name']}",
+                "activity": f"{mode_cap} from {hotspot['name']} to {h_next['name']}.",
+                "duration_minutes": leg_duration,
+                "estimated_cost_krw": 0,
+                "latitude": None,
+                "longitude": None,
+                "routing_source": routing_src,
+            })
+            running_minutes += leg_duration
+            
+    return items
+
+
+# Hard cap on total hotspots (selected + AI fill) to prevent factorial permutation blow-up.
+_MAX_HOTSPOTS = 7
+
+
+async def _fill_and_optimize_route(
+    selected_hotspots: list[dict],
+    allow_ai_fill: bool,
+    available_hours: float,
+    start_time: str,
+) -> tuple[list[dict], dict]:
+    """
+    Finds the optimal set of hotspots (including AI fills if allowed) and their optimized order.
+    The combined total of selected + fill hotspots is capped at _MAX_HOTSPOTS (7) to avoid
+    factorial permutation cost in _optimize_hotspot_route.
+    """
+    current_hotspots = list(selected_hotspots)
+    travel_matrix = await _build_travel_matrix(current_hotspots)
+    ordered = await _optimize_hotspot_route(current_hotspots, travel_matrix)
+    
+    if not allow_ai_fill:
+        return ordered, travel_matrix
+        
+    fill_pool = _known_fill_hotspots(selected_hotspots)
+    available_minutes = available_hours * 60
+    
+    for candidate in fill_pool:
+        # Enforce hard cap: never exceed _MAX_HOTSPOTS total stops.
+        if len(current_hotspots) >= _MAX_HOTSPOTS:
+            break
+
+        test_hotspots = current_hotspots + [candidate]
+        test_matrix = await _build_travel_matrix(test_hotspots)
+        test_ordered = await _optimize_hotspot_route(test_hotspots, test_matrix)
+        test_skeleton = _build_deterministic_skeleton(test_ordered, start_time, test_matrix)
+        total_time = sum(item["duration_minutes"] for item in test_skeleton)
+        
+        if total_time <= available_minutes:
+            current_hotspots = test_hotspots
+            travel_matrix = test_matrix
+            ordered = test_ordered
+            
+    return ordered, travel_matrix
 
 
 def _known_fill_hotspots(selected_hotspots: list[dict]) -> list[dict]:
     selected_ids = {hotspot["id"] for hotspot in selected_hotspots}
     return [hotspot for hotspot in HOTSPOTS if hotspot["id"] not in selected_ids]
-
-
-def _build_user_prompt(req: ItineraryGenerateRequest) -> str:
-    budget_text = f"{req.budget_krw:,} KRW" if req.budget_krw else "No budget constraint"
-    selected_hotspots = _resolve_hotspots(req.hotspots)
-    selected_names = ", ".join(hotspot["name"] for hotspot in selected_hotspots) or ", ".join(req.hotspots)
-    fill_pool = _known_fill_hotspots(selected_hotspots) if req.allow_ai_fill else []
-    waypoint_info = ""
-    if WAYPOINTS:
-        waypoint_info = (
-            f"\n\nKnown waypoints with exact GPS coordinates:\n"
-            + "\n".join(
-                f'- {wp["name"]}: lat={wp["coordinates"]["latitude"]}, lng={wp["coordinates"]["longitude"]}'
-                for wp in WAYPOINTS
-            )
-        )
-
-    return (
-        f"Location: {req.location}\n"
-        f"Selected hotspots: {selected_names}\n"
-        f"Selected hotspot details:\n{_format_hotspot_lines(selected_hotspots)}\n"
-        f"The selected hotspot list is unordered. Reorder these stops into the most efficient walking route, minimizing backtracking and total travel distance.\n"
-        f"AI fill mode: {'enabled' if req.allow_ai_fill else 'disabled'}\n"
-        f"Known fill pool, only usable when AI fill mode is enabled:\n{_format_hotspot_lines(fill_pool)}\n"
-        f"Budget: {budget_text}\n"
-        f"Maximum available time: {req.available_hours} hours starting at {req.start_time}\n"
-        f"If the selected hotspots take less time than the maximum, do not pad the route unless fill mode is enabled.\n"
-        f"{waypoint_info}"
-    )
-
-
-def _hotspot_to_item(hotspot: dict) -> dict:
-    return {
-        "order": 0,
-        "time": "",
-        "place": hotspot["name"],
-        "activity": hotspot["short_desc"],
-        "duration_minutes": int(hotspot["est_duration_mins"]),
-        "estimated_cost_krw": 0,
-        "latitude": float(hotspot["lat"]),
-        "longitude": float(hotspot["lng"]),
-    }
-
-
-def _fallback_itinerary_items(req: ItineraryGenerateRequest) -> list[dict]:
-    selected_hotspots = _resolve_hotspots(req.hotspots)
-    if selected_hotspots:
-        return _recalculate_item_schedule(
-            [_hotspot_to_item(hotspot) for hotspot in selected_hotspots],
-            req.start_time,
-        )
-
-    return _recalculate_item_schedule(
-        [{
-            "order": 0,
-            "time": "",
-            "place": req.location,
-            "activity": "Explore the selected area at a relaxed pace.",
-            "duration_minutes": 60,
-            "estimated_cost_krw": 0,
-            "latitude": None,
-            "longitude": None,
-        }],
-        req.start_time,
-    )
 
 
 def _extract_json_array(raw_content: str) -> str:
@@ -254,98 +288,118 @@ def _parse_itinerary_items(raw_content: str) -> list[dict]:
     return items
 
 
+# Travel legs generated by _build_deterministic_skeleton always have:
+#   1. Null latitude / longitude
+#   2. A place that starts with "Walk to " or "Taxi to "
+# Checking these two structural properties is far more reliable than scanning
+# descriptive text, which can misfire on real destinations that mention
+# walking (e.g. "Deoksugung Stone-wall Road").
+_TRAVEL_LEG_PREFIXES = ("walk to ", "taxi to ")
+
+
 def _is_utility_item(item: dict) -> bool:
-    text = f'{item.get("place", "")} {item.get("activity", "")}'.lower()
-    return any(
-        keyword in text
-        for keyword in ("walk", "walking", "travel", "transit", "rest break", "lunch break")
-    )
+    """Return True only for generated travel legs (Walk to / Taxi to), not real destinations."""
+    if item.get("latitude") is not None or item.get("longitude") is not None:
+        # Real destinations always have coordinates – never a travel leg.
+        return False
+    place_lower = item.get("place", "").lower()
+    return any(place_lower.startswith(prefix) for prefix in _TRAVEL_LEG_PREFIXES)
 
 
-def _merge_known_hotspot_item(item: dict, hotspot: dict) -> dict:
-    return {
-        **item,
-        "place": hotspot["name"],
-        "duration_minutes": int(item.get("duration_minutes") or hotspot["est_duration_mins"]),
-        "latitude": float(hotspot["lat"]),
-        "longitude": float(hotspot["lng"]),
-    }
+def _validate_llm_itinerary(parsed_items: list[dict], skeleton: list[dict]) -> list[dict] | None:
+    if not isinstance(parsed_items, list) or len(parsed_items) != len(skeleton):
+        return None
+        
+    validated = []
+    for p_item, s_item in zip(parsed_items, skeleton):
+        if not isinstance(p_item, dict):
+            return None
+            
+        # Check order
+        if int(p_item.get("order", 0)) != int(s_item["order"]):
+            return None
+            
+        # Check duration
+        if int(p_item.get("duration_minutes", 0)) != int(s_item["duration_minutes"]):
+            return None
+            
+        # Check time
+        if str(p_item.get("time", "")).strip() != str(s_item["time"]).strip():
+            return None
+            
+        # Check place
+        p_place = _normalize_name(str(p_item.get("place", "")))
+        s_place = _normalize_name(str(s_item["place"]))
+        if p_place != s_place:
+            return None
+            
+        # Check estimated_cost_krw
+        if int(p_item.get("estimated_cost_krw", 0)) != int(s_item.get("estimated_cost_krw", 0)):
+            return None
 
+        # Check coordinates (latitude and longitude)
+        p_lat = p_item.get("latitude")
+        s_lat = s_item["latitude"]
+        p_lng = p_item.get("longitude")
+        s_lng = s_item["longitude"]
 
-def _filter_known_items(items: list[dict], req: ItineraryGenerateRequest) -> list[dict]:
-    selected_hotspots = _resolve_hotspots(req.hotspots)
-    allowed_hotspots = selected_hotspots + (_known_fill_hotspots(selected_hotspots) if req.allow_ai_fill else [])
-    allowed_by_name = {_normalize_name(hotspot["name"]): hotspot for hotspot in allowed_hotspots}
-    selected_names = {_normalize_name(hotspot["name"]) for hotspot in selected_hotspots}
+        # Helper to compare float coords
+        def coords_match(c1, c2):
+            if c1 is None and c2 is None:
+                return True
+            if c1 is None or c2 is None:
+                return False
+            try:
+                return abs(float(c1) - float(c2)) < 1e-5
+            except (ValueError, TypeError):
+                return False
 
-    filtered = []
-    selected_seen = set()
-    for item in items:
-        normalized_place = _normalize_name(str(item.get("place", "")))
-        known_hotspot = allowed_by_name.get(normalized_place)
-        if known_hotspot:
-            filtered.append(_merge_known_hotspot_item(item, known_hotspot))
-            if normalized_place in selected_names:
-                selected_seen.add(normalized_place)
-            continue
-
-        if _is_utility_item(item):
-            filtered.append({
-                **item,
-                "latitude": None,
-                "longitude": None,
-            })
-
-    # Ensure strict mode cannot accidentally omit a selected destination.
-    for hotspot in selected_hotspots:
-        normalized_name = _normalize_name(hotspot["name"])
-        if normalized_name not in selected_seen:
-            filtered.append(_hotspot_to_item(hotspot))
-
-    filtered = _trim_optional_items_to_available_time(filtered, req, selected_names)
-    return _recalculate_item_schedule(filtered or _fallback_itinerary_items(req), req.start_time)
-
-
-def _trim_optional_items_to_available_time(
-    items: list[dict],
-    req: ItineraryGenerateRequest,
-    selected_names: set[str],
-) -> list[dict]:
-    max_minutes = int(req.available_hours * 60)
-    if max_minutes <= 0:
-        return items
-
-    running_minutes = 0
-    trimmed = []
-    for item in items:
-        duration = int(item.get("duration_minutes") or 60)
-        is_selected_hotspot = _normalize_name(str(item.get("place", ""))) in selected_names
-        if running_minutes + duration <= max_minutes or is_selected_hotspot:
-            trimmed.append(item)
-            running_minutes += duration
-
-    return trimmed
-
-
-def _recalculate_item_schedule(items: list[dict], start_time: str) -> list[dict]:
-    running_minutes = _parse_time_to_minutes(start_time)
-    scheduled = []
-    for order, item in enumerate(items, start=1):
-        duration = int(item.get("duration_minutes") or 60)
-        scheduled.append({
-            **item,
-            "order": order,
-            "time": _format_minutes_as_time(running_minutes),
-            "duration_minutes": duration,
+        if not coords_match(p_lat, s_lat) or not coords_match(p_lng, s_lng):
+            return None
+            
+        validated.append({
+            "order": s_item["order"],
+            "time": s_item["time"],
+            "place": s_item["place"],
+            "activity": str(p_item.get("activity", s_item["activity"])),
+            "duration_minutes": s_item["duration_minutes"],
+            "estimated_cost_krw": s_item["estimated_cost_krw"],
+            "latitude": s_item["latitude"],
+            "longitude": s_item["longitude"],
+            "routing_source": s_item.get("routing_source"),
         })
-        running_minutes += duration
-    return scheduled
+        
+    return validated
 
 
 @traceable(name="Generate Itinerary With LLM", run_type="chain")
-async def call_llm_for_itinerary(req: ItineraryGenerateRequest) -> list[dict]:
-    """Call the same default chat model/provider to generate itinerary JSON."""
-    user_prompt = _build_user_prompt(req)
+async def call_llm_for_itinerary(req: ItineraryGenerateRequest, skeleton: list[dict]) -> list[dict]:
+    """Call the LLM to enrich the deterministic itinerary skeleton."""
+    skeleton_json = json.dumps([
+        {
+            "order": item["order"],
+            "time": item["time"],
+            "place": item["place"],
+            "activity": item["activity"],
+            "duration_minutes": item["duration_minutes"],
+            "estimated_cost_krw": item["estimated_cost_krw"],
+            "latitude": item["latitude"],
+            "longitude": item["longitude"],
+        }
+        for item in skeleton
+    ], indent=2, ensure_ascii=False)
+
+    user_prompt = (
+        f"Location: {req.location}\n"
+        f"Desired itinerary budget: {req.budget_krw if req.budget_krw else 'No limit'}\n"
+        f"Available time: {req.available_hours} hours starting at {req.start_time}\n"
+        f"Itinerary Skeleton (strictly preserve this structure):\n"
+        f"{skeleton_json}\n\n"
+        "You MUST keep every item in the skeleton exactly. Keep 'order', 'time', 'place', 'duration_minutes', 'estimated_cost_krw', 'latitude', and 'longitude' identical.\n"
+        "You may only rewrite the activity field for destination stops.\n"
+        "For travel legs such as 'Walk to X' or 'Taxi to X', keep the activity short and do not change duration."
+    )
+
     try:
         raw_content = await _call_llm(
             messages=[
@@ -353,62 +407,130 @@ async def call_llm_for_itinerary(req: ItineraryGenerateRequest) -> list[dict]:
                 {"role": "user", "content": user_prompt},
             ],
             model=LLM_MODEL_ID,
-            temperature=0.4,
+            temperature=0.3,
             provider="openrouter",
         )
-        return _filter_known_items(_parse_itinerary_items(raw_content), req)
-    except (HTTPException, json.JSONDecodeError, ValueError) as exc:
-        print(f"⚠️ Falling back to deterministic itinerary: {exc}")
-        return _fallback_itinerary_items(req)
+        parsed_items = _parse_itinerary_items(raw_content)
+        validated_items = _validate_llm_itinerary(parsed_items, skeleton)
+        if validated_items:
+            return validated_items
+        else:
+            print("⚠️ LLM itinerary validation failed. Falling back to skeleton.")
+            return skeleton
+    except Exception as exc:
+        print(f"⚠️ Error during LLM itinerary generation: {exc}. Falling back to skeleton.")
+        return skeleton
 
-
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
 
 @router.post("/generate", response_model=ItineraryResponse)
 @traceable(name="Itinerary Generate API", run_type="chain")
 async def generate_itinerary(req: ItineraryGenerateRequest):
     """Generate an AI-powered itinerary and persist it."""
-    # Preflight check for available hours vs selected stops duration + buffer
-    over_budget_err = _estimate_selected_route_budget(req)
-    if over_budget_err:
+    # 1. Resolve selected hotspots
+    selected_hotspots = _resolve_hotspots(req.hotspots)
+    if len(selected_hotspots) > 7:
         raise HTTPException(
             status_code=400,
-            detail=over_budget_err
+            detail={
+                "code": "too_many_hotspots",
+                "message": "Too many selected stops to optimize. Please select at most 7 hotspots."
+            }
         )
 
-    # 1. Create or reuse session
+    # 2. Build travel matrix and optimize route (with AI fill if enabled)
+    ordered_hotspots, travel_matrix = await _fill_and_optimize_route(
+        selected_hotspots,
+        allow_ai_fill=req.allow_ai_fill,
+        available_hours=req.available_hours,
+        start_time=req.start_time,
+    )
+
+    # 3. Build deterministic skeleton
+    skeleton = _build_deterministic_skeleton(ordered_hotspots, req.start_time, travel_matrix)
+    
+    # 4. Fallback if skeleton is empty
+    if not skeleton:
+        skeleton = [{
+            "order": 1,
+            "time": _format_minutes_as_time(_parse_time_to_minutes(req.start_time)),
+            "place": req.location,
+            "activity": "Explore the selected area at a relaxed pace.",
+            "duration_minutes": 60,
+            "estimated_cost_krw": 0,
+            "latitude": None,
+            "longitude": None,
+            "routing_source": None,
+        }]
+
+    # 5. Check time budget
+    available_minutes = req.available_hours * 60
+    total_minutes = sum(item["duration_minutes"] for item in skeleton)
+    if total_minutes > available_minutes:
+        over_by_minutes = total_minutes - available_minutes
+        stops_list = []
+        breakdown_list = []
+        travel_minutes = 0
+        for item in skeleton:
+            stops_list.append({
+                "name": item["place"],
+                "duration_minutes": item["duration_minutes"]
+            })
+            if _is_utility_item(item):
+                travel_minutes += item["duration_minutes"]
+                item_type = "taxi" if "taxi" in item["place"].lower() else "walk"
+            else:
+                item_type = "visit"
+            breakdown_list.append({
+                "type": item_type,
+                "name": item["place"],
+                "duration_minutes": item["duration_minutes"]
+            })
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "itinerary_time_budget_exceeded",
+                "message": "Not enough time for this itinerary.",
+                "available_minutes": int(available_minutes),
+                "required_minutes": int(total_minutes),
+                "over_by_minutes": int(over_by_minutes),
+                "stops": stops_list,
+                "travel_minutes": int(travel_minutes),
+                "travel_buffer_minutes": int(travel_minutes),
+                "breakdown": breakdown_list
+            }
+        )
+
+    # 6. Create or reuse session
     session_id = req.session_id or str(uuid.uuid4())
     existing = await get_session(session_id)
     if not existing:
         await create_session(session_id, location=req.location)
 
-    # 2. Call LLM
-    raw_items = await call_llm_for_itinerary(req)
+    # 7. Call LLM to enrich the skeleton
+    enriched_items = await call_llm_for_itinerary(req, skeleton)
 
-    # 3. Enrich items with Naver Map URLs where coordinates exist
-    enriched_items = []
-    for item in raw_items:
+    # 8. Enrich items with Naver Map URLs where coordinates exist
+    final_items = []
+    for item in enriched_items:
         lat = item.get("latitude")
         lng = item.get("longitude")
         naver_url = None
         if lat and lng:
             urls = build_naver_urls(item.get("place", ""), lat, lng)
             naver_url = urls["naver_app_url"]
-        enriched_items.append({**item, "naver_map_url": naver_url})
+        final_items.append({**item, "naver_map_url": naver_url})
 
-    # 4. Persist
-    await save_itinerary_items(session_id, enriched_items)
+    # 9. Persist
+    await save_itinerary_items(session_id, final_items)
 
-    # 5. Build response
-    total_cost = sum(item.get("estimated_cost_krw", 0) for item in enriched_items)
+    # 10. Build response
+    total_cost = sum(item.get("estimated_cost_krw", 0) for item in final_items)
     session_data = await get_session(session_id)
 
     return ItineraryResponse(
         session_id=session_id,
         location=req.location,
-        items=[ItineraryItem(**item) for item in enriched_items],
+        items=[ItineraryItem(**item) for item in final_items],
         total_estimated_cost_krw=total_cost,
         created_at=session_data["created_at"] if session_data else None,
     )
