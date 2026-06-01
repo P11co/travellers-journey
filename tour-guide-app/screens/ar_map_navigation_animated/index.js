@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, TouchableOpacity, View, Text, StyleSheet } from 'react-native';
 import { WebView } from 'react-native-webview';
-import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useAppStore from '../../src/store';
 import waypointsData from '../../src/data/waypoints.json';
@@ -40,15 +39,15 @@ const getCurrentCoords = (currentLocation) => {
   };
 };
 
-const buildLeafletMapHtml = ({ center, waypoints, currentCoords }) => {
-  const payload = JSON.stringify({ center, waypoints, currentCoords });
+const buildMapLibreMapHtml = ({ center, waypoints, currentCoords, themeMode }) => {
+  const payload = JSON.stringify({ center, waypoints, currentCoords, themeMode });
 
   return `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.13.0/dist/maplibre-gl.css" />
     <style>
       html, body, #map {
         width: 100%;
@@ -58,18 +57,18 @@ const buildLeafletMapHtml = ({ center, waypoints, currentCoords }) => {
         background: #0f0f13;
         overflow: hidden;
       }
-      .leaflet-container {
+      .maplibregl-map {
         width: 100%;
         height: 100%;
         background: #0f0f13;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
-      .leaflet-tile {
-        filter: saturate(0.9) brightness(0.92) contrast(1.04);
-      }
-      .leaflet-control-attribution {
+      .maplibregl-ctrl-attrib {
         font-size: 10px;
         opacity: 0.7;
+      }
+      .maplibregl-ctrl-bottom-right {
+        bottom: 18px;
       }
       .pin {
         width: 18px;
@@ -85,16 +84,8 @@ const buildLeafletMapHtml = ({ center, waypoints, currentCoords }) => {
         background: #5c77ff;
         box-shadow: 0 0 0 8px rgba(92, 119, 255, 0.18), 0 4px 16px rgba(0, 0, 0, 0.4);
       }
-      .leaflet-popup-content-wrapper {
-        border-radius: 12px;
-      }
-      .popup-title {
-        font-weight: 700;
-        margin-bottom: 4px;
-      }
-      .popup-summary {
-        color: #52525b;
-        line-height: 1.35;
+      .maplibregl-marker {
+        cursor: pointer;
       }
       #fallback {
         position: absolute;
@@ -114,27 +105,26 @@ const buildLeafletMapHtml = ({ center, waypoints, currentCoords }) => {
   <body>
     <div id="map"></div>
     <div id="fallback">Map tiles could not load. Check the device internet connection.</div>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/maplibre-gl@5.13.0/dist/maplibre-gl.js"></script>
     <script>
-      (function () {
+      (async function () {
         var data = ${payload};
         var fallback = document.getElementById('fallback');
+        var styleUrl = data.themeMode === 'dark'
+          ? 'https://tiles.openfreemap.org/styles/dark'
+          : 'https://tiles.openfreemap.org/styles/liberty';
+        var englishLabelExpression = [
+          'coalesce',
+          ['get', 'name_en'],
+          ['get', 'name:en'],
+          ['get', 'name:latin']
+        ];
+        var waypointLabelColor = data.themeMode === 'dark' ? '#f4f4f5' : '#18181b';
+        var waypointLabelHalo = data.themeMode === 'dark' ? '#0f0f13' : '#ffffff';
 
         function showFallback(message) {
           fallback.textContent = message;
           fallback.style.display = 'flex';
-        }
-
-        function escapeHtml(value) {
-          return String(value || '').replace(/[&<>"']/g, function (character) {
-            return ({
-              '&': '&amp;',
-              '<': '&lt;',
-              '>': '&gt;',
-              '"': '&quot;',
-              "'": '&#39;'
-            })[character];
-          });
         }
 
         function postMapDismissal() {
@@ -152,71 +142,236 @@ const buildLeafletMapHtml = ({ center, waypoints, currentCoords }) => {
           }));
         }
 
-        if (!window.L) {
+        function expressionReferencesName(expression) {
+          if (!Array.isArray(expression)) return false;
+          if (expression[0] === 'get' && typeof expression[1] === 'string') {
+            return expression[1] === 'name' ||
+              expression[1] === 'name_en' ||
+              expression[1] === 'name:en' ||
+              expression[1] === 'name:latin' ||
+              expression[1] === 'name:nonlatin';
+          }
+          return expression.some(expressionReferencesName);
+        }
+
+        function preferEnglishLabels(style) {
+          style.layers = (style.layers || []).map(function (layer) {
+            if (!layer.layout || !expressionReferencesName(layer.layout['text-field'])) {
+              return layer;
+            }
+
+            return Object.assign({}, layer, {
+              layout: Object.assign({}, layer.layout, {
+                'text-field': englishLabelExpression
+              })
+            });
+          });
+          return style;
+        }
+
+        function createCirclePolygon(centerPoint, radiusMeters, steps) {
+          var coordinates = [];
+          var lat = centerPoint.latitude * Math.PI / 180;
+          var lng = centerPoint.longitude * Math.PI / 180;
+          var angularDistance = radiusMeters / 6371000;
+
+          for (var i = 0; i <= steps; i += 1) {
+            var bearing = (i / steps) * 2 * Math.PI;
+            var pointLat = Math.asin(
+              Math.sin(lat) * Math.cos(angularDistance) +
+              Math.cos(lat) * Math.sin(angularDistance) * Math.cos(bearing)
+            );
+            var pointLng = lng + Math.atan2(
+              Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(lat),
+              Math.cos(angularDistance) - Math.sin(lat) * Math.sin(pointLat)
+            );
+            coordinates.push([pointLng * 180 / Math.PI, pointLat * 180 / Math.PI]);
+          }
+
+          return coordinates;
+        }
+
+        if (!window.maplibregl) {
           showFallback('Map library could not load. Check the device internet connection.');
           return;
         }
 
-        var center = data.currentCoords || data.center;
-        var map = L.map('map', {
-          zoomControl: false,
-          attributionControl: true,
-          preferCanvas: true
-        }).setView([center.latitude, center.longitude], data.currentCoords ? 18 : 17);
-
-        L.control.zoom({ position: 'bottomright' }).addTo(map);
-        map.on('click', postMapDismissal);
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 19,
-          attribution: '&copy; OpenStreetMap'
-        }).addTo(map);
-
-        data.waypoints.forEach(function (point) {
-          var latLng = [point.latitude, point.longitude];
-          var color = point.active ? '#5c77ff' : '#ef4444';
-          var fill = point.active ? 'rgba(92, 119, 255, 0.16)' : 'rgba(239, 68, 68, 0.08)';
-          var pinClass = point.active ? 'pin active' : 'pin';
-
-          var circle = L.circle(latLng, {
-            radius: point.radius,
-            color: color,
-            fillColor: fill,
-            fillOpacity: 1,
-            weight: point.active ? 2 : 1
-          }).addTo(map);
-          circle.on('click', function (event) {
-            L.DomEvent.stopPropagation(event);
-            postWaypointSelection(point);
-          });
-
-          var marker = L.marker(latLng, {
-            icon: L.divIcon({
-              className: '',
-              html: '<div class="' + pinClass + '"></div>',
-              iconSize: point.active ? [22, 22] : [18, 18],
-              iconAnchor: point.active ? [11, 11] : [9, 9]
-            })
-          }).addTo(map);
-          marker.on('click', function (event) {
-            L.DomEvent.stopPropagation(event);
-            postWaypointSelection(point);
-          });
-        });
-
-        if (data.currentCoords) {
-          L.circleMarker([data.currentCoords.latitude, data.currentCoords.longitude], {
-            radius: 9,
-            color: '#ffffff',
-            fillColor: '#2563eb',
-            fillOpacity: 1,
-            weight: 3
-          }).addTo(map).bindTooltip('Current location');
+        var style;
+        try {
+          var response = await fetch(styleUrl);
+          if (!response.ok) {
+            throw new Error('Style request failed: ' + response.status);
+          }
+          style = preferEnglishLabels(await response.json());
+        } catch (error) {
+          showFallback('Vector map style could not load. Check the device internet connection.');
+          return;
         }
 
-        setTimeout(function () {
-          map.invalidateSize();
-        }, 200);
+        var center = data.currentCoords || data.center;
+        var map = new maplibregl.Map({
+          container: 'map',
+          style: style,
+          center: [center.longitude, center.latitude],
+          zoom: data.currentCoords ? 17.6 : 16.8,
+          attributionControl: true
+        });
+
+        map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
+        map.touchZoomRotate.disableRotation();
+        map.dragRotate.disable();
+
+        map.on('load', function () {
+          var waypointFeatures = data.waypoints.map(function (point) {
+            return {
+              type: 'Feature',
+              geometry: {
+                type: 'Polygon',
+                coordinates: [createCirclePolygon(point, point.radius, 64)]
+              },
+              properties: {
+                id: point.id,
+                active: point.active
+              }
+            };
+          });
+
+          map.addSource('waypoint-zones', {
+            type: 'geojson',
+            data: {
+              type: 'FeatureCollection',
+              features: waypointFeatures
+            }
+          });
+
+          map.addLayer({
+            id: 'waypoint-zone-fill',
+            type: 'fill',
+            source: 'waypoint-zones',
+            paint: {
+              'fill-color': ['case', ['boolean', ['get', 'active'], false], '#5c77ff', '#ef4444'],
+              'fill-opacity': ['case', ['boolean', ['get', 'active'], false], 0.16, 0.08]
+            }
+          });
+
+          map.addLayer({
+            id: 'waypoint-zone-line',
+            type: 'line',
+            source: 'waypoint-zones',
+            paint: {
+              'line-color': ['case', ['boolean', ['get', 'active'], false], '#5c77ff', '#ef4444'],
+              'line-opacity': 0.9,
+              'line-width': ['case', ['boolean', ['get', 'active'], false], 2, 1]
+            }
+          });
+
+          map.addSource('waypoint-labels', {
+            type: 'geojson',
+            data: {
+              type: 'FeatureCollection',
+              features: data.waypoints.map(function (point) {
+                return {
+                  type: 'Feature',
+                  geometry: {
+                    type: 'Point',
+                    coordinates: [point.longitude, point.latitude]
+                  },
+                  properties: {
+                    id: point.id,
+                    name: point.name,
+                    active: point.active
+                  }
+                };
+              })
+            }
+          });
+
+          map.addLayer({
+            id: 'waypoint-english-labels',
+            type: 'symbol',
+            source: 'waypoint-labels',
+            layout: {
+              'text-field': ['get', 'name'],
+              'text-font': ['Noto Sans Bold'],
+              'text-size': ['case', ['boolean', ['get', 'active'], false], 14, 12],
+              'text-anchor': 'top',
+              'text-offset': [0, 1.25],
+              'text-max-width': 8,
+              'text-allow-overlap': true,
+              'text-ignore-placement': true
+            },
+            paint: {
+              'text-color': waypointLabelColor,
+              'text-halo-color': waypointLabelHalo,
+              'text-halo-width': 1.5,
+              'text-halo-blur': 0.4
+            }
+          });
+
+          map.on('click', function (event) {
+            var waypointHits = map.queryRenderedFeatures(event.point, {
+              layers: ['waypoint-zone-fill']
+            });
+            if (waypointHits.length > 0) return;
+            postMapDismissal();
+          });
+
+          map.on('click', 'waypoint-zone-fill', function (event) {
+            if (event.originalEvent && event.originalEvent.stopPropagation) {
+              event.originalEvent.stopPropagation();
+            }
+            var feature = event.features && event.features[0];
+            var point = data.waypoints.find(function (waypoint) {
+              return feature && waypoint.id === feature.properties.id;
+            });
+            if (point) postWaypointSelection(point);
+          });
+
+          data.waypoints.forEach(function (point) {
+            var markerElement = document.createElement('div');
+            markerElement.className = point.active ? 'pin active' : 'pin';
+            markerElement.addEventListener('click', function (event) {
+              event.stopPropagation();
+              postWaypointSelection(point);
+            });
+
+            new maplibregl.Marker({
+              element: markerElement,
+              anchor: 'center'
+            })
+              .setLngLat([point.longitude, point.latitude])
+              .addTo(map);
+          });
+
+          if (data.currentCoords) {
+            map.addSource('current-location', {
+              type: 'geojson',
+              data: {
+                type: 'FeatureCollection',
+                features: [{
+                  type: 'Feature',
+                  geometry: {
+                    type: 'Point',
+                    coordinates: [data.currentCoords.longitude, data.currentCoords.latitude]
+                  },
+                  properties: {}
+                }]
+              }
+            });
+
+            map.addLayer({
+              id: 'current-location-dot',
+              type: 'circle',
+              source: 'current-location',
+              paint: {
+                'circle-radius': 9,
+                'circle-color': '#2563eb',
+                'circle-stroke-color': '#ffffff',
+                'circle-stroke-width': 3
+              }
+            });
+          }
+        });
       })();
     </script>
   </body>
@@ -267,16 +422,18 @@ export default function ARMapNavigationView({ navigation, showBottomNav = true, 
     }))
   ), [activeWaypointId]);
 
-  const mapHtml = useMemo(() => buildLeafletMapHtml({
+  const mapHtml = useMemo(() => buildMapLibreMapHtml({
     center: mapCenter,
     waypoints: mapWaypoints,
     currentCoords,
+    themeMode,
   }), [
     currentCoords?.latitude,
     currentCoords?.longitude,
     mapCenter.latitude,
     mapCenter.longitude,
     mapWaypoints,
+    themeMode,
   ]);
 
   useEffect(() => {
@@ -326,6 +483,10 @@ export default function ARMapNavigationView({ navigation, showBottomNav = true, 
   const handleMapMessage = (event) => {
     try {
       const payload = JSON.parse(event?.nativeEvent?.data || '{}');
+      if (payload.type === 'DEBUG_TOUCH') {
+        console.log('[ARMap] TOUCH:', payload.event, JSON.stringify(payload));
+        return;
+      }
       if (payload.type === 'MAP_DISMISSED') {
         setSelectedWaypoint(null);
         return;

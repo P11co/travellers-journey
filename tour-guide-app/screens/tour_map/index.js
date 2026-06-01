@@ -75,22 +75,25 @@ export default function TourMapScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      {/* Full-screen map */}
-      <ARMapNavigationView
-        navigation={navigation}
-        showBottomNav={false}
-        onAskWaypoint={handleAskWaypoint}
-      />
+      <View style={styles.mapLayer}>
+        <ARMapNavigationView
+          navigation={navigation}
+          showBottomNav={false}
+          onAskWaypoint={handleAskWaypoint}
+        />
+      </View>
 
-      <AIChatInterface
-        navigation={navigation}
-        presentation="embedded"
-        panelMode={chatPanelMode}
-        onItineraryPress={handleItineraryDockPress}
-        onChatPress={() => {
-          setChatPanelMode((mode) => (mode === 'full' ? 'half' : 'full'));
-        }}
-      />
+      <View style={styles.chatLayer} pointerEvents="box-none">
+        <AIChatInterface
+          navigation={navigation}
+          presentation="embedded"
+          panelMode={chatPanelMode}
+          onItineraryPress={handleItineraryDockPress}
+          onChatPress={() => {
+            setChatPanelMode((mode) => (mode === 'full' ? 'half' : 'full'));
+          }}
+        />
+      </View>
     </View>
   );
 }
@@ -99,5 +102,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0f0f13',
+  },
+  mapLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
+  },
+  chatLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 20,
+    elevation: 20,
   },
 });

@@ -35,7 +35,9 @@ export default function AIChatInterface({
   const [inputText, setInputText] = useState('');
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const scrollViewRef = useRef(null);
+  const inputRef = useRef(null);
   const isNearBottomRef = useRef(true);
+  const pendingInputFocusRef = useRef(false);
   const chatMessages = useAppStore((s) => s.chatMessages);
   const chatWaypointContext = useAppStore((s) => s.chatWaypointContext);
   const isChatLoading = useAppStore((s) => s.isChatLoading);
@@ -72,6 +74,19 @@ export default function AIChatInterface({
       hideSub.remove();
     };
   }, []);
+
+  useEffect(() => {
+    if (!pendingInputFocusRef.current || !isEmbedded || !isFullPanel) {
+      return undefined;
+    }
+
+    pendingInputFocusRef.current = false;
+    const focusTimer = setTimeout(() => {
+      inputRef.current?.focus();
+    }, 120);
+
+    return () => clearTimeout(focusTimer);
+  }, [isEmbedded, isFullPanel]);
 
   const scrollToBottom = (animated = true) => {
     scrollViewRef.current?.scrollToEnd({ animated });
@@ -154,6 +169,23 @@ export default function AIChatInterface({
     setVoiceModeEnabled(!voiceModeEnabled);
   };
 
+  const handleDockChatPress = () => {
+    if (!isEmbedded) {
+      (onChatPress || (() => navigation.goBack()))();
+      return;
+    }
+
+    if (isFullPanel) {
+      pendingInputFocusRef.current = false;
+      Keyboard.dismiss();
+      onChatPress?.();
+      return;
+    }
+
+    pendingInputFocusRef.current = true;
+    onChatPress?.();
+  };
+
   const formatTimestamp = (value) => {
     const date = value ? new Date(value) : new Date();
     if (Number.isNaN(date.getTime())) return '';
@@ -222,21 +254,43 @@ export default function AIChatInterface({
 
   const keyboardLift = Math.max(0, keyboardHeight);
   const embeddedPanelLift = isEmbedded && !isFullPanel ? keyboardLift : 0;
-  const embeddedDockTopOffset = -insets.top - 38;
+  const shouldLiftInputForKeyboard = keyboardLift > 0 && (!isEmbedded || isFullPanel);
+  const halfPanelTop = Math.round(screenHeight * 0.5);
+  const halfPanelDockTopOffset = -insets.top - 38;
+  const alignFullDockToLiftedHalfPanel = isEmbedded && isFullPanel && keyboardLift > 0;
+  const dockTopOffset = alignFullDockToLiftedHalfPanel
+    ? halfPanelTop - keyboardLift - insets.top - 38
+    : (isEmbedded && !isFullPanel ? halfPanelDockTopOffset : 28);
 
   return (
     <View
       style={[
         styles.deviceWrapper,
-        { backgroundColor: theme.background },
+        { backgroundColor: isEmbedded && !isFullPanel ? 'transparent' : theme.background },
         isEmbedded && styles.embeddedWrapper,
         isEmbedded && (isFullPanel ? styles.embeddedFullPanel : styles.embeddedHalfPanel),
         embeddedPanelLift > 0 && { transform: [{ translateY: -embeddedPanelLift }] },
       ]}
       pointerEvents={isEmbedded && !isFullPanel ? 'box-none' : 'auto'}
     >
+      {isEmbedded && !isFullPanel && (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.embeddedRoundedSurface,
+            { backgroundColor: theme.background, borderColor: theme.border },
+          ]}
+        />
+      )}
+
       {/* 1. IMMERSIVE GRADIENT & GRID BACKGROUND PATTERN */}
-      <View style={styles.backgroundContainer}>
+      <View
+        style={[
+          styles.backgroundContainer,
+          isEmbedded && !isFullPanel && styles.embeddedRoundedBackground,
+        ]}
+        pointerEvents="none"
+      >
         <View style={[styles.radialGlowOverlay, { backgroundColor: theme.background, opacity: themeMode === 'light' ? 1 : 0.95 }]} />
         <Svg style={[styles.gridOverlay, { opacity: themeMode === 'light' ? 0.12 : 0.25 }]} pointerEvents="none">
           {/* Custom Matrix Grid Emulation */}
@@ -253,9 +307,9 @@ export default function AIChatInterface({
         navigation={navigation}
         activeKey="chat"
         placement="top"
-        topOffset={isEmbedded && !isFullPanel ? embeddedDockTopOffset : 28}
+        topOffset={dockTopOffset}
         onItineraryPress={onItineraryPress}
-        onChatPress={onChatPress || (() => navigation.goBack())}
+        onChatPress={handleDockChatPress}
         onSettingsPress={onSettingsPress}
         style={isEmbedded && !isFullPanel ? styles.embeddedDockFrontLayer : null}
       />
@@ -267,8 +321,9 @@ export default function AIChatInterface({
         contentContainerStyle={[
           styles.chatContentPadding,
           isEmbedded && !isFullPanel && styles.embeddedHalfChatPadding,
-          keyboardLift > 0 && !isEmbedded && { paddingBottom: keyboardLift + 120 },
+          shouldLiftInputForKeyboard && { paddingBottom: keyboardLift + 120 },
         ]}
+        scrollEnabled={!isEmbedded || isFullPanel}
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="none"
         keyboardShouldPersistTaps="always"
@@ -308,7 +363,7 @@ export default function AIChatInterface({
           style={[
             styles.actionSidebar,
             { backgroundColor: theme.surface, shadowColor: theme.shadow },
-            keyboardLift > 0 && !isEmbedded && { bottom: keyboardLift + 100 },
+            shouldLiftInputForKeyboard && { bottom: keyboardLift + 100 },
           ]}
         >
           <TouchableOpacity
@@ -347,7 +402,7 @@ export default function AIChatInterface({
         style={[
           styles.bottomDockInputBar,
           { backgroundColor: theme.background, borderColor: theme.border },
-          keyboardLift > 0 && !isEmbedded && { transform: [{ translateY: -keyboardLift }] },
+          shouldLiftInputForKeyboard && { transform: [{ translateY: -keyboardLift }] },
         ]}
       >
         {chatWaypointContext && (
@@ -369,6 +424,7 @@ export default function AIChatInterface({
               </Svg>
             </TouchableOpacity>
             <TextInput
+              ref={inputRef}
               style={[styles.textInputBox, { color: theme.text }]}
               placeholder="Ask AI..."
               placeholderTextColor={theme.subtleText}
@@ -416,12 +472,8 @@ const styles = StyleSheet.create({
     zIndex: 90,
   },
   embeddedHalfPanel: {
+    top: Math.round(screenHeight * 0.5),
     bottom: 0,
-    height: Math.round(screenHeight * 0.5),
-    borderTopWidth: 1,
-    borderColor: '#27272A',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
     overflow: 'visible',
     zIndex: 90,
     elevation: 20,
@@ -434,9 +486,21 @@ const styles = StyleSheet.create({
     zIndex: 300,
     elevation: 60,
   },
+  embeddedRoundedSurface: {
+    ...StyleSheet.absoluteFillObject,
+    borderTopWidth: 1,
+    borderTopLeftRadius: 34,
+    borderTopRightRadius: 34,
+    overflow: 'hidden',
+  },
   backgroundContainer: {
     ...StyleSheet.absoluteFillObject,
     zIndex: -1,
+  },
+  embeddedRoundedBackground: {
+    borderTopLeftRadius: 34,
+    borderTopRightRadius: 34,
+    overflow: 'hidden',
   },
   radialGlowOverlay: {
     ...StyleSheet.absoluteFillObject,
