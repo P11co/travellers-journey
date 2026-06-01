@@ -1,7 +1,8 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Keyboard,
   View,
   Text,
   TouchableOpacity,
@@ -23,6 +24,7 @@ export default function AIChatInterface({ navigation }) {
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [cameraVisible, setCameraVisible] = useState(false);
   const [inputText, setInputText] = useState('');
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const scrollViewRef = useRef(null);
   const isNearBottomRef = useRef(true);
   const chatMessages = useAppStore((s) => s.chatMessages);
@@ -43,6 +45,22 @@ export default function AIChatInterface({ navigation }) {
   const themeMode = useAppStore((s) => s.themeMode);
   const theme = getTheme(themeMode);
   const hasStreamingMessage = chatMessages.some((message) => message.isStreaming);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', (event) => {
+      setKeyboardHeight(event.endCoordinates?.height || 0);
+      isNearBottomRef.current = true;
+      requestAnimationFrame(() => scrollToBottom(true));
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const scrollToBottom = (animated = true) => {
     scrollViewRef.current?.scrollToEnd({ animated });
@@ -191,6 +209,8 @@ export default function AIChatInterface({ navigation }) {
     );
   };
 
+  const keyboardLift = Math.max(0, keyboardHeight);
+
   return (
     <View style={[styles.deviceWrapper, { backgroundColor: theme.background }]}>
       {/* 1. IMMERSIVE GRADIENT & GRID BACKGROUND PATTERN */}
@@ -219,10 +239,13 @@ export default function AIChatInterface({ navigation }) {
       <ScrollView
         ref={scrollViewRef}
         style={styles.chatScrollContainer}
-        contentContainerStyle={styles.chatContentPadding}
+        contentContainerStyle={[
+          styles.chatContentPadding,
+          keyboardLift > 0 && { paddingBottom: keyboardLift + 120 },
+        ]}
         showsVerticalScrollIndicator={false}
-        keyboardDismissMode="on-drag"
-        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="none"
+        keyboardShouldPersistTaps="always"
         scrollEventThrottle={16}
         onScroll={handleScroll}
         onContentSizeChange={handleContentSizeChange}
@@ -255,7 +278,13 @@ export default function AIChatInterface({ navigation }) {
 
       {/* 5. FLOATING HUD FUNCTION SIDEBAR */}
       {sidebarVisible && (
-        <View style={[styles.actionSidebar, { backgroundColor: theme.surface, shadowColor: theme.shadow }]}>
+        <View
+          style={[
+            styles.actionSidebar,
+            { backgroundColor: theme.surface, shadowColor: theme.shadow },
+            keyboardLift > 0 && { bottom: keyboardLift + 100 },
+          ]}
+        >
           <TouchableOpacity
             style={styles.sidebarActionButton}
             onPress={() => setCameraVisible(!cameraVisible)}
@@ -288,7 +317,13 @@ export default function AIChatInterface({ navigation }) {
       )}
 
       {/* 6. BOTTOM CONTEXT INPUT FOOTER BAR */}
-      <View style={[styles.bottomDockInputBar, { backgroundColor: theme.background, borderColor: theme.border }]}>
+      <View
+        style={[
+          styles.bottomDockInputBar,
+          { backgroundColor: theme.background, borderColor: theme.border },
+          keyboardLift > 0 && { transform: [{ translateY: -keyboardLift }] },
+        ]}
+      >
         {chatWaypointContext && (
           <View style={[styles.contextChip, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}>
             <Text style={[styles.contextChipText, { color: theme.accent }]} numberOfLines={1}>

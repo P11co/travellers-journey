@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Dimensions,
   Image,
+  Keyboard,
   LayoutAnimation,
   Linking,
   Platform,
@@ -44,6 +45,7 @@ export default function BuddyAIChatOverlay({
   const [cameraVisible, setCameraVisible] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [inputText, setInputText] = useState('');
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [localMode, setLocalMode] = useState(sheetMode);
   const prevPropMode = useRef(sheetMode);
   const scrollViewRef = useRef(null);
@@ -94,6 +96,22 @@ export default function BuddyAIChatOverlay({
 
     return () => clearTimeout(timer);
   }, [localMode]);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', (event) => {
+      setKeyboardHeight(event.endCoordinates?.height || 0);
+      isNearBottomRef.current = true;
+      requestAnimationFrame(() => scrollToBottom(true));
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const scrollToBottom = (animated = true) => {
     scrollViewRef.current?.scrollToEnd({ animated });
@@ -243,6 +261,7 @@ export default function BuddyAIChatOverlay({
   const currentHeight = heightFor(localMode);
   const isExpanded = localMode !== 'folded';
   const isFullScreen = localMode === 'full';
+  const keyboardLift = Math.max(0, keyboardHeight - (isFullScreen ? 0 : bottomOffset));
 
   return (
     <View style={styles.root} pointerEvents="box-none">
@@ -281,10 +300,13 @@ export default function BuddyAIChatOverlay({
               <ScrollView
                 ref={scrollViewRef}
                 style={styles.scroll}
-                contentContainerStyle={styles.scrollContent}
+                contentContainerStyle={[
+                  styles.scrollContent,
+                  keyboardLift > 0 && { paddingBottom: keyboardLift + 20 },
+                ]}
                 showsVerticalScrollIndicator={false}
-                keyboardDismissMode="on-drag"
-                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="none"
+                keyboardShouldPersistTaps="always"
                 scrollEventThrottle={16}
                 onScroll={handleScroll}
                 onContentSizeChange={handleContentSizeChange}
@@ -339,7 +361,14 @@ export default function BuddyAIChatOverlay({
             </View>
 
             {/* Input bar */}
-            <View style={[styles.inputBar, { backgroundColor: theme.background, borderColor: theme.border }, isFullScreen && { paddingBottom: insets.bottom + 10 }]}>
+            <View
+              style={[
+                styles.inputBar,
+                { backgroundColor: theme.background, borderColor: theme.border },
+                isFullScreen && { paddingBottom: insets.bottom + 10 },
+                keyboardLift > 0 && { transform: [{ translateY: -keyboardLift }] },
+              ]}
+            >
               {chatWaypointContext && (
                 <View style={[styles.contextChip, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}>
                   <Text style={[styles.contextChipText, { color: theme.accent }]} numberOfLines={1}>
