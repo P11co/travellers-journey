@@ -11,7 +11,7 @@ import httpx
 from server.config import NAVER_MAP_CLIENT_ID, NAVER_MAP_CLIENT_SECRET
 from server.services.langsmith_tracing import traceable
 
-DIRECTIONS_URL = "https://naveropenapi.apigw.ntruss.com/map-direction/v1/driving"
+DIRECTIONS_URL = "https://maps.apigw.ntruss.com/map-direction/v1/driving"
 
 
 def haversine_distance(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
