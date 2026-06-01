@@ -50,6 +50,12 @@ def _make_tavily_response(results: list) -> httpx.Response:
     )
 
 
+@pytest.fixture(autouse=True)
+def _llm_api_keys(monkeypatch):
+    monkeypatch.setattr("server.services.web_search.OPENROUTER_API_KEY", "test-openrouter-key")
+    monkeypatch.setattr("server.services.web_search.NVIDIA_API_KEY", "test-nvidia-key")
+
+
 # ---------------------------------------------------------------------------
 # Unit tests for format_search_results_for_prompt
 # ---------------------------------------------------------------------------
@@ -151,6 +157,30 @@ async def test_classifier_fails_gracefully():
         result = await classify_intent("What time does it close?")
 
     assert result == "RAG"
+
+
+@pytest.mark.asyncio
+async def test_classifier_falls_back_to_nvidia():
+    """Classifier tries OpenRouter first, then NVIDIA if OpenRouter errors."""
+    with patch("server.services.web_search.httpx.AsyncClient") as MockClient:
+        mock = AsyncMock()
+        mock.post.side_effect = [
+            httpx.Response(status_code=502, json={"error": "bad gateway"}),
+            _make_openrouter_response("MAP_STATIC"),
+        ]
+        mock.__aenter__ = AsyncMock(return_value=mock)
+        mock.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock
+
+        from server.services.web_search import classify_intent
+        result = await classify_intent("What buildings are around me?")
+
+    assert result == "MAP_STATIC"
+    urls = [call.args[0] for call in mock.post.call_args_list]
+    assert urls == [
+        "https://openrouter.ai/api/v1/chat/completions",
+        "https://integrate.api.nvidia.com/v1/chat/completions",
+    ]
 
 
 @pytest.mark.asyncio

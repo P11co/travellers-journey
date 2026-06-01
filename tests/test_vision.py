@@ -2,7 +2,7 @@
 test_vision.py — Tests for the POST /chat/vision endpoint
 
 The vision endpoint now runs a two-pass flow:
-  1. NVIDIA vision model returns structured image evidence
+  1. OpenRouter vision model returns structured image evidence
   2. Standard SeoulWalk text chat policy produces the final user-facing answer
 """
 
@@ -53,8 +53,9 @@ def _patch_common(final_intent="RAG"):
 @pytest.fixture(autouse=True)
 def _vision_api_key(monkeypatch):
     """Vision tests mock LLM calls, so only sentinel keys are needed."""
+    monkeypatch.setattr("server.routers.chat.OPENROUTER_API_KEY", "test-openrouter-key")
     monkeypatch.setattr("server.routers.chat.NVIDIA_API_KEY", "test-nvidia-key")
-    monkeypatch.setattr("server.routers.chat.VISION_MODEL_ID", "meta/llama-3.2-11b-vision-instruct")
+    monkeypatch.setattr("server.routers.chat.VISION_MODEL_ID", "google/gemma-4-31b-it")
 
 
 @pytest.mark.asyncio

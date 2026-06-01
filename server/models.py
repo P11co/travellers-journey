@@ -99,7 +99,7 @@ class ChatRequest(BaseModel):
     )
     provider: str | None = Field(
         None,
-        description="Deprecated. Non-vision LLM requests always use NVIDIA NIM."
+        description="Deprecated. LLM requests use OpenRouter first with NVIDIA NIM fallback."
     )
 
 

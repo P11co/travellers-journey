@@ -5,8 +5,8 @@ Endpoints:
   POST /chat         — Text chat with web search augmentation
   POST /chat/vision  — Multimodal image analysis + SeoulWalk finalization
 
-Both share the same spatial context logic. Text chat uses the configured NVIDIA
-NIM text model; vision uses a vision-capable NVIDIA model for first-pass
+Both share the same spatial context logic. Text chat uses OpenRouter first with
+NVIDIA NIM as a fallback. Vision uses the same provider order for first-pass
 evidence and the text model for final response policy.
 
 Web Search Flow (Task 3):
@@ -484,69 +484,81 @@ async def _call_llm(
     messages: list[dict],
     model: str,
     temperature: float = 0.7,
-    provider: str = "nvidia",
+    provider: str = "openrouter",
 ) -> str:
     """
-    Call the LLM via the selected provider.
-    - provider='nvidia'     → NVIDIA NIM (default)
-    - provider='openrouter' → OpenRouter fallback for compatible models
+    Call the LLM via OpenRouter first, then NVIDIA NIM as fallback.
     Reasoning traces (<think>...</think>) are always stripped before returning.
     """
-    if provider == "nvidia":
-        if not NVIDIA_API_KEY:
-            raise HTTPException(status_code=500, detail="Missing NVIDIA_API_KEY")
-        url = NVIDIA_BASE_URL
-        api_key = NVIDIA_API_KEY
-        is_reasoning = "reasoning" in model
-        extra: dict = {}
-        if is_reasoning:
-            extra["extra_body"] = {
-                "chat_template_kwargs": {"enable_thinking": True},
-                "reasoning_budget": 8192,
-            }
-    else:
-        if not OPENROUTER_API_KEY:
-            raise HTTPException(status_code=500, detail="Missing OpenRouter API key")
-        url = OPENROUTER_BASE_URL
-        api_key = OPENROUTER_API_KEY
-        extra = {}
+    providers = [provider]
+    if provider == "openrouter":
+        providers.append("nvidia")
 
-    payload = {
-        "model": model,
-        "messages": messages,
-        "temperature": temperature,
-        **extra,
-    }
+    last_error: HTTPException | None = None
+    for active_provider in providers:
+        if active_provider == "openrouter":
+            if not OPENROUTER_API_KEY:
+                last_error = HTTPException(status_code=500, detail="Missing OpenRouter API key")
+                continue
+            url = OPENROUTER_BASE_URL
+            api_key = OPENROUTER_API_KEY
+            extra: dict = {}
+        elif active_provider == "nvidia":
+            if not NVIDIA_API_KEY:
+                last_error = HTTPException(status_code=500, detail="Missing NVIDIA_API_KEY")
+                continue
+            url = NVIDIA_BASE_URL
+            api_key = NVIDIA_API_KEY
+            extra = {}
+            if "reasoning" in model:
+                extra["extra_body"] = {
+                    "chat_template_kwargs": {"enable_thinking": True},
+                    "reasoning_budget": 8192,
+                }
+        else:
+            raise HTTPException(status_code=500, detail=f"Unknown LLM provider: {active_provider}")
 
-    try:
-        async with httpx.AsyncClient(timeout=90.0) as client:
-            resp = await client.post(
-                url,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            **extra,
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=90.0) as client:
+                resp = await client.post(
+                    url,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                )
+        except httpx.TimeoutException:
+            last_error = HTTPException(
+                status_code=504,
+                detail=f"Request to {active_provider} LLM API timed out.",
             )
-    except httpx.TimeoutException:
-        raise HTTPException(
-            status_code=504,
-            detail=f"Request to {provider} LLM API timed out.",
-        )
-    except httpx.RequestError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Failed to communicate with {provider} LLM API: {exc}",
-        )
+            continue
+        except httpx.RequestError as exc:
+            last_error = HTTPException(
+                status_code=502,
+                detail=f"Failed to communicate with {active_provider} LLM API: {exc}",
+            )
+            continue
 
-    if resp.status_code != 200:
-        raise HTTPException(
-            status_code=502,
-            detail=f"{provider} API returned {resp.status_code}: {resp.text[:300]}",
-        )
+        if resp.status_code != 200:
+            last_error = HTTPException(
+                status_code=502,
+                detail=f"{active_provider} API returned {resp.status_code}: {resp.text[:300]}",
+            )
+            continue
 
-    raw = resp.json().get("choices", [{}])[0].get("message", {}).get("content") or ""
-    return _strip_thinking(raw)
+        raw = resp.json().get("choices", [{}])[0].get("message", {}).get("content") or ""
+        return _strip_thinking(raw)
+
+    raise last_error or HTTPException(status_code=500, detail="No LLM provider is configured")
 
 
 async def _stream_llm(
@@ -554,59 +566,73 @@ async def _stream_llm(
     model: str,
     temperature: float = 0.7,
 ):
-    """Stream NVIDIA NIM chat completion deltas."""
-    if not NVIDIA_API_KEY:
-        raise HTTPException(status_code=500, detail="Missing NVIDIA_API_KEY")
-
+    """Stream OpenRouter chat completion deltas, falling back to NVIDIA NIM."""
     payload = {
         "model": model,
         "messages": messages,
         "temperature": temperature,
         "stream": True,
     }
+    providers = [
+        ("openrouter", OPENROUTER_BASE_URL, OPENROUTER_API_KEY),
+        ("nvidia", NVIDIA_BASE_URL, NVIDIA_API_KEY),
+    ]
+    last_error: HTTPException | None = None
 
-    try:
-        async with httpx.AsyncClient(timeout=None) as client:
-            async with client.stream(
-                "POST",
-                NVIDIA_BASE_URL,
-                headers={
-                    "Authorization": f"Bearer {NVIDIA_API_KEY}",
-                    "Content-Type": "application/json",
-                    "Accept": "text/event-stream",
-                },
-                json=payload,
-            ) as resp:
-                if resp.status_code != 200:
-                    text = await resp.aread()
-                    raise HTTPException(
-                        status_code=502,
-                        detail=f"nvidia API returned {resp.status_code}: {text.decode('utf-8', errors='replace')[:300]}",
-                    )
+    for active_provider, url, api_key in providers:
+        if not api_key:
+            last_error = HTTPException(status_code=500, detail=f"Missing {active_provider} API key")
+            continue
 
-                async for line in resp.aiter_lines():
-                    if not line:
+        try:
+            async with httpx.AsyncClient(timeout=None) as client:
+                async with client.stream(
+                    "POST",
+                    url,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                        "Accept": "text/event-stream",
+                    },
+                    json=payload,
+                ) as resp:
+                    if resp.status_code != 200:
+                        text = await resp.aread()
+                        last_error = HTTPException(
+                            status_code=502,
+                            detail=(
+                                f"{active_provider} API returned {resp.status_code}: "
+                                f"{text.decode('utf-8', errors='replace')[:300]}"
+                            ),
+                        )
                         continue
-                    if line.startswith("data:"):
-                        line = line[5:].strip()
-                    if line == "[DONE]":
-                        break
-                    try:
-                        chunk = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
 
-                    delta = (
-                        chunk.get("choices", [{}])[0]
-                        .get("delta", {})
-                        .get("content")
-                    )
-                    if delta:
-                        yield delta
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="Request to nvidia LLM API timed out.")
-    except httpx.RequestError as exc:
-        raise HTTPException(status_code=502, detail=f"Failed to communicate with nvidia LLM API: {exc}")
+                    async for line in resp.aiter_lines():
+                        if not line:
+                            continue
+                        if line.startswith("data:"):
+                            line = line[5:].strip()
+                        if line == "[DONE]":
+                            break
+                        try:
+                            chunk = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+
+                        delta = (
+                            chunk.get("choices", [{}])[0]
+                            .get("delta", {})
+                            .get("content")
+                        )
+                        if delta:
+                            yield delta
+                    return
+        except httpx.TimeoutException:
+            last_error = HTTPException(status_code=504, detail=f"Request to {active_provider} LLM API timed out.")
+        except httpx.RequestError as exc:
+            last_error = HTTPException(status_code=502, detail=f"Failed to communicate with {active_provider} LLM API: {exc}")
+
+    raise last_error or HTTPException(status_code=500, detail="No streaming LLM provider is configured")
 
 
 async def _emit_prepare_status(status_callback, label: str):
@@ -707,10 +733,10 @@ async def _prepare_chat_completion(
     prompt_user_message: str | None = None,
 ) -> dict:
     """Build all context needed for either normal or streaming chat completion."""
-    provider = "nvidia"
+    provider = "openrouter"
     model = req.model_override or LLM_MODEL_ID
-    if not NVIDIA_API_KEY:
-        raise HTTPException(status_code=500, detail="Missing NVIDIA_API_KEY")
+    if not OPENROUTER_API_KEY and not NVIDIA_API_KEY:
+        raise HTTPException(status_code=500, detail="Missing OpenRouter and NVIDIA API keys")
 
     session_id = req.session_id or str(uuid.uuid4())
     if not await get_session(session_id):
@@ -1030,7 +1056,7 @@ async def chat(req: ChatRequest):
     Process a user text message.
     Automatically determines whether live web search is needed,
     fetches results if so, and injects them into the LLM context.
-    Text chat uses NVIDIA NIM.
+    Text chat uses OpenRouter first, with NVIDIA NIM as fallback.
     """
     prepared = await _prepare_chat_completion(req)
     return await _complete_prepared_chat(prepared, history_user_message=req.message)
@@ -1094,7 +1120,7 @@ async def chat_stream(req: ChatRequest):
                 session_id,
                 "chat_llm_stream_started",
                 {
-                    "provider": "nvidia",
+                    "provider": "openrouter",
                     "model": model,
                     "intent": intent,
                     "map_snapshot_included": prepared["map_snapshot_included"],
@@ -1115,7 +1141,7 @@ async def chat_stream(req: ChatRequest):
                 session_id,
                 "chat_llm_stream_completed",
                 {
-                    "provider": "nvidia",
+                    "provider": "openrouter",
                     "model": model,
                     "intent": intent,
                     "duration_ms": round((time.perf_counter() - started_at) * 1000),
@@ -1170,11 +1196,11 @@ async def chat_stream(req: ChatRequest):
 async def chat_vision(req: VisionChatRequest):
     """
     Process a user photo + optional text question.
-    Uses a NVIDIA NIM vision-language model for first-pass visual evidence,
+    Uses OpenRouter first for first-pass visual evidence,
     then routes the final answer through the standard SeoulWalk text-chat policy.
     """
-    if not NVIDIA_API_KEY:
-        raise HTTPException(status_code=500, detail="Missing NVIDIA_API_KEY")
+    if not OPENROUTER_API_KEY and not NVIDIA_API_KEY:
+        raise HTTPException(status_code=500, detail="Missing OpenRouter and NVIDIA API keys")
 
     # Session management
     session_id = req.session_id or str(uuid.uuid4())
@@ -1231,7 +1257,7 @@ async def chat_vision(req: VisionChatRequest):
         ],
         model=VISION_MODEL_ID,
         temperature=0.4,
-        provider="nvidia",
+        provider="openrouter",
     )
     analysis = _parse_vision_analysis(vision_raw)
     await _trace_chat_event(

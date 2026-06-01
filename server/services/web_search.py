@@ -4,7 +4,9 @@ import httpx
 
 from server.config import (
     NVIDIA_API_KEY,
+    OPENROUTER_API_KEY,
     LLM_MODEL_ID,
+    OPENROUTER_BASE_URL,
     NVIDIA_BASE_URL,
     TAVILY_API_KEY,
 )
@@ -68,22 +70,18 @@ Current user message:
 async def classify_intent(
     user_message: str,
     last_ai_message: str = "",
-    provider: str = "nvidia",
+    provider: str = "openrouter",
     model: str | None = None,
 ) -> str:
     """
     Ask the LLM to classify the user query into one of four intents:
     RAG, WEB_SEARCH, MAP_STATIC, or MAP_GEOCODE.
-    Falls back to RAG on any error (safe default).
-    Uses NVIDIA NIM only; OpenRouter is reserved for vision requests.
+    Falls back to NVIDIA if OpenRouter cannot complete, then RAG on any error.
     """
     model = model or LLM_MODEL_ID
 
-    if not NVIDIA_API_KEY:
+    if not OPENROUTER_API_KEY and not NVIDIA_API_KEY:
         return "RAG"
-
-    url = NVIDIA_BASE_URL
-    api_key = NVIDIA_API_KEY
 
     prompt = _CLASSIFIER_USER_TEMPLATE.format(
         last_ai_message=last_ai_message.strip() or "(none)",
@@ -92,60 +90,84 @@ async def classify_intent(
 
     import asyncio as _asyncio
 
+    providers = [provider]
+    if provider == "openrouter":
+        providers.append("nvidia")
+
     max_retries = 2
-    for attempt in range(max_retries + 1):
-        try:
-            async with httpx.AsyncClient(timeout=20.0) as client:
-                resp = await client.post(
-                    url,
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": model,
-                        "messages": [
-                            {"role": "system", "content": _CLASSIFIER_SYSTEM},
-                            {"role": "user", "content": prompt},
-                        ],
-                        "temperature": 0.0,  # Deterministic classification
-                        "max_tokens": 10,
-                    },
+    for active_provider in providers:
+        if active_provider == "openrouter":
+            if not OPENROUTER_API_KEY:
+                continue
+            url = OPENROUTER_BASE_URL
+            api_key = OPENROUTER_API_KEY
+        elif active_provider == "nvidia":
+            if not NVIDIA_API_KEY:
+                continue
+            url = NVIDIA_BASE_URL
+            api_key = NVIDIA_API_KEY
+        else:
+            continue
+
+        for attempt in range(max_retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=20.0) as client:
+                    resp = await client.post(
+                        url,
+                        headers={
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": model,
+                            "messages": [
+                                {"role": "system", "content": _CLASSIFIER_SYSTEM},
+                                {"role": "user", "content": prompt},
+                            ],
+                            "temperature": 0.0,  # Deterministic classification
+                            "max_tokens": 10,
+                        },
+                    )
+
+                if resp.status_code == 500 and attempt < max_retries:
+                    print(
+                        f"⚠️ {active_provider} classifier API 500 error "
+                        f"(attempt {attempt + 1}/{max_retries + 1}), retrying..."
+                    )
+                    await _asyncio.sleep(1.0)
+                    continue
+
+                if resp.status_code != 200:
+                    print(f"⚠️ {active_provider} classifier API error ({resp.status_code}): {resp.text[:200]}")
+                    break
+
+                answer = (
+                    resp.json()
+                    .get("choices", [{}])[0]
+                    .get("message", {})
+                    .get("content") or ""
                 )
+                answer = answer.strip().upper()
 
-            if resp.status_code == 500 and attempt < max_retries:
-                print(f"⚠️ Classifier API 500 error (attempt {attempt + 1}/{max_retries + 1}), retrying...")
-                await _asyncio.sleep(1.0)
-                continue
+                # Parse the 4-way response
+                if "WEB_SEARCH" in answer:
+                    return "WEB_SEARCH"
+                elif "MAP_GEOCODE" in answer:
+                    return "MAP_GEOCODE"
+                elif "MAP_STATIC" in answer:
+                    return "MAP_STATIC"
+                else:
+                    return "RAG"
 
-            if resp.status_code != 200:
-                print(f"⚠️ Classifier API error ({resp.status_code}): {resp.text[:200]}")
-                return "RAG"
-
-            answer = (
-                resp.json()
-                .get("choices", [{}])[0]
-                .get("message", {})
-                .get("content") or ""
-            )
-            answer = answer.strip().upper()
-
-            # Parse the 4-way response
-            if "WEB_SEARCH" in answer:
-                return "WEB_SEARCH"
-            elif "MAP_GEOCODE" in answer:
-                return "MAP_GEOCODE"
-            elif "MAP_STATIC" in answer:
-                return "MAP_STATIC"
-            else:
-                return "RAG"
-
-        except Exception as e:
-            print(f"⚠️ Classifier exception (attempt {attempt + 1}/{max_retries + 1}): {type(e).__name__}: {repr(e)}")
-            if attempt < max_retries:
-                await _asyncio.sleep(1.0)
-                continue
-            return "RAG"  # Fail open — default to RAG
+            except Exception as e:
+                print(
+                    f"⚠️ {active_provider} classifier exception "
+                    f"(attempt {attempt + 1}/{max_retries + 1}): {type(e).__name__}: {repr(e)}"
+                )
+                if attempt < max_retries:
+                    await _asyncio.sleep(1.0)
+                    continue
+                break
 
     return "RAG"
 

@@ -19,10 +19,10 @@ from urllib.parse import quote
 # ---------------------------------------------------------------------------
 # Mock LLM helper
 # ---------------------------------------------------------------------------
-def _make_mock_openrouter_response(reply_text: str) -> httpx.Response:
+def _make_mock_openrouter_response(reply_text: str, status_code: int = 200) -> httpx.Response:
     """Build a fake httpx.Response that mimics the OpenRouter API."""
     return httpx.Response(
-        status_code=200,
+        status_code=status_code,
         json={
             "choices": [
                 {"message": {"content": reply_text}}
@@ -43,6 +43,62 @@ async def test_health(client):
     data = resp.json()
     assert data["status"] == "ok"
     assert "version" in data
+
+
+@pytest.mark.asyncio
+async def test_call_llm_uses_openrouter_first(monkeypatch):
+    """The shared LLM helper sends primary requests to OpenRouter."""
+    from server.routers.chat import _call_llm
+
+    monkeypatch.setattr("server.routers.chat.OPENROUTER_API_KEY", "test-openrouter-key")
+    monkeypatch.setattr("server.routers.chat.NVIDIA_API_KEY", "test-nvidia-key")
+
+    with patch("server.routers.chat.httpx.AsyncClient") as MockClient:
+        mock_instance = AsyncMock()
+        mock_instance.post.return_value = _make_mock_openrouter_response("OpenRouter reply")
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_instance
+
+        reply = await _call_llm(
+            messages=[{"role": "user", "content": "Hello"}],
+            model="google/gemma-4-31b-it",
+        )
+
+    assert reply == "OpenRouter reply"
+    first_url = mock_instance.post.call_args_list[0].args[0]
+    assert first_url == "https://openrouter.ai/api/v1/chat/completions"
+
+
+@pytest.mark.asyncio
+async def test_call_llm_falls_back_to_nvidia(monkeypatch):
+    """If OpenRouter cannot complete, the shared LLM helper retries on NVIDIA."""
+    from server.routers.chat import _call_llm
+
+    monkeypatch.setattr("server.routers.chat.OPENROUTER_API_KEY", "test-openrouter-key")
+    monkeypatch.setattr("server.routers.chat.NVIDIA_API_KEY", "test-nvidia-key")
+
+    with patch("server.routers.chat.httpx.AsyncClient") as MockClient:
+        mock_instance = AsyncMock()
+        mock_instance.post.side_effect = [
+            _make_mock_openrouter_response("OpenRouter failure", status_code=502),
+            _make_mock_openrouter_response("NVIDIA fallback reply"),
+        ]
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_instance
+
+        reply = await _call_llm(
+            messages=[{"role": "user", "content": "Hello"}],
+            model="google/gemma-4-31b-it",
+        )
+
+    assert reply == "NVIDIA fallback reply"
+    urls = [call.args[0] for call in mock_instance.post.call_args_list]
+    assert urls == [
+        "https://openrouter.ai/api/v1/chat/completions",
+        "https://integrate.api.nvidia.com/v1/chat/completions",
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -279,7 +335,7 @@ async def test_chat_stream_returns_ndjson_events(client):
         if status_callback:
             await status_callback("Understanding request")
         return {
-            "provider": "nvidia",
+            "provider": "openrouter",
             "model": "test-model",
             "session_id": "stream-session",
             "waypoint": {"id": "geunjeongjeon", "name": "Geunjeongjeon"},

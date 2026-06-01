@@ -323,7 +323,7 @@ async def call_llm_for_itinerary(req: ItineraryGenerateRequest) -> list[dict]:
             ],
             model=LLM_MODEL_ID,
             temperature=0.4,
-            provider="nvidia",
+            provider="openrouter",
         )
         return _filter_known_items(_parse_itinerary_items(raw_content), req)
     except (HTTPException, json.JSONDecodeError, ValueError) as exc:
