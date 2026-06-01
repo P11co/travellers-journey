@@ -25,6 +25,9 @@ export const buildApiUrl = (pathOrUrl) => {
 const normalizeErrorMessage = (payload, fallback) => {
   if (!payload) return fallback;
   if (typeof payload.detail === 'string') return payload.detail;
+  if (payload.detail && typeof payload.detail === 'object' && typeof payload.detail.message === 'string') {
+    return payload.detail.message;
+  }
   if (payload.detail) return JSON.stringify(payload.detail);
   if (typeof payload.message === 'string') return payload.message;
   return fallback;

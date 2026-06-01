@@ -233,7 +233,13 @@ async def test_generate_itinerary_over_budget(client):
         "start_time": "10:00",
     })
     assert resp.status_code == 400
-    assert "Too many stops for a 4-hour itinerary" in resp.json()["detail"]
+    detail = resp.json()["detail"]
+    assert detail["code"] == "itinerary_time_budget_exceeded"
+    assert detail["available_minutes"] == 240
+    assert detail["required_minutes"] == 300
+    assert detail["over_by_minutes"] == 60
+    assert detail["travel_buffer_minutes"] == 30
+    assert len(detail["stops"]) == 3
 
 
 @pytest.mark.asyncio

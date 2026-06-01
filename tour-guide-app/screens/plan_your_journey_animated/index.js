@@ -1,7 +1,6 @@
 import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   View,
   Text,
   StyleSheet,
@@ -22,6 +21,258 @@ const primaryLocationImage = require('../../assets/images/hotspots/gyeongbokgung
 const BUDGET_OPTIONS = ['$25', '$50', '$100', '$200'];
 const TIME_OPTIONS = ['Half Day (4 hrs)', 'Full Day (8 hrs)', 'Two Days (16 hrs)'];
 
+function PreferenceDropdown({
+  label,
+  value,
+  onChange,
+  options,
+  type,
+  disabled,
+}) {
+  const [modalVisible, setModalVisible] = useState(false);
+  const [isCustomMode, setIsCustomMode] = useState(false);
+  const [customValue, setCustomValue] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const isPreset = options.includes(value);
+
+  const handleOpen = () => {
+    if (disabled) return;
+    if (isPreset) {
+      setIsCustomMode(false);
+      setCustomValue('');
+    } else {
+      setIsCustomMode(true);
+      const match = String(value || '').match(/(\d+(?:\.\d+)?)/);
+      setCustomValue(match ? match[1] : '');
+    }
+    setErrorMsg('');
+    setModalVisible(true);
+  };
+
+  const handleSelectPreset = (preset) => {
+    onChange(preset);
+    setModalVisible(false);
+  };
+
+  const handleSelectCustomTrigger = () => {
+    setIsCustomMode(true);
+    if (isPreset) {
+      setCustomValue('');
+    } else {
+      const match = String(value || '').match(/(\d+(?:\.\d+)?)/);
+      setCustomValue(match ? match[1] : '');
+    }
+    setErrorMsg('');
+  };
+
+  const handleSaveCustom = () => {
+    const num = parseFloat(customValue);
+    if (isNaN(num) || num <= 0) {
+      setErrorMsg('Please enter a positive number.');
+      return;
+    }
+
+    if (type === 'time') {
+      if (num < 1 || num > 48) {
+        setErrorMsg('Please enter a value between 1 and 48 hours.');
+        return;
+      }
+      onChange(`Custom (${num} hrs)`);
+    } else {
+      onChange(`$${Math.round(num)}`);
+    }
+
+    setModalVisible(false);
+  };
+
+  return (
+    <View>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <TouchableOpacity
+        style={[styles.customSelectTrigger, disabled && styles.lockedControl]}
+        onPress={handleOpen}
+        disabled={disabled}
+      >
+        <Text style={styles.selectText}>{value}</Text>
+        <Text style={styles.dropdownCarat}>▼</Text>
+      </TouchableOpacity>
+
+      <Modal
+        visible={modalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Select {label}</Text>
+
+            {!isCustomMode ? (
+              <View style={styles.optionsList}>
+                {options.map((opt) => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[
+                      styles.optionItem,
+                      value === opt && styles.optionItemActive,
+                    ]}
+                    onPress={() => handleSelectPreset(opt)}
+                  >
+                    <Text
+                      style={[
+                        styles.optionText,
+                        value === opt && styles.optionTextActive,
+                      ]}
+                    >
+                      {opt}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+
+                <TouchableOpacity
+                  style={[
+                    styles.optionItem,
+                    !isPreset && styles.optionItemActive,
+                  ]}
+                  onPress={handleSelectCustomTrigger}
+                >
+                  <Text
+                    style={[
+                      styles.optionText,
+                      !isPreset && styles.optionTextActive,
+                    ]}
+                  >
+                    Custom... {!isPreset && `(${value})`}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.customInputContainer}>
+                <Text style={styles.customInputLabel}>
+                  {type === 'budget' ? 'Enter budget in USD:' : 'Enter duration in hours (1-48):'}
+                </Text>
+                <TextInput
+                  style={styles.modalTextInput}
+                  keyboardType="numeric"
+                  value={customValue}
+                  onChangeText={(txt) => {
+                    setCustomValue(txt);
+                    setErrorMsg('');
+                  }}
+                  placeholder={type === 'budget' ? 'e.g. 75' : 'e.g. 6'}
+                  placeholderTextColor="#666"
+                  autoFocus={true}
+                />
+
+                {Boolean(errorMsg) && (
+                  <Text style={styles.modalErrorText}>{errorMsg}</Text>
+                )}
+
+                <View style={styles.modalButtonsRow}>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.modalButtonRowItem, styles.modalButtonCancel]}
+                    onPress={() => setIsCustomMode(false)}
+                  >
+                    <Text style={styles.modalButtonTextCancel}>Back</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.modalButtonRowItem, styles.modalButtonSave]}
+                    onPress={handleSaveCustom}
+                  >
+                    <Text style={styles.modalButtonTextSave}>Save</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {!isCustomMode && (
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setModalVisible(false)}
+              >
+                <Text style={styles.closeButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+function TimeBudgetWarningModal({ visible, detail, onClose }) {
+  if (!detail) return null;
+
+  const formatMins = (mins) => {
+    if (mins < 60) return `${mins} min`;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return m === 0 ? `${h} hr` : `${h} hr ${m} min`;
+  };
+
+  const budgetStr = formatMins(detail.available_minutes);
+  const totalStr = formatMins(detail.required_minutes);
+  const overStr = formatMins(detail.over_by_minutes);
+  const bufferStr = formatMins(detail.travel_buffer_minutes);
+
+  return (
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalBackdrop}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Not Enough Time</Text>
+          
+          <Text style={styles.modalWarningText}>
+            Your {budgetStr} budget is too short.
+          </Text>
+
+          <View style={styles.stopsListContainer}>
+            {detail.stops?.map((stop, idx) => (
+              <View key={idx} style={styles.stopDurationRow}>
+                <Text style={styles.stopNameText}>{stop.name}</Text>
+                <Text style={styles.stopDurationText}>{formatMins(stop.duration_minutes)}</Text>
+              </View>
+            ))}
+            <View style={styles.stopDurationRow}>
+              <Text style={styles.stopNameTextSubtle}>Travel buffer</Text>
+              <Text style={styles.stopDurationTextSubtle}>{bufferStr}</Text>
+            </View>
+          </View>
+
+          <View style={styles.budgetSummaryContainer}>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabelText}>Estimated total:</Text>
+              <Text style={styles.summaryValueText}>{totalStr}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabelTextAlert}>Over budget by:</Text>
+              <Text style={styles.summaryValueTextAlert}>{overStr}</Text>
+            </View>
+          </View>
+
+          <Text style={styles.modalWarningSubText}>
+            Please increase your time budget or remove a stop.
+          </Text>
+
+          <TouchableOpacity
+            style={styles.timeWarningButton}
+            onPress={onClose}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.timeWarningButtonText}>OK</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export default function PlanYourJourneyView({ navigation }) {
   const insets = useSafeAreaInsets();
   const scrollViewRef = useRef(null);
@@ -35,6 +286,7 @@ export default function PlanYourJourneyView({ navigation }) {
   const isLoadingItinerary = useAppStore((s) => s.isLoadingItinerary);
   const itineraryError = useAppStore((s) => s.itineraryError);
   const [reviewError, setReviewError] = useState(null);
+  const [timeBudgetWarning, setTimeBudgetWarning] = useState(null);
 
   const activities = draft.activities;
   const hasGeneratedRoute = Boolean(generatedItinerary);
@@ -76,9 +328,10 @@ export default function PlanYourJourneyView({ navigation }) {
         scrollViewRef.current?.scrollToEnd({ animated: true });
       }, 80);
     } catch (err) {
-      const errMsg = err?.message || '';
-      if (errMsg.includes('Too many stops for a')) {
-        Alert.alert('Impossible Itinerary', errMsg);
+      if (err?.payload?.detail?.code === 'itinerary_time_budget_exceeded') {
+        setTimeBudgetWarning(err.payload.detail);
+      } else if (err?.message) {
+        setReviewError(err.message);
       }
     }
   };
@@ -419,7 +672,7 @@ export default function PlanYourJourneyView({ navigation }) {
             )}
           </TouchableOpacity>
         </View>
-        {bottomError && (
+        {bottomError && !timeBudgetWarning && (
           <Text style={[styles.errorText, styles.finalizeErrorText]}>{bottomError}</Text>
         )}
       </View>
@@ -440,187 +693,11 @@ export default function PlanYourJourneyView({ navigation }) {
         </View>
       )}
 
-    </View>
-  );
-}
-
-function PreferenceDropdown({
-  label,
-  value,
-  onChange,
-  options,
-  type,
-  disabled,
-}) {
-  const [modalVisible, setModalVisible] = useState(false);
-  const [isCustomMode, setIsCustomMode] = useState(false);
-  const [customValue, setCustomValue] = useState('');
-  const [errorMsg, setErrorMsg] = useState('');
-
-  const isPreset = options.includes(value);
-
-  const handleOpen = () => {
-    if (disabled) return;
-    if (isPreset) {
-      setIsCustomMode(false);
-      setCustomValue('');
-    } else {
-      setIsCustomMode(true);
-      const match = String(value || '').match(/(\d+(?:\.\d+)?)/);
-      setCustomValue(match ? match[1] : '');
-    }
-    setErrorMsg('');
-    setModalVisible(true);
-  };
-
-  const handleSelectPreset = (preset) => {
-    onChange(preset);
-    setModalVisible(false);
-  };
-
-  const handleSelectCustomTrigger = () => {
-    setIsCustomMode(true);
-    if (isPreset) {
-      setCustomValue('');
-    } else {
-      const match = String(value || '').match(/(\d+(?:\.\d+)?)/);
-      setCustomValue(match ? match[1] : '');
-    }
-    setErrorMsg('');
-  };
-
-  const handleSaveCustom = () => {
-    const num = parseFloat(customValue);
-    if (isNaN(num) || num <= 0) {
-      setErrorMsg('Please enter a positive number.');
-      return;
-    }
-
-    if (type === 'time') {
-      if (num < 1 || num > 48) {
-        setErrorMsg('Please enter a value between 1 and 48 hours.');
-        return;
-      }
-      onChange(`Custom (${num} hrs)`);
-    } else {
-      onChange(`$${Math.round(num)}`);
-    }
-
-    setModalVisible(false);
-  };
-
-  return (
-    <View>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <TouchableOpacity
-        style={[styles.customSelectTrigger, disabled && styles.lockedControl]}
-        onPress={handleOpen}
-        disabled={disabled}
-      >
-        <Text style={styles.selectText}>{value}</Text>
-        <Text style={styles.dropdownCarat}>▼</Text>
-      </TouchableOpacity>
-
-      <Modal
-        visible={modalVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Select {label}</Text>
-
-            {!isCustomMode ? (
-              <View style={styles.optionsList}>
-                {options.map((opt) => (
-                  <TouchableOpacity
-                    key={opt}
-                    style={[
-                      styles.optionItem,
-                      value === opt && styles.optionItemActive,
-                    ]}
-                    onPress={() => handleSelectPreset(opt)}
-                  >
-                    <Text
-                      style={[
-                        styles.optionText,
-                        value === opt && styles.optionTextActive,
-                      ]}
-                    >
-                      {opt}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-
-                <TouchableOpacity
-                  style={[
-                    styles.optionItem,
-                    !isPreset && styles.optionItemActive,
-                  ]}
-                  onPress={handleSelectCustomTrigger}
-                >
-                  <Text
-                    style={[
-                      styles.optionText,
-                      !isPreset && styles.optionTextActive,
-                    ]}
-                  >
-                    Custom... {!isPreset && `(${value})`}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.customInputContainer}>
-                <Text style={styles.customInputLabel}>
-                  {type === 'budget' ? 'Enter budget in USD:' : 'Enter duration in hours (1-48):'}
-                </Text>
-                <TextInput
-                  style={styles.modalTextInput}
-                  keyboardType="numeric"
-                  value={customValue}
-                  onChangeText={(txt) => {
-                    setCustomValue(txt);
-                    setErrorMsg('');
-                  }}
-                  placeholder={type === 'budget' ? 'e.g. 75' : 'e.g. 6'}
-                  placeholderTextColor="#666"
-                  autoFocus={true}
-                />
-
-                {Boolean(errorMsg) && (
-                  <Text style={styles.modalErrorText}>{errorMsg}</Text>
-                )}
-
-                <View style={styles.modalButtonsRow}>
-                  <TouchableOpacity
-                    style={[styles.modalButton, styles.modalButtonCancel]}
-                    onPress={() => setIsCustomMode(false)}
-                  >
-                    <Text style={styles.modalButtonTextCancel}>Back</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.modalButton, styles.modalButtonSave]}
-                    onPress={handleSaveCustom}
-                  >
-                    <Text style={styles.modalButtonTextSave}>Save</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-
-            {!isCustomMode && (
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => setModalVisible(false)}
-              >
-                <Text style={styles.closeButtonText}>Cancel</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-      </Modal>
+      <TimeBudgetWarningModal
+        visible={Boolean(timeBudgetWarning)}
+        detail={timeBudgetWarning}
+        onClose={() => setTimeBudgetWarning(null)}
+      />
     </View>
   );
 }
@@ -1381,11 +1458,29 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   modalButton: {
-    flex: 1,
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  modalButtonRowItem: {
+    flex: 1,
+  },
+  timeWarningButton: {
+    marginTop: 16,
+    width: '100%',
+    minHeight: 48,
+    borderRadius: 14,
+    backgroundColor: '#5c77ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  timeWarningButtonText: {
+    color: '#131313',
+    fontSize: 16,
+    fontWeight: '700',
+    lineHeight: 20,
   },
   modalButtonCancel: {
     backgroundColor: '#262626',
@@ -1414,5 +1509,84 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     fontSize: 14,
     fontWeight: '500',
+  },
+  modalWarningText: {
+    fontSize: 14,
+    color: '#ef4444',
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  stopsListContainer: {
+    backgroundColor: '#121212',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#262626',
+    marginBottom: 16,
+    gap: 8,
+  },
+  stopDurationRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  stopNameText: {
+    fontSize: 13,
+    color: '#ffffff',
+    fontWeight: '500',
+    flex: 1,
+    marginRight: 8,
+  },
+  stopDurationText: {
+    fontSize: 13,
+    color: '#9ca3af',
+  },
+  stopNameTextSubtle: {
+    fontSize: 13,
+    color: '#9ca3af',
+    fontStyle: 'italic',
+  },
+  stopDurationTextSubtle: {
+    fontSize: 13,
+    color: '#6b7280',
+  },
+  budgetSummaryContainer: {
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#262626',
+    paddingVertical: 12,
+    marginBottom: 16,
+    gap: 8,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  summaryLabelText: {
+    fontSize: 14,
+    color: '#9ca3af',
+  },
+  summaryValueText: {
+    fontSize: 14,
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  summaryLabelTextAlert: {
+    fontSize: 14,
+    color: '#ef4444',
+    fontWeight: '600',
+  },
+  summaryValueTextAlert: {
+    fontSize: 14,
+    color: '#ef4444',
+    fontWeight: '700',
+  },
+  modalWarningSubText: {
+    fontSize: 13,
+    color: '#9ca3af',
+    textAlign: 'center',
+    lineHeight: 18,
   },
 });

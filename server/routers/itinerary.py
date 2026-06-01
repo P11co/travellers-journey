@@ -117,6 +117,35 @@ def _resolve_hotspots(names: list[str]) -> list[dict]:
     return resolved
 
 
+def _estimate_selected_route_budget(req: ItineraryGenerateRequest) -> dict | None:
+    selected_hotspots = _resolve_hotspots(req.hotspots)
+    if not selected_hotspots:
+        return None
+    total_duration = sum(int(h.get("est_duration_mins", 60)) for h in selected_hotspots)
+    num_stops = len(selected_hotspots)
+    walking_buffer = 15 * (num_stops - 1)
+    min_time_required = total_duration + walking_buffer
+    available_minutes = req.available_hours * 60
+    if min_time_required > available_minutes:
+        over_by_minutes = min_time_required - available_minutes
+        return {
+            "code": "itinerary_time_budget_exceeded",
+            "message": "Not enough time for this itinerary.",
+            "available_minutes": int(available_minutes),
+            "required_minutes": int(min_time_required),
+            "over_by_minutes": int(over_by_minutes),
+            "stops": [
+                {
+                    "name": h.get("name", ""),
+                    "duration_minutes": int(h.get("est_duration_mins", 60))
+                }
+                for h in selected_hotspots
+            ],
+            "travel_buffer_minutes": int(walking_buffer)
+        }
+    return None
+
+
 def _format_hotspot_lines(hotspots: list[dict]) -> str:
     if not hotspots:
         return "- None"
@@ -342,19 +371,12 @@ async def call_llm_for_itinerary(req: ItineraryGenerateRequest) -> list[dict]:
 async def generate_itinerary(req: ItineraryGenerateRequest):
     """Generate an AI-powered itinerary and persist it."""
     # Preflight check for available hours vs selected stops duration + buffer
-    selected_hotspots = _resolve_hotspots(req.hotspots)
-    if selected_hotspots:
-        total_duration = sum(int(h.get("est_duration_mins", 60)) for h in selected_hotspots)
-        num_stops = len(selected_hotspots)
-        walking_buffer = 15 * (num_stops - 1)
-        min_time_required = total_duration + walking_buffer
-        available_minutes = req.available_hours * 60
-        if min_time_required > available_minutes:
-            hours_str = str(int(req.available_hours)) if req.available_hours.is_integer() else f"{req.available_hours:.1f}"
-            raise HTTPException(
-                status_code=400,
-                detail=f"Too many stops for a {hours_str}-hour itinerary. Please increase your time budget or remove some hotspots."
-            )
+    over_budget_err = _estimate_selected_route_budget(req)
+    if over_budget_err:
+        raise HTTPException(
+            status_code=400,
+            detail=over_budget_err
+        )
 
     # 1. Create or reuse session
     session_id = req.session_id or str(uuid.uuid4())
