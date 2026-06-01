@@ -7,7 +7,9 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Image
+  Image,
+  Modal,
+  TextInput
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -273,29 +275,23 @@ export default function PlanYourJourneyView({ navigation }) {
           </View>
 
           <View style={styles.formGroupSpacing}>
-            <View>
-              <Text style={styles.fieldLabel}>Budget (USD)</Text>
-              <TouchableOpacity
-                style={[styles.customSelectTrigger, isPlanLocked && styles.lockedControl]}
-                onPress={() => cycleDraftOption('budgetLevel', BUDGET_OPTIONS)}
-                disabled={isPlanLocked}
-              >
-                <Text style={styles.selectText}>{draft.budgetLevel}</Text>
-                <Text style={styles.dropdownCarat}>▼</Text>
-              </TouchableOpacity>
-            </View>
+            <PreferenceDropdown
+              label="Budget (USD)"
+              value={draft.budgetLevel}
+              onChange={(val) => updateDraft({ budgetLevel: val })}
+              options={BUDGET_OPTIONS}
+              type="budget"
+              disabled={isPlanLocked}
+            />
 
-            <View>
-              <Text style={styles.fieldLabel}>Available Time</Text>
-              <TouchableOpacity
-                style={[styles.customSelectTrigger, isPlanLocked && styles.lockedControl]}
-                onPress={() => cycleDraftOption('availableTime', TIME_OPTIONS)}
-                disabled={isPlanLocked}
-              >
-                <Text style={styles.selectText}>{draft.availableTime}</Text>
-                <Text style={styles.dropdownCarat}>▼</Text>
-              </TouchableOpacity>
-            </View>
+            <PreferenceDropdown
+              label="Available Time"
+              value={draft.availableTime}
+              onChange={(val) => updateDraft({ availableTime: val })}
+              options={TIME_OPTIONS}
+              type="time"
+              disabled={isPlanLocked}
+            />
           </View>
         </View>
 
@@ -444,6 +440,187 @@ export default function PlanYourJourneyView({ navigation }) {
         </View>
       )}
 
+    </View>
+  );
+}
+
+function PreferenceDropdown({
+  label,
+  value,
+  onChange,
+  options,
+  type,
+  disabled,
+}) {
+  const [modalVisible, setModalVisible] = useState(false);
+  const [isCustomMode, setIsCustomMode] = useState(false);
+  const [customValue, setCustomValue] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const isPreset = options.includes(value);
+
+  const handleOpen = () => {
+    if (disabled) return;
+    if (isPreset) {
+      setIsCustomMode(false);
+      setCustomValue('');
+    } else {
+      setIsCustomMode(true);
+      const match = String(value || '').match(/(\d+(?:\.\d+)?)/);
+      setCustomValue(match ? match[1] : '');
+    }
+    setErrorMsg('');
+    setModalVisible(true);
+  };
+
+  const handleSelectPreset = (preset) => {
+    onChange(preset);
+    setModalVisible(false);
+  };
+
+  const handleSelectCustomTrigger = () => {
+    setIsCustomMode(true);
+    if (isPreset) {
+      setCustomValue('');
+    } else {
+      const match = String(value || '').match(/(\d+(?:\.\d+)?)/);
+      setCustomValue(match ? match[1] : '');
+    }
+    setErrorMsg('');
+  };
+
+  const handleSaveCustom = () => {
+    const num = parseFloat(customValue);
+    if (isNaN(num) || num <= 0) {
+      setErrorMsg('Please enter a positive number.');
+      return;
+    }
+
+    if (type === 'time') {
+      if (num < 1 || num > 48) {
+        setErrorMsg('Please enter a value between 1 and 48 hours.');
+        return;
+      }
+      onChange(`Custom (${num} hrs)`);
+    } else {
+      onChange(`$${Math.round(num)}`);
+    }
+
+    setModalVisible(false);
+  };
+
+  return (
+    <View>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <TouchableOpacity
+        style={[styles.customSelectTrigger, disabled && styles.lockedControl]}
+        onPress={handleOpen}
+        disabled={disabled}
+      >
+        <Text style={styles.selectText}>{value}</Text>
+        <Text style={styles.dropdownCarat}>▼</Text>
+      </TouchableOpacity>
+
+      <Modal
+        visible={modalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Select {label}</Text>
+
+            {!isCustomMode ? (
+              <View style={styles.optionsList}>
+                {options.map((opt) => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[
+                      styles.optionItem,
+                      value === opt && styles.optionItemActive,
+                    ]}
+                    onPress={() => handleSelectPreset(opt)}
+                  >
+                    <Text
+                      style={[
+                        styles.optionText,
+                        value === opt && styles.optionTextActive,
+                      ]}
+                    >
+                      {opt}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+
+                <TouchableOpacity
+                  style={[
+                    styles.optionItem,
+                    !isPreset && styles.optionItemActive,
+                  ]}
+                  onPress={handleSelectCustomTrigger}
+                >
+                  <Text
+                    style={[
+                      styles.optionText,
+                      !isPreset && styles.optionTextActive,
+                    ]}
+                  >
+                    Custom... {!isPreset && `(${value})`}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.customInputContainer}>
+                <Text style={styles.customInputLabel}>
+                  {type === 'budget' ? 'Enter budget in USD:' : 'Enter duration in hours (1-48):'}
+                </Text>
+                <TextInput
+                  style={styles.modalTextInput}
+                  keyboardType="numeric"
+                  value={customValue}
+                  onChangeText={(txt) => {
+                    setCustomValue(txt);
+                    setErrorMsg('');
+                  }}
+                  placeholder={type === 'budget' ? 'e.g. 75' : 'e.g. 6'}
+                  placeholderTextColor="#666"
+                  autoFocus={true}
+                />
+
+                {Boolean(errorMsg) && (
+                  <Text style={styles.modalErrorText}>{errorMsg}</Text>
+                )}
+
+                <View style={styles.modalButtonsRow}>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.modalButtonCancel]}
+                    onPress={() => setIsCustomMode(false)}
+                  >
+                    <Text style={styles.modalButtonTextCancel}>Back</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.modalButtonSave]}
+                    onPress={handleSaveCustom}
+                  >
+                    <Text style={styles.modalButtonTextSave}>Save</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {!isCustomMode && (
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setModalVisible(false)}
+              >
+                <Text style={styles.closeButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1119,5 +1296,123 @@ const styles = StyleSheet.create({
     color: '#131313',
     fontWeight: '700',
     fontSize: 16,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: '#1e1e1e',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#2d2d2d',
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 15,
+    elevation: 10,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#ffffff',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  optionsList: {
+    gap: 8,
+    marginBottom: 8,
+  },
+  optionItem: {
+    backgroundColor: '#262626',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    alignItems: 'center',
+  },
+  optionItemActive: {
+    borderColor: '#5c77ff',
+    backgroundColor: 'rgba(92, 119, 255, 0.1)',
+  },
+  optionText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#d1d5db',
+  },
+  optionTextActive: {
+    color: '#5c77ff',
+    fontWeight: '600',
+  },
+  customInputContainer: {
+    marginTop: 4,
+  },
+  customInputLabel: {
+    fontSize: 14,
+    color: '#9ca3af',
+    marginBottom: 12,
+  },
+  modalTextInput: {
+    backgroundColor: '#121212',
+    borderWidth: 1,
+    borderColor: '#374151',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    color: '#ffffff',
+    fontSize: 16,
+    marginBottom: 12,
+  },
+  modalErrorText: {
+    color: '#ef4444',
+    fontSize: 13,
+    marginBottom: 12,
+  },
+  modalButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalButtonCancel: {
+    backgroundColor: '#262626',
+    borderWidth: 1,
+    borderColor: '#374151',
+  },
+  modalButtonSave: {
+    backgroundColor: '#5c77ff',
+  },
+  modalButtonTextCancel: {
+    color: '#9ca3af',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  modalButtonTextSave: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  closeButton: {
+    marginTop: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    color: '#9ca3af',
+    fontSize: 14,
+    fontWeight: '500',
   },
 });

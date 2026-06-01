@@ -388,7 +388,7 @@ export default function AIChatInterface({
           isEmbedded && !isFullPanel && styles.embeddedHalfChatPadding,
           shouldLiftInputForKeyboard && { paddingBottom: keyboardLift + 120 },
         ]}
-        scrollEnabled={!isEmbedded || isFullPanel}
+        scrollEnabled={true}
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="none"
         keyboardShouldPersistTaps="always"
