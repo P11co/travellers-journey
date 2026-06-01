@@ -28,6 +28,7 @@ export default function AIChatInterface({
   onChatPress,
   onItineraryPress,
   onSettingsPress,
+  onOutsidePress,
 }) {
   const insets = useSafeAreaInsets();
   const [sidebarVisible, setSidebarVisible] = useState(false);
@@ -210,6 +211,8 @@ export default function AIChatInterface({
   };
 
   const handleDockChatPress = () => {
+    onOutsidePress?.();
+
     if (!isEmbedded) {
       (onChatPress || (() => navigation.goBack()))();
       return;
@@ -312,6 +315,7 @@ export default function AIChatInterface({
         embeddedPanelLift > 0 && { transform: [{ translateY: -embeddedPanelLift }] },
       ]}
       pointerEvents={isEmbedded && !isFullPanel ? 'box-none' : 'auto'}
+      onTouchStart={onOutsidePress}
     >
       {isEmbedded && !isFullPanel && (
         <View
@@ -390,7 +394,10 @@ export default function AIChatInterface({
       {/* 4. CAMERA VIEWFINDER FLOATING LIVE-PANEL OVERLAY */}
       {cameraVisible && (
         <VisionCameraPanel
-          style={styles.cameraViewfinder}
+          style={[
+            styles.cameraViewfinder,
+            isEmbedded && !isFullPanel && { top: -halfPanelTop + insets.top + 72 }
+          ]}
           onCapture={handleCapturePhoto}
           onClose={() => setCameraVisible(false)}
           disabled={isChatLoading}

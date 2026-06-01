@@ -121,6 +121,7 @@ const buildMapLibreMapHtml = ({ center, waypoints, currentCoords, themeMode }) =
         ];
         var waypointLabelColor = data.themeMode === 'dark' ? '#f4f4f5' : '#18181b';
         var waypointLabelHalo = data.themeMode === 'dark' ? '#0f0f13' : '#ffffff';
+        var lastWaypointSelectionAt = 0;
 
         function showFallback(message) {
           fallback.textContent = message;
@@ -136,6 +137,7 @@ const buildMapLibreMapHtml = ({ center, waypoints, currentCoords, themeMode }) =
 
         function postWaypointSelection(point) {
           if (!window.ReactNativeWebView) return;
+          lastWaypointSelectionAt = Date.now();
           window.ReactNativeWebView.postMessage(JSON.stringify({
             type: 'WAYPOINT_SELECTED',
             waypoint: point
@@ -309,6 +311,10 @@ const buildMapLibreMapHtml = ({ center, waypoints, currentCoords, themeMode }) =
           });
 
           map.on('click', function (event) {
+            if (Date.now() - lastWaypointSelectionAt < 500) {
+              return;
+            }
+
             var waypointHits = map.queryRenderedFeatures(event.point, {
               layers: ['waypoint-zone-fill']
             });
@@ -329,10 +335,31 @@ const buildMapLibreMapHtml = ({ center, waypoints, currentCoords, themeMode }) =
 
           data.waypoints.forEach(function (point) {
             var markerElement = document.createElement('div');
+            var lastMarkerSelectionAt = 0;
             markerElement.className = point.active ? 'pin active' : 'pin';
-            markerElement.addEventListener('click', function (event) {
+
+            function stopMarkerEvent(event) {
               event.stopPropagation();
+              if (event.cancelable) {
+                event.preventDefault();
+              }
+            }
+
+            function selectMarker(event) {
+              stopMarkerEvent(event);
+              if (Date.now() - lastMarkerSelectionAt < 250) {
+                return;
+              }
+              lastMarkerSelectionAt = Date.now();
               postWaypointSelection(point);
+            }
+
+            ['pointerdown', 'touchstart', 'mousedown'].forEach(function (eventName) {
+              markerElement.addEventListener(eventName, stopMarkerEvent, { passive: false });
+            });
+
+            ['pointerup', 'touchend', 'mouseup', 'click'].forEach(function (eventName) {
+              markerElement.addEventListener(eventName, selectMarker, { passive: false });
             });
 
             new maplibregl.Marker({
@@ -378,13 +405,19 @@ const buildMapLibreMapHtml = ({ center, waypoints, currentCoords, themeMode }) =
 </html>`;
 };
 
-export default function ARMapNavigationView({ navigation, showBottomNav = true, onAskWaypoint }) {
+export default function ARMapNavigationView({
+  navigation,
+  showBottomNav = true,
+  onAskWaypoint,
+  dismissWaypointSignal = 0,
+}) {
   const insets = useSafeAreaInsets();
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapError, setMapError] = useState(null);
   const [selectedWaypoint, setSelectedWaypoint] = useState(null);
   const [entryWaypoint, setEntryWaypoint] = useState(null);
   const lastActiveWaypointIdRef = useRef(null);
+  const lastWaypointSelectedAtRef = useRef(0);
   const currentLocation = useAppStore((s) => s.currentLocation);
   const hotspotSuggestionsEnabled = useAppStore((s) => s.hotspotSuggestionsEnabled);
   const setChatWaypointContext = useAppStore((s) => s.setChatWaypointContext);
@@ -464,6 +497,15 @@ export default function ARMapNavigationView({ navigation, showBottomNav = true, 
     lastActiveWaypointIdRef.current = nextId;
   }, [activeWaypoint?.id, hotspotSuggestionsEnabled]);
 
+  useEffect(() => {
+    if (!dismissWaypointSignal || hotspotSuggestionsEnabled) {
+      return;
+    }
+
+    setSelectedWaypoint(null);
+    setEntryWaypoint(null);
+  }, [dismissWaypointSignal, hotspotSuggestionsEnabled]);
+
   const handleMapReady = () => {
     setIsMapReady(true);
     setMapError(null);
@@ -488,10 +530,17 @@ export default function ARMapNavigationView({ navigation, showBottomNav = true, 
         return;
       }
       if (payload.type === 'MAP_DISMISSED') {
-        setSelectedWaypoint(null);
+        if (Date.now() - lastWaypointSelectedAtRef.current < 500) {
+          return;
+        }
+        if (!hotspotSuggestionsEnabled) {
+          setSelectedWaypoint(null);
+          setEntryWaypoint(null);
+        }
         return;
       }
       if (payload.type !== 'WAYPOINT_SELECTED' || !payload.waypoint?.id) return;
+      lastWaypointSelectedAtRef.current = Date.now();
       setSelectedWaypoint(payload.waypoint);
       logTraceEvent('waypoint_marker_tapped', {
         waypoint_id: payload.waypoint.id,

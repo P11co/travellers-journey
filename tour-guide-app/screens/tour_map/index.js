@@ -11,6 +11,7 @@ import useAppStore from '../../src/store';
  */
 export default function TourMapScreen({ navigation }) {
   const [chatPanelMode, setChatPanelMode] = useState('half');
+  const [dismissWaypointSignal, setDismissWaypointSignal] = useState(0);
   const logActivity = useAppStore((s) => s.logActivity);
   const setCurrentLocation = useAppStore((s) => s.setCurrentLocation);
   const activeTourId = useAppStore((s) => s.activeTourId);
@@ -73,6 +74,10 @@ export default function TourMapScreen({ navigation }) {
     setChatPanelMode('full');
   };
 
+  const requestDismissWaypointSuggestion = () => {
+    setDismissWaypointSignal((signal) => signal + 1);
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.mapLayer}>
@@ -80,6 +85,7 @@ export default function TourMapScreen({ navigation }) {
           navigation={navigation}
           showBottomNav={false}
           onAskWaypoint={handleAskWaypoint}
+          dismissWaypointSignal={dismissWaypointSignal}
         />
       </View>
 
@@ -89,6 +95,7 @@ export default function TourMapScreen({ navigation }) {
           presentation="embedded"
           panelMode={chatPanelMode}
           onItineraryPress={handleItineraryDockPress}
+          onOutsidePress={requestDismissWaypointSuggestion}
           onChatPress={() => {
             setChatPanelMode((mode) => (mode === 'full' ? 'half' : 'full'));
           }}
