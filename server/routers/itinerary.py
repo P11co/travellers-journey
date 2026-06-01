@@ -58,6 +58,7 @@ RULES:
 - Include travel/walking time between locations as separate items if needed.
 - Treat available time as a maximum, not a target to fill.
 - Selected hotspots are hard constraints, not loose suggestions.
+- The order of selected hotspots in the request is arbitrary, not user preference. Choose the stop order that minimizes total walking/travel distance while still respecting time, budget, opening-hour, and meal/rest constraints.
 - Do not invent new places, restaurants, cafes, museums, palaces, streets, or parks.
 - If fill mode is disabled, use only selected hotspots plus utility items like "Walking to X" or generic "Rest break".
 - If fill mode is enabled, extra stops must come only from the provided fill pool of known hotspots.
@@ -153,6 +154,7 @@ def _build_user_prompt(req: ItineraryGenerateRequest) -> str:
         f"Location: {req.location}\n"
         f"Selected hotspots: {selected_names}\n"
         f"Selected hotspot details:\n{_format_hotspot_lines(selected_hotspots)}\n"
+        f"The selected hotspot list is unordered. Reorder these stops into the most efficient walking route, minimizing backtracking and total travel distance.\n"
         f"AI fill mode: {'enabled' if req.allow_ai_fill else 'disabled'}\n"
         f"Known fill pool, only usable when AI fill mode is enabled:\n{_format_hotspot_lines(fill_pool)}\n"
         f"Budget: {budget_text}\n"

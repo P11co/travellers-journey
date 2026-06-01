@@ -190,3 +190,27 @@ async def test_delete_nonexistent(client):
     """Deleting a nonexistent session returns 404."""
     resp = await client.delete("/itinerary/ghost-session")
     assert resp.status_code == 404
+
+
+def test_prompt_optimization_rules():
+    """Verify that itinerary generation prompts include walking route optimization and arbitrary order rules."""
+    from server.routers.itinerary import _build_user_prompt, _ITINERARY_SYSTEM_PROMPT
+    from server.models import ItineraryGenerateRequest
+
+    req = ItineraryGenerateRequest(
+        location="Gyeongbokgung",
+        hotspots=["National Palace Museum of Korea", "Bukchon Hanok Village"],
+        budget_krw=30000,
+        available_hours=6.0,
+        start_time="09:00 AM",
+    )
+    user_prompt = _build_user_prompt(req)
+
+    # Assert system prompt has the walking optimization rule
+    assert "The order of selected hotspots in the request is arbitrary" in _ITINERARY_SYSTEM_PROMPT
+    assert "minimizes total walking/travel distance" in _ITINERARY_SYSTEM_PROMPT
+
+    # Assert user prompt has the unordered notification
+    assert "The selected hotspot list is unordered" in user_prompt
+    assert "most efficient walking route" in user_prompt
+

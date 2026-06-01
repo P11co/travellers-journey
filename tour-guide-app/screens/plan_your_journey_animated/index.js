@@ -97,16 +97,18 @@ export default function PlanYourJourneyView({ navigation }) {
         onPress={() => reorderGeneratedStop(index, index - 1)}
         disabled={index === 0}
         activeOpacity={0.75}
+        accessibilityLabel="Move stop up"
       >
-        <Text style={[styles.reorderMoveText, index === 0 && styles.reorderMoveTextDisabled]}>Up</Text>
+        <Text style={[styles.reorderMoveText, index === 0 && styles.reorderMoveTextDisabled]}>↑</Text>
       </TouchableOpacity>
       <TouchableOpacity
         style={[styles.reorderMoveButton, index === routeStops.length - 1 && styles.reorderMoveButtonDisabled]}
         onPress={() => reorderGeneratedStop(index, index + 1)}
         disabled={index === routeStops.length - 1}
         activeOpacity={0.75}
+        accessibilityLabel="Move stop down"
       >
-        <Text style={[styles.reorderMoveText, index === routeStops.length - 1 && styles.reorderMoveTextDisabled]}>Dn</Text>
+        <Text style={[styles.reorderMoveText, index === routeStops.length - 1 && styles.reorderMoveTextDisabled]}>↓</Text>
       </TouchableOpacity>
     </View>
   );
@@ -922,7 +924,7 @@ const styles = StyleSheet.create({
   },
   reorderMoveButton: {
     width: 34,
-    minHeight: 26,
+    height: 34,
     borderRadius: 8,
     backgroundColor: '#131313',
     borderWidth: 1,
@@ -935,7 +937,7 @@ const styles = StyleSheet.create({
   },
   reorderMoveText: {
     color: '#d1d5db',
-    fontSize: 10,
+    fontSize: 16,
     fontWeight: '800',
   },
   reorderMoveTextDisabled: {
