@@ -144,6 +144,33 @@ async def test_classifier_map_geocode():
 
 
 @pytest.mark.asyncio
+async def test_classifier_returns_naver_search_query_for_route():
+    """Structured classifier output includes a Naver search keyword when requested."""
+    classifier_reply = (
+        '{"intent":"MAP_GEOCODE","naver_search_query":"교보문고 광화문",'
+        '"display_query":"Kyobo Bookstore Gwanghwamun"}'
+    )
+    with patch("server.services.web_search.httpx.AsyncClient") as MockClient:
+        mock = AsyncMock()
+        mock.post.return_value = _make_openrouter_response(classifier_reply)
+        mock.__aenter__ = AsyncMock(return_value=mock)
+        mock.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock
+
+        from server.services.web_search import classify_intent
+        result = await classify_intent(
+            "How do I get to Kyobo Bookstore?",
+            return_route=True,
+        )
+
+    assert result == {
+        "intent": "MAP_GEOCODE",
+        "naver_search_query": "교보문고 광화문",
+        "display_query": "Kyobo Bookstore Gwanghwamun",
+    }
+
+
+@pytest.mark.asyncio
 async def test_classifier_fails_gracefully():
     """If the API call fails, classifier returns RAG (safe default)."""
     with patch("server.services.web_search.httpx.AsyncClient") as MockClient:

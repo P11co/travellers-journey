@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import httpx
 
 from server.config import (
@@ -20,7 +21,8 @@ TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 _CLASSIFIER_SYSTEM = """\
 You are a query classifier for a tour guide AI assistant at Gyeongbokgung Palace in Seoul.
 
-Your job: classify the user's message into exactly ONE of four categories.
+Your job: classify the user's message into exactly ONE of four categories and,
+when a Naver Map handoff may be useful, extract the exact Naver Map search key.
 
 ### RAG
 Use when the message asks about:
@@ -54,7 +56,29 @@ Use when the message asks about:
 - Directions to a named destination or specific address
 - Whether a specific named business or facility exists in the area
 
-Respond with exactly one word: RAG, WEB_SEARCH, MAP_STATIC, or MAP_GEOCODE.
+Return compact JSON only:
+{
+  "intent": "RAG" | "WEB_SEARCH" | "MAP_STATIC" | "MAP_GEOCODE",
+  "naver_search_query": string or null,
+  "display_query": string or null
+}
+
+For MAP_GEOCODE:
+- naver_search_query should be the exact keyword to put in nmap://search?query=...
+- Prefer Korean Naver keywords even when the user writes in English, because
+  Naver Map search quality is usually better with Korean place/category names.
+- Preserve useful local qualifiers like 광화문, 경복궁, 종로, or the branch name.
+- display_query should be a user-facing English or bilingual label.
+
+Examples:
+- "How do I get to Kyobo Bookstore?" →
+  {"intent":"MAP_GEOCODE","naver_search_query":"교보문고 광화문","display_query":"Kyobo Bookstore Gwanghwamun"}
+- "nearest bathroom" →
+  {"intent":"MAP_GEOCODE","naver_search_query":"화장실","display_query":"bathroom"}
+- "Is there a subway nearby?" →
+  {"intent":"MAP_GEOCODE","naver_search_query":"지하철역","display_query":"subway station"}
+
+For non-MAP_GEOCODE intents, set naver_search_query and display_query to null.
 """
 
 _CLASSIFIER_USER_TEMPLATE = """\
@@ -72,16 +96,19 @@ async def classify_intent(
     last_ai_message: str = "",
     provider: str = "openrouter",
     model: str | None = None,
-) -> str:
+    return_route: bool = False,
+) -> str | dict:
     """
     Ask the LLM to classify the user query into one of four intents:
     RAG, WEB_SEARCH, MAP_STATIC, or MAP_GEOCODE.
+    When return_route=True, returns the parsed route dict with optional
+    naver_search_query/display_query. Otherwise returns the intent string.
     Falls back to NVIDIA if OpenRouter cannot complete, then RAG on any error.
     """
     model = model or LLM_MODEL_ID
 
     if not OPENROUTER_API_KEY and not NVIDIA_API_KEY:
-        return "RAG"
+        return _route_result("RAG") if return_route else "RAG"
 
     prompt = _CLASSIFIER_USER_TEMPLATE.format(
         last_ai_message=last_ai_message.strip() or "(none)",
@@ -125,7 +152,7 @@ async def classify_intent(
                                 {"role": "user", "content": prompt},
                             ],
                             "temperature": 0.0,  # Deterministic classification
-                            "max_tokens": 10,
+                            "max_tokens": 120,
                         },
                     )
 
@@ -141,23 +168,14 @@ async def classify_intent(
                     print(f"⚠️ {active_provider} classifier API error ({resp.status_code}): {resp.text[:200]}")
                     break
 
-                answer = (
+                raw_answer = (
                     resp.json()
                     .get("choices", [{}])[0]
                     .get("message", {})
                     .get("content") or ""
                 )
-                answer = answer.strip().upper()
-
-                # Parse the 4-way response
-                if "WEB_SEARCH" in answer:
-                    return "WEB_SEARCH"
-                elif "MAP_GEOCODE" in answer:
-                    return "MAP_GEOCODE"
-                elif "MAP_STATIC" in answer:
-                    return "MAP_STATIC"
-                else:
-                    return "RAG"
+                route = _parse_classifier_route(raw_answer)
+                return route if return_route else route["intent"]
 
             except Exception as e:
                 print(
@@ -169,7 +187,52 @@ async def classify_intent(
                     continue
                 break
 
-    return "RAG"
+    return _route_result("RAG") if return_route else "RAG"
+
+
+def _route_result(
+    intent: str,
+    naver_search_query: str | None = None,
+    display_query: str | None = None,
+) -> dict:
+    valid_intents = {"RAG", "WEB_SEARCH", "MAP_STATIC", "MAP_GEOCODE"}
+    normalized_intent = intent.strip().upper() if intent else "RAG"
+    if normalized_intent not in valid_intents:
+        normalized_intent = "RAG"
+    if normalized_intent != "MAP_GEOCODE":
+        naver_search_query = None
+        display_query = None
+    return {
+        "intent": normalized_intent,
+        "naver_search_query": naver_search_query.strip() if naver_search_query else None,
+        "display_query": display_query.strip() if display_query else None,
+    }
+
+
+def _parse_classifier_route(raw_answer: str) -> dict:
+    """Parse either the new JSON classifier response or legacy one-word output."""
+    answer = (raw_answer or "").strip()
+    if answer.startswith("```"):
+        answer = answer.strip("`").strip()
+        if answer.lower().startswith("json"):
+            answer = answer[4:].strip()
+
+    try:
+        data = json.loads(answer)
+        return _route_result(
+            str(data.get("intent") or ""),
+            data.get("naver_search_query"),
+            data.get("display_query"),
+        )
+    except (json.JSONDecodeError, TypeError, ValueError):
+        legacy = answer.upper()
+        if "WEB_SEARCH" in legacy:
+            return _route_result("WEB_SEARCH")
+        if "MAP_GEOCODE" in legacy:
+            return _route_result("MAP_GEOCODE")
+        if "MAP_STATIC" in legacy:
+            return _route_result("MAP_STATIC")
+        return _route_result("RAG")
 
 
 async def needs_web_search(

@@ -68,7 +68,7 @@ from server.services.map_snapshot import get_map_snapshot
 from server.services.geocoding import geocode_search, format_geocoding_for_prompt
 from server.services.langsmith_tracing import sanitize_trace_payload, traceable
 from server.services.trace_artifacts import save_base64_image_artifact
-from server.routers.handoff import build_naver_search_urls, build_naver_urls
+from server.routers.handoff import build_naver_search_urls
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
@@ -640,8 +640,13 @@ async def _emit_prepare_status(status_callback, label: str):
         await status_callback(label)
 
 
-def _build_naver_action_payload_from_geocode(query: str, results: list[dict]) -> dict | None:
-    """Build a deterministic Naver handoff target from the best geocode result."""
+def _build_naver_action_payload_from_geocode(
+    query: str,
+    results: list[dict],
+    naver_search_query: str | None = None,
+    display_query: str | None = None,
+) -> dict | None:
+    """Build a deterministic Naver search handoff from the best geocode result."""
     if not results:
         return None
 
@@ -652,18 +657,52 @@ def _build_naver_action_payload_from_geocode(query: str, results: list[dict]) ->
         return None
 
     place_name = (
-        best.get("building_name")
+        display_query
+        or best.get("building_name")
         or best.get("road_address")
         or best.get("english_address")
+        or naver_search_query
         or query
     )
-    urls = build_naver_urls(place_name, lat, lng)
+    search_keyword = (
+        naver_search_query
+        or best.get("building_name")
+        or query
+    )
+    urls = build_naver_search_urls(search_keyword, latitude=lat, longitude=lng)
     return {
         "place_name": place_name,
+        "query": search_keyword,
+        "naver_query": search_keyword,
         "latitude": lat,
         "longitude": lng,
         "naver_app_url": urls["naver_app_url"],
         "naver_web_url": urls["naver_web_url"],
+        "handoff_type": "search",
+    }
+
+
+def _build_naver_action_payload_from_exact_search(
+    query: str,
+    naver_search_query: str | None,
+    display_query: str | None,
+    latitude: float | None,
+    longitude: float | None,
+) -> dict | None:
+    """Build a Naver search handoff when geocoding did not return a target."""
+    search_keyword = naver_search_query or query
+    if not search_keyword:
+        return None
+    urls = build_naver_search_urls(search_keyword, latitude=latitude, longitude=longitude)
+    return {
+        "place_name": display_query or search_keyword,
+        "query": search_keyword,
+        "naver_query": search_keyword,
+        "latitude": latitude,
+        "longitude": longitude,
+        "naver_app_url": urls["naver_app_url"],
+        "naver_web_url": urls["naver_web_url"],
+        "handoff_type": "search",
     }
 
 
@@ -695,6 +734,37 @@ _AMENITY_SEARCH_TERMS = [
     ),
 ]
 
+_WAYPOINT_NAVER_QUERIES = {
+    "main_gate": "광화문 경복궁",
+    "ticket_booth": "경복궁 매표소",
+    "geunjeongjeon": "근정전 경복궁",
+    "gyeonghoeru": "경회루 경복궁",
+    "national_palace_museum": "국립고궁박물관",
+    "heungnyemun": "흥례문 경복궁",
+    "sajeongjeon": "사정전 경복궁",
+    "gangnyeongjeon": "강녕전 경복궁",
+    "gyotaejeon": "교태전 경복궁",
+    "amisan": "아미산 경복궁",
+    "hyangwonjeong": "향원정 경복궁",
+    "national_folk_museum": "국립민속박물관",
+    "sinmumun": "신무문 경복궁",
+    "yeonchumun": "영추문 경복궁",
+    "geonchunmun": "건춘문 경복궁",
+    "sejong_statue": "세종대왕 동상 광화문광장",
+    "yi_sun_sin_statue": "이순신 장군 동상 광화문광장",
+    "cheonggyecheon_plaza": "청계천 광장",
+    "gwanghwamun_station_9": "광화문역 9번 출구",
+    "sejong_center": "세종문화회관",
+}
+
+
+def _naver_query_for_waypoint(waypoint: dict) -> str:
+    """Return the Korean Naver keyword for a known waypoint."""
+    return _WAYPOINT_NAVER_QUERIES.get(
+        waypoint.get("id"),
+        f"{waypoint['name']} 경복궁",
+    )
+
 
 def _detect_amenity_search(message: str) -> dict | None:
     """Return display and Naver search terms for amenity requests."""
@@ -706,6 +776,35 @@ def _detect_amenity_search(message: str) -> dict | None:
                 "naver_query": naver_query,
             }
     return None
+
+
+def _is_contextual_place_reference(message: str) -> bool:
+    """Detect direction requests where 'this/here' refers to attached waypoint context."""
+    normalized = f" {message.lower()} "
+    reference_terms = (
+        "this place",
+        "this spot",
+        "this location",
+        "this pin",
+        "here",
+        "where i am",
+        "current place",
+        "current location",
+    )
+    direction_terms = (
+        "how do i get",
+        "how can i get",
+        "take me",
+        "navigate",
+        "directions",
+        "route",
+        "open naver",
+        "show me",
+        "map",
+    )
+    return any(term in normalized for term in reference_terms) and any(
+        term in normalized for term in direction_terms
+    )
 
 
 def _build_naver_action_payload_from_search(
@@ -779,12 +878,26 @@ async def _prepare_chat_completion(
     amenity_search = _detect_amenity_search(req.message)
 
     await _emit_prepare_status(status_callback, "Understanding request")
-    intent = await classify_intent(
+    route = await classify_intent(
         user_message=req.message,
         last_ai_message=last_ai_message,
         provider=provider,
         model=model,
+        return_route=True,
     )
+    if isinstance(route, str):
+        intent = route
+        naver_search_query = None
+        display_query = None
+    else:
+        intent = route["intent"]
+        naver_search_query = route.get("naver_search_query")
+        display_query = route.get("display_query")
+
+    if intent == "MAP_GEOCODE" and waypoint and _is_contextual_place_reference(req.message):
+        naver_search_query = _naver_query_for_waypoint(waypoint)
+        display_query = waypoint["name"]
+
     print(f"🧠 Intent classification: {intent}")
     await _trace_chat_event(
         session_id,
@@ -793,6 +906,8 @@ async def _prepare_chat_completion(
             "intent": intent,
             "model": model,
             "has_last_assistant_message": bool(last_ai_message),
+            "naver_search_query": naver_search_query,
+            "display_query": display_query,
             "amenity_search_query": amenity_search["query"] if amenity_search else None,
             "amenity_naver_query": amenity_search["naver_query"] if amenity_search else None,
         },
@@ -813,21 +928,42 @@ async def _prepare_chat_completion(
         if (lat is None or lng is None) and waypoint:
             lat = waypoint["coordinates"]["latitude"]
             lng = waypoint["coordinates"]["longitude"]
+        geocode_query = naver_search_query or req.message
         await _trace_chat_event(
             session_id,
             "chat_geocode_started",
-            {"query": req.message, "center_lat": lat, "center_lng": lng},
+            {
+                "query": geocode_query,
+                "original_message": req.message,
+                "center_lat": lat,
+                "center_lng": lng,
+            },
         )
-        geo_results = await geocode_search(query=req.message, center_lng=lng, center_lat=lat)
+        geo_results = await geocode_search(query=geocode_query, center_lng=lng, center_lat=lat)
         await _trace_chat_event(session_id, "chat_geocode_completed", {"result_count": len(geo_results or [])})
         if geo_results:
-            geocode_block = "\n\n" + format_geocoding_for_prompt(geo_results, req.message)
-            naver_action_payload = _build_naver_action_payload_from_geocode(req.message, geo_results)
+            geocode_block = "\n\n" + format_geocoding_for_prompt(geo_results, geocode_query)
+            naver_action_payload = _build_naver_action_payload_from_geocode(
+                req.message,
+                geo_results,
+                naver_search_query=naver_search_query,
+                display_query=display_query,
+            )
+        else:
+            naver_action_payload = _build_naver_action_payload_from_exact_search(
+                req.message,
+                naver_search_query,
+                display_query,
+                latitude=lat,
+                longitude=lng,
+            )
+        if naver_action_payload:
             await _trace_chat_event(
                 session_id,
                 "chat_naver_handoff_target_resolved",
                 {
                     "place_name": naver_action_payload["place_name"] if naver_action_payload else None,
+                    "naver_query": naver_action_payload.get("naver_query") if naver_action_payload else None,
                     "latitude": naver_action_payload["latitude"] if naver_action_payload else None,
                     "longitude": naver_action_payload["longitude"] if naver_action_payload else None,
                     "source": "naver_geocode",
@@ -869,6 +1005,32 @@ async def _prepare_chat_completion(
     if (lat is None or lng is None) and waypoint:
         lat = waypoint["coordinates"]["latitude"]
         lng = waypoint["coordinates"]["longitude"]
+
+    if (
+        waypoint
+        and not amenity_search
+        and not naver_action_payload
+        and _is_contextual_place_reference(req.message)
+    ):
+        waypoint_search_query = _naver_query_for_waypoint(waypoint)
+        naver_action_payload = _build_naver_action_payload_from_exact_search(
+            req.message,
+            waypoint_search_query,
+            waypoint["name"],
+            latitude=lat,
+            longitude=lng,
+        )
+        await _trace_chat_event(
+            session_id,
+            "chat_naver_handoff_target_resolved",
+            {
+                "place_name": naver_action_payload["place_name"],
+                "naver_query": naver_action_payload["naver_query"],
+                "latitude": naver_action_payload["latitude"],
+                "longitude": naver_action_payload["longitude"],
+                "source": "attached_waypoint_context",
+            },
+        )
 
     if amenity_search and not naver_action_payload:
         naver_action_payload = _build_naver_action_payload_from_search(

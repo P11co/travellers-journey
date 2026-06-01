@@ -76,6 +76,29 @@ const DEFAULT_NAVER_TARGET = {
 
 const NAVER_APP_NAME = 'com.seoulwalk.tourguide';
 
+const WAYPOINT_NAVER_QUERIES = {
+  main_gate: '광화문 경복궁',
+  ticket_booth: '경복궁 매표소',
+  geunjeongjeon: '근정전 경복궁',
+  gyeonghoeru: '경회루 경복궁',
+  national_palace_museum: '국립고궁박물관',
+  heungnyemun: '흥례문 경복궁',
+  sajeongjeon: '사정전 경복궁',
+  gangnyeongjeon: '강녕전 경복궁',
+  gyotaejeon: '교태전 경복궁',
+  amisan: '아미산 경복궁',
+  hyangwonjeong: '향원정 경복궁',
+  national_folk_museum: '국립민속박물관',
+  sinmumun: '신무문 경복궁',
+  yeonchumun: '영추문 경복궁',
+  geonchunmun: '건춘문 경복궁',
+  sejong_statue: '세종대왕 동상 광화문광장',
+  yi_sun_sin_statue: '이순신 장군 동상 광화문광장',
+  cheonggyecheon_plaza: '청계천 광장',
+  gwanghwamun_station_9: '광화문역 9번 출구',
+  sejong_center: '세종문화회관',
+};
+
 const AMENITY_SEARCH_TERMS = [
   {
     triggers: ['bathroom', 'bathrooms', 'restroom', 'restrooms', 'toilet', 'toilets', 'washroom', 'wc'],
@@ -126,6 +149,27 @@ const buildAmenityNaverPayload = ({ message, lat, lng }) => {
     naver_app_url: `nmap://search?query=${encodedQuery}&appname=${NAVER_APP_NAME}`,
     naver_web_url: lat != null && lng != null
       ? `https://map.naver.com/v5/search/${encodedQuery}/@${lng},${lat},17z`
+      : `https://map.naver.com/v5/search/${encodedQuery}`,
+  };
+};
+
+const buildWaypointNaverPayload = ({ waypoint, lat, lng }) => {
+  if (!waypoint?.name) return null;
+
+  const searchQuery = WAYPOINT_NAVER_QUERIES[waypoint.id] || `${waypoint.name} 경복궁`;
+  const encodedQuery = encodeURIComponent(searchQuery);
+  const resolvedLat = lat ?? waypoint.lat ?? waypoint.latitude ?? waypoint.coordinates?.latitude ?? null;
+  const resolvedLng = lng ?? waypoint.lng ?? waypoint.longitude ?? waypoint.coordinates?.longitude ?? null;
+  return {
+    place_name: waypoint.name,
+    query: searchQuery,
+    naver_query: searchQuery,
+    latitude: resolvedLat,
+    longitude: resolvedLng,
+    handoff_type: 'search',
+    naver_app_url: `nmap://search?query=${encodedQuery}&appname=${NAVER_APP_NAME}`,
+    naver_web_url: resolvedLat != null && resolvedLng != null
+      ? `https://map.naver.com/v5/search/${encodedQuery}/@${resolvedLng},${resolvedLat},17z`
       : `https://map.naver.com/v5/search/${encodedQuery}`,
   };
 };
@@ -1041,6 +1085,10 @@ const useAppStore = create((set, get) => ({
           message,
           lat: actionLat,
           lng: actionLng,
+        }) || buildWaypointNaverPayload({
+          waypoint: waypointContext,
+          lat: actionLat,
+          lng: actionLng,
         }) || await get().buildNaverActionPayload();
       }
 
@@ -1104,6 +1152,10 @@ const useAppStore = create((set, get) => ({
         if (response.action === 'OPEN_NAVER_MAP' && !actionPayload) {
           actionPayload = buildAmenityNaverPayload({
             message,
+            lat: actionLat,
+            lng: actionLng,
+          }) || buildWaypointNaverPayload({
+            waypoint: waypointContext,
             lat: actionLat,
             lng: actionLng,
           }) || await get().buildNaverActionPayload();
@@ -1224,6 +1276,10 @@ const useAppStore = create((set, get) => ({
       if (response.action === 'OPEN_NAVER_MAP' && !actionPayload) {
         actionPayload = buildAmenityNaverPayload({
           message,
+          lat: actionLat,
+          lng: actionLng,
+        }) || buildWaypointNaverPayload({
+          waypoint: waypointContext,
           lat: actionLat,
           lng: actionLng,
         }) || await get().buildNaverActionPayload();

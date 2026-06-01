@@ -232,9 +232,107 @@ async def test_chat_geocode_returns_naver_action_payload(client):
     data = resp.json()
     assert data["action"] == "OPEN_NAVER_MAP"
     assert data["action_payload"]["place_name"] == "Kyobo Bookstore Gwanghwamun"
+    assert data["action_payload"]["handoff_type"] == "search"
+    assert data["action_payload"]["query"] == "Kyobo Bookstore Gwanghwamun"
+    assert data["action_payload"]["naver_query"] == "Kyobo Bookstore Gwanghwamun"
     assert data["action_payload"]["latitude"] == 37.5702
     assert data["action_payload"]["longitude"] == 126.9779
-    assert data["action_payload"]["naver_app_url"].startswith("nmap://place")
+    assert data["action_payload"]["naver_app_url"].startswith("nmap://search")
+    assert "query=Kyobo%20Bookstore%20Gwanghwamun" in data["action_payload"]["naver_app_url"]
+    assert "/search/Kyobo%20Bookstore%20Gwanghwamun/" in data["action_payload"]["naver_web_url"]
+
+
+@pytest.mark.asyncio
+async def test_chat_geocode_uses_classifier_naver_search_query(client):
+    """MAP_GEOCODE handoff uses the classifier's exact Naver search keyword."""
+    geocode_mock = AsyncMock(return_value=[{
+        "road_address": "1 Jong-ro, Jongno-gu, Seoul",
+        "jibun_address": "",
+        "english_address": "1 Jong-ro, Jongno-gu, Seoul",
+        "building_name": "Kyobo Bookstore Gwanghwamun",
+        "longitude": 126.9779,
+        "latitude": 37.5702,
+        "distance": 450,
+    }])
+    with patch("server.routers.chat.classify_intent", new=AsyncMock(return_value={
+            "intent": "MAP_GEOCODE",
+            "naver_search_query": "교보문고 광화문",
+            "display_query": "Kyobo Bookstore Gwanghwamun",
+         })), \
+         patch("server.routers.chat.geocode_search", new=geocode_mock), \
+         patch("server.routers.chat.get_map_snapshot", new=AsyncMock(return_value=None)), \
+         patch("server.routers.chat._get_live_environment", new=AsyncMock(return_value="Current Time: test")), \
+         patch("server.routers.chat._call_llm", new=AsyncMock(return_value="Kyobo Bookstore is south of the palace area.")):
+        resp = await client.post("/chat", json={
+            "message": "How do I get to Kyobo Bookstore?",
+            "latitude": 37.57865,
+            "longitude": 126.97711,
+        })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    geocode_mock.assert_awaited_once()
+    assert geocode_mock.await_args.kwargs["query"] == "교보문고 광화문"
+    assert data["action_payload"]["place_name"] == "Kyobo Bookstore Gwanghwamun"
+    assert data["action_payload"]["query"] == "교보문고 광화문"
+    assert data["action_payload"]["naver_query"] == "교보문고 광화문"
+    assert "query=%EA%B5%90%EB%B3%B4%EB%AC%B8%EA%B3%A0%20%EA%B4%91%ED%99%94%EB%AC%B8" in data["action_payload"]["naver_app_url"]
+
+
+@pytest.mark.asyncio
+async def test_chat_contextual_place_request_uses_attached_waypoint_for_search(client):
+    """Requests like 'this place' use the attached waypoint as the Naver search key."""
+    geocode_mock = AsyncMock(return_value=[])
+    with patch("server.routers.chat.classify_intent", new=AsyncMock(return_value={
+            "intent": "MAP_GEOCODE",
+            "naver_search_query": "Gyeongbokgung Palace",
+            "display_query": "Gyeongbokgung Palace",
+         })), \
+         patch("server.routers.chat.geocode_search", new=geocode_mock), \
+         patch("server.routers.chat.get_map_snapshot", new=AsyncMock(return_value=None)), \
+         patch("server.routers.chat._get_live_environment", new=AsyncMock(return_value="Current Time: test")), \
+         patch("server.routers.chat._call_llm", new=AsyncMock(return_value="I can open Naver Map for this place.")):
+        resp = await client.post("/chat", json={
+            "message": "How do I get to this place?",
+            "latitude": 37.57724,
+            "longitude": 126.97746,
+            "waypoint_id": "ticket_booth",
+        })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    geocode_mock.assert_awaited_once()
+    assert geocode_mock.await_args.kwargs["query"] == "경복궁 매표소"
+    assert data["action_payload"]["place_name"] == "Ticket Booth"
+    assert data["action_payload"]["query"] == "경복궁 매표소"
+    assert data["action_payload"]["naver_query"] == "경복궁 매표소"
+    assert "query=%EA%B2%BD%EB%B3%B5%EA%B6%81%20%EB%A7%A4%ED%91%9C%EC%86%8C" in data["action_payload"]["naver_app_url"]
+
+
+@pytest.mark.asyncio
+async def test_chat_contextual_place_request_gets_payload_even_without_map_intent(client):
+    """Attached waypoint handoff works even when final wording alone triggers the Naver button."""
+    with patch("server.routers.chat.classify_intent", new=AsyncMock(return_value="RAG")), \
+         patch("server.routers.chat.geocode_search", new=AsyncMock()) as mock_geocode, \
+         patch("server.routers.chat.get_map_snapshot", new=AsyncMock(return_value=None)), \
+         patch("server.routers.chat._get_live_environment", new=AsyncMock(return_value="Current Time: test")), \
+         patch("server.routers.chat.search_rag", return_value="PALACE_KNOWLEDGE: Hyangwonjeong context"), \
+         patch("server.routers.chat._call_llm", new=AsyncMock(return_value=(
+             "You are already at Hyangwonjeong Pavilion. I can open Naver Map if you need precise navigation."
+         ))):
+        resp = await client.post("/chat", json={
+            "message": "How do I get here",
+            "latitude": 37.57962,
+            "longitude": 126.97598,
+            "waypoint_id": "hyangwonjeong",
+        })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["action"] == "OPEN_NAVER_MAP"
+    assert data["action_payload"]["query"] == "향원정 경복궁"
+    assert "query=%ED%96%A5%EC%9B%90%EC%A0%95%20%EA%B2%BD%EB%B3%B5%EA%B6%81" in data["action_payload"]["naver_app_url"]
+    mock_geocode.assert_not_awaited()
 
 
 @pytest.mark.asyncio
