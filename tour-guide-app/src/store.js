@@ -394,6 +394,7 @@ const useAppStore = create((set, get) => ({
   // Chat
   chatMessages: [initialAssistantMessage],
   chatWaypointContext: null,
+  chatPhotoContext: null,
   isChatLoading: false,
   chatStreamStatus: null,
   chatError: null,
@@ -461,6 +462,7 @@ const useAppStore = create((set, get) => ({
       draft: createInitialDraft(),
       chatMessages: [{ ...initialAssistantMessage, timestamp: new Date().toISOString() }],
       chatWaypointContext: null,
+      chatPhotoContext: null,
       isChatLoading: false,
       chatStreamStatus: null,
       chatError: null,
@@ -725,6 +727,33 @@ const useAppStore = create((set, get) => ({
       get().logTraceEvent('waypoint_context_removed', {
         waypoint_id: previous.id,
         waypoint_name: previous.name,
+      });
+    }
+  },
+
+  setChatPhotoContext: (photo) => {
+    const nextContext = photo
+      ? {
+          imageBase64: photo.imageBase64,
+          imageUri: photo.imageUri,
+          imageMimeType: photo.imageMimeType || 'image/jpeg',
+          attachedAt: photo.attachedAt || new Date().toISOString(),
+        }
+      : null;
+    set({ chatPhotoContext: nextContext });
+    if (nextContext) {
+      get().logTraceEvent('photo_context_attached', {
+        image_uri: nextContext.imageUri,
+      });
+    }
+  },
+
+  clearChatPhotoContext: () => {
+    const previous = get().chatPhotoContext;
+    set({ chatPhotoContext: null });
+    if (previous) {
+      get().logTraceEvent('photo_context_removed', {
+        image_uri: previous.imageUri,
       });
     }
   },

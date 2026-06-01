@@ -63,7 +63,7 @@ export default function VisionCameraPanel({
           {isCapturing ? (
             <ActivityIndicator color="#ffffff" size="small" />
           ) : (
-            <Text style={styles.captureText}>Send Photo</Text>
+            <Text style={styles.captureText}>Add</Text>
           )}
         </TouchableOpacity>
       </View>

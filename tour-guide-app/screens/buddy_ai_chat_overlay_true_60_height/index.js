@@ -52,6 +52,7 @@ export default function BuddyAIChatOverlay({
   const isNearBottomRef = useRef(true);
   const chatMessages = useAppStore((s) => s.chatMessages);
   const chatWaypointContext = useAppStore((s) => s.chatWaypointContext);
+  const chatPhotoContext = useAppStore((s) => s.chatPhotoContext);
   const isChatLoading = useAppStore((s) => s.isChatLoading);
   const isRecording = useAppStore((s) => s.isRecording);
   const isTranscribing = useAppStore((s) => s.isTranscribing);
@@ -65,6 +66,8 @@ export default function BuddyAIChatOverlay({
   const stopSpeaking = useAppStore((s) => s.stopSpeaking);
   const logTraceEvent = useAppStore((s) => s.logTraceEvent);
   const clearChatWaypointContext = useAppStore((s) => s.clearChatWaypointContext);
+  const setChatPhotoContext = useAppStore((s) => s.setChatPhotoContext);
+  const clearChatPhotoContext = useAppStore((s) => s.clearChatPhotoContext);
   const themeMode = useAppStore((s) => s.themeMode);
   const theme = getTheme(themeMode);
   const hasStreamingMessage = chatMessages.some((message) => message.isStreaming);
@@ -142,11 +145,25 @@ export default function BuddyAIChatOverlay({
 
   const handleSend = async () => {
     const text = inputText.trim();
-    if (!text || isChatLoading) return;
+    if (isChatLoading) return;
+    if (!text && !chatPhotoContext) return;
     isNearBottomRef.current = true;
     setInputText('');
     try {
-      await sendMessage(text);
+      if (chatPhotoContext) {
+        const photo = chatPhotoContext;
+        clearChatPhotoContext();
+        await sendVisionMessage(
+          photo.imageBase64,
+          text || 'What is this?',
+          {
+            imageUri: photo.imageUri,
+            imageMimeType: photo.imageMimeType,
+          }
+        );
+      } else {
+        await sendMessage(text);
+      }
     } catch {
       // Store renders a friendly failure message.
     }
@@ -184,9 +201,13 @@ export default function BuddyAIChatOverlay({
   };
 
   const handleCapturePhoto = async (imageBase64, imageUri) => {
+    setChatPhotoContext({
+      imageBase64,
+      imageUri,
+      imageMimeType: 'image/jpeg',
+      attachedAt: new Date().toISOString(),
+    });
     setCameraVisible(false);
-    await sendVisionMessage(imageBase64, inputText.trim() || 'What is this?', { imageUri });
-    setInputText('');
   };
 
   const handleMicPress = async () => {
@@ -379,6 +400,24 @@ export default function BuddyAIChatOverlay({
                   </TouchableOpacity>
                 </View>
               )}
+
+              {chatPhotoContext && (
+                <View style={[styles.contextChip, { backgroundColor: theme.accentSoft, borderColor: theme.accent, marginTop: chatWaypointContext ? 6 : 0 }]}>
+                  <Text style={[styles.contextChipText, { color: theme.accent }]} numberOfLines={1}>
+                    Photo taken at {(() => {
+                      try {
+                        const d = new Date(chatPhotoContext.attachedAt);
+                        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                      } catch {
+                        return '';
+                      }
+                    })()} attached
+                  </Text>
+                  <TouchableOpacity style={styles.contextChipClose} onPress={clearChatPhotoContext}>
+                    <Text style={[styles.contextChipCloseText, { color: theme.accent }]}>x</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
               <View style={styles.inputRow}>
                 <View style={[styles.inputInner, { backgroundColor: theme.input, borderColor: theme.assistantBorder }]}>
                   <TextInput
@@ -392,9 +431,12 @@ export default function BuddyAIChatOverlay({
                     returnKeyType="send"
                   />
                   <TouchableOpacity
-                    style={[styles.sendBtn, (!inputText.trim() || isChatLoading) && styles.sendBtnDisabled]}
+                    style={[
+                      styles.sendBtn,
+                      ((!inputText.trim() && !chatPhotoContext) || isChatLoading) && styles.sendBtnDisabled
+                    ]}
                     onPress={handleSend}
-                    disabled={!inputText.trim() || isChatLoading}
+                    disabled={(!inputText.trim() && !chatPhotoContext) || isChatLoading}
                   >
                     <Svg width="16" height="16" fill="none" stroke={theme.accent} strokeWidth="2.5" viewBox="0 0 24 24">
                       <Path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
