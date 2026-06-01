@@ -2,31 +2,19 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import * as Location from 'expo-location';
 import ARMapNavigationView from '../ar_map_navigation_animated';
-import BuddyAIChatOverlay from '../buddy_ai_chat_overlay_true_60_height';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AIChatInterface from '../buddy_ai_chat_fullscreen_open_in_naver';
 import useAppStore from '../../src/store';
-import TrioDock from '../../src/components/TrioDock';
-
-const CHAT_SHEET_MODES = ['folded', 'half', 'full'];
-
-const getNextChatSheetMode = (mode) => {
-  const currentIndex = CHAT_SHEET_MODES.indexOf(mode);
-  return CHAT_SHEET_MODES[(currentIndex + 1) % CHAT_SHEET_MODES.length];
-};
 
 /**
- * TourMapScreen composites the AR Map background with the Chat Overlay sheet.
- * The AR map fills the full screen; the chat overlay sits on top as an
- * absolute-positioned sheet covering the bottom portion.
+ * TourMapScreen renders the AR map and sends chat actions to the shared
+ * full-screen chat interface.
  */
 export default function TourMapScreen({ navigation }) {
-  const insets = useSafeAreaInsets();
-  const [chatSheetMode, setChatSheetMode] = useState('folded');
+  const [chatPanelMode, setChatPanelMode] = useState('half');
   const logActivity = useAppStore((s) => s.logActivity);
   const setCurrentLocation = useAppStore((s) => s.setCurrentLocation);
   const activeTourId = useAppStore((s) => s.activeTourId);
   const lastLoggedAtRef = useRef(0);
-  const chatOverlayBottomOffset = 116;
 
   useEffect(() => {
     let subscription = null;
@@ -77,21 +65,12 @@ export default function TourMapScreen({ navigation }) {
     };
   }, [logActivity, setCurrentLocation]);
 
-  const handleChatDockPress = () => {
-    console.log('[TourMap] Chat dock pressed, current mode:', chatSheetMode);
-    setChatSheetMode((mode) => {
-      const next = getNextChatSheetMode(mode);
-      console.log('[TourMap] Switching to mode:', next);
-      return next;
-    });
-  };
-
   const handleItineraryDockPress = () => {
     navigation.navigate('ConfirmItinerary', activeTourId ? { itineraryId: activeTourId } : undefined);
   };
 
   const handleAskWaypoint = () => {
-    setChatSheetMode((mode) => (mode === 'full' ? 'full' : 'half'));
+    setChatPanelMode('full');
   };
 
   return (
@@ -103,20 +82,14 @@ export default function TourMapScreen({ navigation }) {
         onAskWaypoint={handleAskWaypoint}
       />
 
-      {/* Chat Overlay (absolute positioned, bottom sheet) */}
-      <BuddyAIChatOverlay
+      <AIChatInterface
         navigation={navigation}
-        bottomOffset={chatOverlayBottomOffset + insets.bottom}
-        sheetMode={chatSheetMode}
-        onSheetModeChange={setChatSheetMode}
-      />
-
-      <TrioDock
-        navigation={navigation}
-        activeKey={chatSheetMode !== 'folded' ? 'chat' : null}
-        bottomOffset={24}
+        presentation="embedded"
+        panelMode={chatPanelMode}
         onItineraryPress={handleItineraryDockPress}
-        onChatPress={handleChatDockPress}
+        onChatPress={() => {
+          setChatPanelMode((mode) => (mode === 'full' ? 'half' : 'full'));
+        }}
       />
     </View>
   );

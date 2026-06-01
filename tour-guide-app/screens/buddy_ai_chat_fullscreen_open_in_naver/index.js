@@ -13,6 +13,7 @@ import {
   Linking
 } from 'react-native';
 import Svg, { Path, Line } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useAppStore from '../../src/store';
 import TrioDock from '../../src/components/TrioDock';
 import VisionCameraPanel from '../../src/components/VisionCameraPanel';
@@ -20,7 +21,15 @@ import { getTheme } from '../../src/theme';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-export default function AIChatInterface({ navigation }) {
+export default function AIChatInterface({
+  navigation,
+  presentation = 'screen',
+  panelMode = 'full',
+  onChatPress,
+  onItineraryPress,
+  onSettingsPress,
+}) {
+  const insets = useSafeAreaInsets();
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [cameraVisible, setCameraVisible] = useState(false);
   const [inputText, setInputText] = useState('');
@@ -45,6 +54,8 @@ export default function AIChatInterface({ navigation }) {
   const themeMode = useAppStore((s) => s.themeMode);
   const theme = getTheme(themeMode);
   const hasStreamingMessage = chatMessages.some((message) => message.isStreaming);
+  const isEmbedded = presentation === 'embedded';
+  const isFullPanel = !isEmbedded || panelMode === 'full';
 
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', (event) => {
@@ -210,9 +221,20 @@ export default function AIChatInterface({ navigation }) {
   };
 
   const keyboardLift = Math.max(0, keyboardHeight);
+  const embeddedPanelLift = isEmbedded && !isFullPanel ? keyboardLift : 0;
+  const embeddedDockTopOffset = -insets.top - 38;
 
   return (
-    <View style={[styles.deviceWrapper, { backgroundColor: theme.background }]}>
+    <View
+      style={[
+        styles.deviceWrapper,
+        { backgroundColor: theme.background },
+        isEmbedded && styles.embeddedWrapper,
+        isEmbedded && (isFullPanel ? styles.embeddedFullPanel : styles.embeddedHalfPanel),
+        embeddedPanelLift > 0 && { transform: [{ translateY: -embeddedPanelLift }] },
+      ]}
+      pointerEvents={isEmbedded && !isFullPanel ? 'box-none' : 'auto'}
+    >
       {/* 1. IMMERSIVE GRADIENT & GRID BACKGROUND PATTERN */}
       <View style={styles.backgroundContainer}>
         <View style={[styles.radialGlowOverlay, { backgroundColor: theme.background, opacity: themeMode === 'light' ? 1 : 0.95 }]} />
@@ -231,8 +253,11 @@ export default function AIChatInterface({ navigation }) {
         navigation={navigation}
         activeKey="chat"
         placement="top"
-        topOffset={28}
-        onChatPress={() => navigation.goBack()}
+        topOffset={isEmbedded && !isFullPanel ? embeddedDockTopOffset : 28}
+        onItineraryPress={onItineraryPress}
+        onChatPress={onChatPress || (() => navigation.goBack())}
+        onSettingsPress={onSettingsPress}
+        style={isEmbedded && !isFullPanel ? styles.embeddedDockFrontLayer : null}
       />
 
       {/* 3. SCROLLABLE CORE CHAT WINDOW */}
@@ -241,7 +266,8 @@ export default function AIChatInterface({ navigation }) {
         style={styles.chatScrollContainer}
         contentContainerStyle={[
           styles.chatContentPadding,
-          keyboardLift > 0 && { paddingBottom: keyboardLift + 120 },
+          isEmbedded && !isFullPanel && styles.embeddedHalfChatPadding,
+          keyboardLift > 0 && !isEmbedded && { paddingBottom: keyboardLift + 120 },
         ]}
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="none"
@@ -282,7 +308,7 @@ export default function AIChatInterface({ navigation }) {
           style={[
             styles.actionSidebar,
             { backgroundColor: theme.surface, shadowColor: theme.shadow },
-            keyboardLift > 0 && { bottom: keyboardLift + 100 },
+            keyboardLift > 0 && !isEmbedded && { bottom: keyboardLift + 100 },
           ]}
         >
           <TouchableOpacity
@@ -321,7 +347,7 @@ export default function AIChatInterface({ navigation }) {
         style={[
           styles.bottomDockInputBar,
           { backgroundColor: theme.background, borderColor: theme.border },
-          keyboardLift > 0 && { transform: [{ translateY: -keyboardLift }] },
+          keyboardLift > 0 && !isEmbedded && { transform: [{ translateY: -keyboardLift }] },
         ]}
       >
         {chatWaypointContext && (
@@ -383,6 +409,31 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0d0d0d',
   },
+  embeddedWrapper: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 90,
+  },
+  embeddedHalfPanel: {
+    bottom: 0,
+    height: Math.round(screenHeight * 0.5),
+    borderTopWidth: 1,
+    borderColor: '#27272A',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'visible',
+    zIndex: 90,
+    elevation: 20,
+  },
+  embeddedFullPanel: {
+    top: 0,
+    bottom: 0,
+  },
+  embeddedDockFrontLayer: {
+    zIndex: 300,
+    elevation: 60,
+  },
   backgroundContainer: {
     ...StyleSheet.absoluteFillObject,
     zIndex: -1,
@@ -403,6 +454,9 @@ const styles = StyleSheet.create({
     paddingTop: 130,
     paddingBottom: 170,
     paddingHorizontal: 16,
+  },
+  embeddedHalfChatPadding: {
+    paddingTop: 88,
   },
   dateStamp: {
     textAlign: 'center',
