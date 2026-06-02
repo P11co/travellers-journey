@@ -338,11 +338,15 @@ export default function AIChatInterface({
       pointerEvents={isEmbedded && !isFullPanel ? 'box-none' : 'auto'}
       onTouchStart={onOutsidePress}
     >
+      {/* UNDERLAY: fills theme.background behind the rounded corners.
+          Rendered FIRST (below all siblings) so it is always in paint order
+          without relying on negative z-index, which falls behind the parent
+          on iOS and causes the dark wedge artifact. */}
       {isEmbedded && !isFullPanel && (
         <View
           pointerEvents="none"
           style={[
-            styles.embeddedRoundedSurface,
+            styles.roundedSheetUnderlay,
             { backgroundColor: theme.background, borderColor: theme.border },
           ]}
         />
@@ -579,16 +583,20 @@ const styles = StyleSheet.create({
     zIndex: 300,
     elevation: 60,
   },
-  embeddedRoundedSurface: {
+  // Underlay that deterministically paints theme.background behind the rounded
+  // top corners. No negative z-index — paint order handles the layering.
+  roundedSheetUnderlay: {
     ...StyleSheet.absoluteFillObject,
     borderTopWidth: 1,
     borderTopLeftRadius: 34,
     borderTopRightRadius: 34,
+    // overflow:'hidden' clips the background to the rounded shape so the
+    // corner pixels are always the panel colour, never the dark root.
     overflow: 'hidden',
   },
   backgroundContainer: {
     ...StyleSheet.absoluteFillObject,
-    zIndex: -1,
+    // No zIndex here — render order determines layering.
   },
   embeddedRoundedBackground: {
     borderTopLeftRadius: 34,
