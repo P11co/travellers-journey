@@ -20,6 +20,48 @@ const primaryLocationImage = require('../../assets/images/hotspots/gyeongbokgung
 
 const BUDGET_OPTIONS = ['$25', '$50', '$100', '$200'];
 const TIME_OPTIONS = ['Half Day (4 hrs)', 'Full Day (8 hrs)', 'Two Days (16 hrs)'];
+const START_TIME_HOURS = Array.from({ length: 12 }, (_, idx) => String(idx + 1));
+const START_TIME_MINUTES = ['00', '15', '30', '45'];
+const START_TIME_PERIODS = ['AM', 'PM'];
+
+const parseStartTimeParts = (value) => {
+  const match = String(value || '09:00')
+    .trim()
+    .match(/^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$/i);
+
+  if (!match) {
+    return { hour: '9', minute: '00', period: 'AM' };
+  }
+
+  let hour = Number(match[1]);
+  const minute = START_TIME_MINUTES.includes(match[2]) ? match[2] : '00';
+  let period = match[3]?.toUpperCase();
+
+  if (!period) {
+    period = hour >= 12 ? 'PM' : 'AM';
+    hour = hour % 12 || 12;
+  }
+
+  if (!START_TIME_HOURS.includes(String(hour))) {
+    hour = 9;
+    period = 'AM';
+  }
+
+  return { hour: String(hour), minute, period };
+};
+
+const formatStartTimeLabel = (value) => {
+  const parts = parseStartTimeParts(value);
+  return `${parts.hour}:${parts.minute} ${parts.period}`;
+};
+
+const toStartTimeValue = ({ hour, minute, period }) => {
+  const hourNumber = Number(hour);
+  const hour24 = period === 'PM'
+    ? (hourNumber === 12 ? 12 : hourNumber + 12)
+    : (hourNumber === 12 ? 0 : hourNumber);
+  return `${String(hour24).padStart(2, '0')}:${minute}`;
+};
 
 function PreferenceDropdown({
   label,
@@ -195,6 +237,121 @@ function PreferenceDropdown({
                 <Text style={styles.closeButtonText}>Cancel</Text>
               </TouchableOpacity>
             )}
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+function StartTimePicker({
+  label,
+  value,
+  onChange,
+  disabled,
+}) {
+  const [modalVisible, setModalVisible] = useState(false);
+  const [draftParts, setDraftParts] = useState(() => parseStartTimeParts(value));
+
+  const openPicker = () => {
+    if (disabled) return;
+    setDraftParts(parseStartTimeParts(value));
+    setModalVisible(true);
+  };
+
+  const selectPart = (patch) => {
+    setDraftParts((current) => ({ ...current, ...patch }));
+  };
+
+  const handleDone = () => {
+    onChange(toStartTimeValue(draftParts));
+    setModalVisible(false);
+  };
+
+  const renderChip = (text, active, onPress, extraStyle) => (
+    <TouchableOpacity
+      key={text}
+      style={[styles.timePickerChip, extraStyle, active && styles.timePickerChipActive]}
+      onPress={onPress}
+      activeOpacity={0.85}
+    >
+      <Text style={[styles.timePickerChipText, active && styles.timePickerChipTextActive]}>
+        {text}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  return (
+    <View>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <TouchableOpacity
+        style={[styles.customSelectTrigger, disabled && styles.lockedControl]}
+        onPress={openPicker}
+        disabled={disabled}
+      >
+        <Text style={styles.selectText}>{formatStartTimeLabel(value)}</Text>
+        <Text style={styles.dropdownCarat}>▼</Text>
+      </TouchableOpacity>
+
+      <Modal
+        visible={modalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalContent, styles.startTimeModalContent]}>
+            <View style={styles.timePickerHeaderRow}>
+              <TouchableOpacity onPress={() => setModalVisible(false)} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                <Text style={styles.timePickerActionText}>Cancel</Text>
+              </TouchableOpacity>
+              <Text style={styles.timePickerHeaderTitle}>Start Time</Text>
+              <TouchableOpacity onPress={handleDone} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                <Text style={[styles.timePickerActionText, styles.timePickerDoneText]}>Done</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.timePreviewPill}>
+              <Text style={styles.timePreviewText}>
+                {`${draftParts.hour}:${draftParts.minute} ${draftParts.period}`}
+              </Text>
+            </View>
+
+            <Text style={styles.timePickerSectionLabel}>Hour</Text>
+            <View style={styles.timePickerHourGrid}>
+              {START_TIME_HOURS.map((hour) => renderChip(
+                hour,
+                draftParts.hour === hour,
+                () => selectPart({ hour }),
+                styles.timePickerHourChip,
+              ))}
+            </View>
+
+            <View style={styles.timePickerSplitRow}>
+              <View style={styles.timePickerSplitColumn}>
+                <Text style={styles.timePickerSectionLabel}>Minute</Text>
+                <View style={styles.timePickerOptionRow}>
+                  {START_TIME_MINUTES.map((minute) => renderChip(
+                    minute,
+                    draftParts.minute === minute,
+                    () => selectPart({ minute }),
+                    styles.timePickerSmallChip,
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.timePickerSplitColumn}>
+                <Text style={styles.timePickerSectionLabel}>Period</Text>
+                <View style={styles.timePickerOptionRow}>
+                  {START_TIME_PERIODS.map((period) => renderChip(
+                    period,
+                    draftParts.period === period,
+                    () => selectPart({ period }),
+                    styles.timePickerSmallChip,
+                  ))}
+                </View>
+              </View>
+            </View>
           </View>
         </View>
       </Modal>
@@ -589,6 +746,13 @@ export default function PlanYourJourneyView({ navigation }) {
               onChange={(val) => updateDraft({ availableTime: val })}
               options={TIME_OPTIONS}
               type="time"
+              disabled={isPlanLocked}
+            />
+
+            <StartTimePicker
+              label="Start Tour Time"
+              value={draft.startTime}
+              onChange={(val) => updateDraft({ startTime: val })}
               disabled={isPlanLocked}
             />
           </View>
@@ -1482,6 +1646,97 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 15,
     elevation: 10,
+  },
+  startTimeModalContent: {
+    maxWidth: 360,
+    padding: 20,
+  },
+  timePickerHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+  },
+  timePickerHeaderTitle: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  timePickerActionText: {
+    color: '#9ca3af',
+    fontSize: 14,
+    fontWeight: '600',
+    minWidth: 56,
+  },
+  timePickerDoneText: {
+    color: '#5c77ff',
+    textAlign: 'right',
+  },
+  timePreviewPill: {
+    minHeight: 54,
+    borderRadius: 16,
+    backgroundColor: 'rgba(92, 119, 255, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(92, 119, 255, 0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 18,
+  },
+  timePreviewText: {
+    color: '#ffffff',
+    fontSize: 28,
+    fontWeight: '800',
+  },
+  timePickerSectionLabel: {
+    color: '#9ca3af',
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  timePickerHourGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 18,
+  },
+  timePickerChip: {
+    minHeight: 42,
+    borderRadius: 12,
+    backgroundColor: '#262626',
+    borderWidth: 1,
+    borderColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timePickerHourChip: {
+    width: '22.5%',
+  },
+  timePickerSmallChip: {
+    flex: 1,
+  },
+  timePickerChipActive: {
+    backgroundColor: 'rgba(92, 119, 255, 0.16)',
+    borderColor: '#5c77ff',
+  },
+  timePickerChipText: {
+    color: '#d1d5db',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  timePickerChipTextActive: {
+    color: '#6d85ff',
+  },
+  timePickerSplitRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  timePickerSplitColumn: {
+    flex: 1,
+  },
+  timePickerOptionRow: {
+    flexDirection: 'row',
+    gap: 8,
   },
   modalTitle: {
     fontSize: 18,

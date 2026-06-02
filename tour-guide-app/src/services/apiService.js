@@ -324,7 +324,7 @@ export function generateItinerary({
   hotspots,
   budgetKrw,
   availableHours,
-  startTime = '10:00',
+  startTime = '09:00',
   sessionId,
   allowAiFill = false,
 }) {

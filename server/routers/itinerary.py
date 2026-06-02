@@ -77,11 +77,19 @@ def _normalize_name(value: str) -> str:
 def _parse_time_to_minutes(value: str | None) -> int:
     match = re.match(r"^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$", (value or "").strip(), re.I)
     if not match:
-        return 9 * 60
+        raise ValueError(f"Invalid time format: {value}")
 
     hours = int(match.group(1))
     minutes = int(match.group(2))
     meridiem = match.group(3).upper() if match.group(3) else None
+
+    if minutes > 59:
+        raise ValueError(f"Time out of range: {value}")
+    if meridiem and (hours < 1 or hours > 12):
+        raise ValueError(f"Time out of range: {value}")
+    if not meridiem and (hours < 0 or hours > 23):
+        raise ValueError(f"Time out of range: {value}")
+
     if meridiem == "PM" and hours != 12:
         hours += 12
     if meridiem == "AM" and hours == 12:

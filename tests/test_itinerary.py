@@ -115,6 +115,42 @@ async def test_generate_itinerary(client):
     return data["session_id"]
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("start_time", ["invalid_time", "25:00", "13:30 PM"])
+async def test_generate_itinerary_invalid_start_time(client, start_time):
+    """If start_time is malformed, request should fail validation (422) instead of falling back to 9:00."""
+    resp = await client.post("/itinerary/generate", json={
+        "location": "Gwanghwamun",
+        "hotspots": ["Gyeongbokgung Palace", "Tosokchon"],
+        "available_hours": 4.0,
+        "start_time": start_time,
+    })
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+@patch("server.routers.itinerary.call_llm_for_itinerary")
+async def test_generate_itinerary_late_start_time(mock_llm, client):
+    """Generate an itinerary with a late start time and verify the schedule shifts."""
+    async def _mock_passthrough(req, skeleton):
+        return skeleton
+
+    mock_llm.side_effect = _mock_passthrough
+
+    resp = await client.post("/itinerary/generate", json={
+        "location": "Gwanghwamun",
+        "hotspots": ["Gyeongbokgung Palace", "National Palace Museum of Korea"],
+        "available_hours": 4.0,
+        "start_time": "13:30",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    items = data["items"]
+    # 13:30 in 12h format is 01:30 PM
+    assert items[0]["time"] == "01:30 PM"
+    assert items[0]["place"] == "Gyeongbokgung Palace"
+
+
 # ---------------------------------------------------------------------------
 # GET /itinerary/{session_id}
 # ---------------------------------------------------------------------------
@@ -494,7 +530,6 @@ async def test_generate_itinerary_permutation_cap(client):
     detail = resp.json()["detail"]
     assert detail["code"] == "too_many_hotspots"
     assert "Too many selected stops" in detail["message"]
-
 
 
 

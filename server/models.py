@@ -7,7 +7,8 @@ chat, handoff, and session management.
 
 from __future__ import annotations
 from datetime import datetime
-from pydantic import BaseModel, Field
+import re
+from pydantic import BaseModel, Field, field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -37,10 +38,33 @@ class ItineraryGenerateRequest(BaseModel):
         examples=[4.0],
     )
     start_time: str = Field(
-        "10:00",
+        "09:00",
         description="Desired start time in HH:MM format",
-        examples=["10:00"],
+        examples=["09:00"],
     )
+
+    @field_validator("start_time")
+    @classmethod
+    def validate_start_time(cls, value: str) -> str:
+        cleaned = (value or "").strip()
+        match = re.fullmatch(r"(\d{1,2}):(\d{2})(?:\s*([AP]M))?", cleaned, re.I)
+        if not match:
+            raise ValueError("start_time must be a valid time such as 09:00 or 1:30 PM")
+
+        hours = int(match.group(1))
+        minutes = int(match.group(2))
+        meridiem = match.group(3)
+
+        if minutes > 59:
+            raise ValueError("start_time minutes must be between 00 and 59")
+
+        if meridiem:
+            if hours < 1 or hours > 12:
+                raise ValueError("start_time hour must be 1-12 when using AM or PM")
+        elif hours < 0 or hours > 23:
+            raise ValueError("start_time hour must be 0-23")
+
+        return cleaned
     session_id: str | None = Field(
         None,
         description="Existing session ID to attach the itinerary to. If omitted, a new session is created.",
