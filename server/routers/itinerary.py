@@ -73,6 +73,7 @@ _REQUIRED_ITEM_KEYS = {
 
 _SEOUL_TZ = ZoneInfo("Asia/Seoul")
 _WEEKDAY_KEYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+_WEEKDAY_LABELS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 _PUBLIC_TRANSPORT_START_MINUTES = 6 * 60
 _PUBLIC_TRANSPORT_END_MINUTES = 24 * 60
 
@@ -152,9 +153,10 @@ def _is_last_monday(service_dt: datetime) -> bool:
 
 def _closed_day_reason(hotspot: dict, service_dt: datetime) -> str | None:
     opening_hours = hotspot.get("opening_hours") or {}
-    weekday = _WEEKDAY_KEYS[service_dt.weekday()]
+    weekday_index = service_dt.weekday()
+    weekday = _WEEKDAY_KEYS[weekday_index]
     if weekday in opening_hours.get("closed_weekdays", []):
-        return f"{hotspot['name']} is closed on {weekday.capitalize()}s."
+        return f"{hotspot['name']} is closed on {_WEEKDAY_LABELS[weekday_index]}s."
     if "last_monday" in opening_hours.get("closed_rules", []) and _is_last_monday(service_dt):
         return f"{hotspot['name']} is closed on the last Monday of each month."
     return None
@@ -342,9 +344,11 @@ def _raise_closed_destination_conflicts(conflicts: list[dict]):
         return
 
     if len(conflicts) == 1:
+        reason = conflicts[0].get("reason")
         message = (
-            f"{conflicts[0]['name']} is closed at {conflicts[0]['scheduled_time']}. "
-            "Choose a different start time or remove it."
+            f"{reason} Choose a different start time or remove it."
+            if reason
+            else f"{conflicts[0]['name']} is closed at {conflicts[0]['scheduled_time']}. Choose a different start time or remove it."
         )
     else:
         names = ", ".join(conflict["name"] for conflict in conflicts)

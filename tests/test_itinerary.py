@@ -200,6 +200,24 @@ async def test_generate_itinerary_rejects_closed_scheduled_stop(client):
 
 
 @pytest.mark.asyncio
+async def test_generate_itinerary_uses_weekday_closure_reason(client):
+    service_dt = datetime(2026, 6, 2, 10, 0, tzinfo=ZoneInfo("Asia/Seoul"))
+    with patch("server.routers.itinerary._current_service_datetime", return_value=service_dt):
+        resp = await client.post("/itinerary/generate", json={
+            "location": "Gwanghwamun",
+            "hotspots": ["Gyeongbokgung Palace", "Gwanghwamun Square"],
+            "available_hours": 4.0,
+            "start_time": "09:15",
+        })
+
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert detail["code"] == "itinerary_hotspots_closed"
+    assert "closed on Tuesdays" in detail["message"]
+    assert "closed at 09:15 AM" not in detail["message"]
+
+
+@pytest.mark.asyncio
 @patch("server.routers.itinerary.call_llm_for_itinerary")
 async def test_generate_itinerary_late_start_time(mock_llm, client):
     """Generate an itinerary with a late start time and verify the schedule shifts."""
@@ -601,4 +619,3 @@ async def test_generate_itinerary_permutation_cap(client):
     detail = resp.json()["detail"]
     assert detail["code"] == "too_many_hotspots"
     assert "Too many selected stops" in detail["message"]
-
