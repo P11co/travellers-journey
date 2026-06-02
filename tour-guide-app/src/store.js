@@ -31,6 +31,8 @@ let activeTtsSubscription = null;
 let preferredSystemVoice = undefined;
 let availableSystemVoicesCache = null;
 
+const DEFAULT_SYSTEM_VOICE_IDENTIFIER = 'com.apple.speech.synthesis.voice.Kathy';
+
 const releaseActiveTtsPlayer = () => {
   if (activeTtsSubscription) {
     activeTtsSubscription.remove?.();
@@ -104,11 +106,10 @@ const LEGACY_ACTIVITY_HOTSPOTS = {
 };
 
 const HOTSPOTS_BY_ID = new Map(hotspotsData.map((hotspot) => [hotspot.id, hotspot]));
-const DEFAULT_SELECTED_HOTSPOTS = new Set(['h_001', 'h_007']);
 
 const buildInitialActivities = () =>
   Object.fromEntries(
-    hotspotsData.map((hotspot) => [hotspot.id, DEFAULT_SELECTED_HOTSPOTS.has(hotspot.id)]),
+    hotspotsData.map((hotspot) => [hotspot.id, false]),
   );
 
 const createInitialDraft = () => ({
@@ -499,10 +500,10 @@ const useAppStore = create((set, get) => ({
 
   // Voice + appearance
   themeMode: 'dark',
-  hotspotSuggestionsEnabled: false,
-  voiceModeEnabled: false,
-  voiceOutputProvider: 'deepgram',
-  systemVoiceIdentifier: null,
+  hotspotSuggestionsEnabled: true,
+  voiceModeEnabled: true,
+  voiceOutputProvider: 'system',
+  systemVoiceIdentifier: DEFAULT_SYSTEM_VOICE_IDENTIFIER,
   isRecording: false,
   isTranscribing: false,
   isSpeaking: false,
@@ -522,7 +523,7 @@ const useAppStore = create((set, get) => ({
       get().stopSpeaking();
     }
   },
-  setVoiceOutputProvider: (voiceOutputProvider, systemVoiceIdentifier = null) => {
+  setVoiceOutputProvider: (voiceOutputProvider, systemVoiceIdentifier = DEFAULT_SYSTEM_VOICE_IDENTIFIER) => {
     const normalized = voiceOutputProvider === 'system' ? 'system' : 'deepgram';
     set({
       voiceOutputProvider: normalized,
@@ -569,6 +570,11 @@ const useAppStore = create((set, get) => ({
       activeTourId: null,
       currentLocation: null,
       activityError: null,
+      themeMode: 'dark',
+      hotspotSuggestionsEnabled: true,
+      voiceModeEnabled: true,
+      voiceOutputProvider: 'system',
+      systemVoiceIdentifier: DEFAULT_SYSTEM_VOICE_IDENTIFIER,
       isRecording: false,
       isTranscribing: false,
       isSpeaking: false,
