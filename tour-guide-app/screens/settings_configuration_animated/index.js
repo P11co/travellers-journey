@@ -54,7 +54,32 @@ export default function SettingsConfigurationView({ navigation }) {
   }, []);
 
   const handleGoBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+
     navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
+  };
+
+  const handleChatPress = () => {
+    const navState = navigation.getState();
+    const routes = navState?.routes || [];
+    const len = routes.length;
+    const previousRouteName = routes[len - 2]?.name;
+
+    if (previousRouteName === 'Chat' || previousRouteName === 'TourMap') {
+      navigation.goBack();
+      return;
+    }
+
+    navigation.reset({
+      index: 1,
+      routes: [
+        { name: 'Home' },
+        { name: 'Chat' },
+      ],
+    });
   };
 
   const handleResetStudySession = () => {
@@ -380,6 +405,7 @@ export default function SettingsConfigurationView({ navigation }) {
         activeKey="settings" 
         bottomOffset={24} 
         onItineraryPress={() => navigation.reset({ index: 0, routes: [{ name: 'Home' }] })}
+        onChatPress={handleChatPress}
       />
 
     </View>
