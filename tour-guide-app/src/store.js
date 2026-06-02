@@ -31,7 +31,8 @@ let activeTtsSubscription = null;
 let preferredSystemVoice = undefined;
 let availableSystemVoicesCache = null;
 
-const DEFAULT_SYSTEM_VOICE_IDENTIFIER = 'com.apple.speech.synthesis.voice.Kathy';
+const DEFAULT_SYSTEM_VOICE_IDENTIFIER = 'com.apple.speech.synthesis.voice.Samantha';
+const DEFAULT_SYSTEM_VOICE_NAME = 'Samantha';
 
 const releaseActiveTtsPlayer = () => {
   if (activeTtsSubscription) {
@@ -76,6 +77,13 @@ const getPreferredSystemVoice = async (voiceIdentifier) => {
   if (voiceIdentifier) {
     const selectedVoice = voices.find((voice) => voice.identifier === voiceIdentifier);
     if (selectedVoice) return selectedVoice;
+
+    if (voiceIdentifier === DEFAULT_SYSTEM_VOICE_IDENTIFIER) {
+      const defaultNamedVoice = voices.find((voice) => (
+        new RegExp(`\\b${DEFAULT_SYSTEM_VOICE_NAME}\\b`, 'i').test(`${voice.name} ${voice.identifier}`)
+      ));
+      if (defaultNamedVoice) return defaultNamedVoice;
+    }
   }
 
   if (preferredSystemVoice !== undefined) return preferredSystemVoice;
