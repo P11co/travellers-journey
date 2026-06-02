@@ -11,7 +11,6 @@ import {
 import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { API_BASE_URL, healthCheck } from '../../src/services/apiService';
-import TrioDock from '../../src/components/TrioDock';
 import useAppStore from '../../src/store';
 import { getTheme } from '../../src/theme';
 
@@ -60,26 +59,6 @@ export default function SettingsConfigurationView({ navigation }) {
     }
 
     navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
-  };
-
-  const handleChatPress = () => {
-    const navState = navigation.getState();
-    const routes = navState?.routes || [];
-    const len = routes.length;
-    const previousRouteName = routes[len - 2]?.name;
-
-    if (previousRouteName === 'Chat' || previousRouteName === 'TourMap') {
-      navigation.goBack();
-      return;
-    }
-
-    navigation.reset({
-      index: 1,
-      routes: [
-        { name: 'Home' },
-        { name: 'Chat' },
-      ],
-    });
   };
 
   const handleResetStudySession = () => {
@@ -400,13 +379,6 @@ export default function SettingsConfigurationView({ navigation }) {
 
       </ScrollView>
 
-      <TrioDock 
-        navigation={navigation} 
-        activeKey="settings" 
-        bottomOffset={24} 
-        onChatPress={handleChatPress}
-      />
-
     </View>
   );
 }
@@ -439,7 +411,7 @@ const styles = StyleSheet.create({
   scrollPadding: {
     paddingHorizontal: 16,
     paddingTop: 24,
-    paddingBottom: 120,
+    paddingBottom: 32,
   },
   headlineGroupSection: {
     marginBottom: 24,
