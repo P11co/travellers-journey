@@ -43,4 +43,4 @@ export const THEMES = {
   },
 };
 
-export const getTheme = (mode) => THEMES[mode] || THEMES.dark;
+export const getTheme = (mode) => THEMES[mode] || THEMES.light;

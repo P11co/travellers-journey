@@ -35,11 +35,11 @@ export default function AIChatInterface({
   const [cameraVisible, setCameraVisible] = useState(false);
   const [inputText, setInputText] = useState('');
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [isMicPressed, setIsMicPressed] = useState(false);
   const scrollViewRef = useRef(null);
   const inputRef = useRef(null);
   const isNearBottomRef = useRef(true);
   const pendingInputFocusRef = useRef(false);
-  const didLongPressMicRef = useRef(false);
   const micHoldActiveRef = useRef(false);
   const micRecordingStartedRef = useRef(false);
   const chatMessages = useAppStore((s) => s.chatMessages);
@@ -55,7 +55,6 @@ export default function AIChatInterface({
   const sendVisionMessage = useAppStore((s) => s.sendVisionMessage);
   const startVoiceRecording = useAppStore((s) => s.startVoiceRecording);
   const stopVoiceRecordingAndSend = useAppStore((s) => s.stopVoiceRecordingAndSend);
-  const addAssistantNotice = useAppStore((s) => s.addAssistantNotice);
   const setVoiceModeEnabled = useAppStore((s) => s.setVoiceModeEnabled);
   const stopSpeaking = useAppStore((s) => s.stopSpeaking);
   const logTraceEvent = useAppStore((s) => s.logTraceEvent);
@@ -67,6 +66,7 @@ export default function AIChatInterface({
   const hasStreamingMessage = chatMessages.some((message) => message.isStreaming);
   const isEmbedded = presentation === 'embedded';
   const isFullPanel = !isEmbedded || panelMode === 'full';
+  const isMicActive = isMicPressed || isRecording;
 
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', (event) => {
@@ -191,27 +191,14 @@ export default function AIChatInterface({
     setCameraVisible(false);
   };
 
-  const handleMicTap = async () => {
-    if (didLongPressMicRef.current) {
-      didLongPressMicRef.current = false;
-      return;
-    }
-    if (isChatLoading || isTranscribing) return;
+  const handleMicPressIn = async () => {
+    if (isChatLoading || isTranscribing || isRecording || micHoldActiveRef.current) return;
 
+    micHoldActiveRef.current = true;
+    micRecordingStartedRef.current = false;
+    setIsMicPressed(true);
     Keyboard.dismiss();
     isNearBottomRef.current = true;
-    await addAssistantNotice('Hold to talk.', {
-      speak: true,
-      eventType: 'voice_hold_instruction_prompted',
-    });
-  };
-
-  const handleMicLongPress = async () => {
-    if (isChatLoading || isTranscribing || isRecording) return;
-
-    didLongPressMicRef.current = true;
-    micHoldActiveRef.current = true;
-    Keyboard.dismiss();
 
     const recording = await startVoiceRecording();
     micRecordingStartedRef.current = Boolean(recording);
@@ -220,19 +207,22 @@ export default function AIChatInterface({
       micRecordingStartedRef.current = false;
       await stopVoiceRecordingAndSend();
     }
+
+    if (!recording) {
+      micHoldActiveRef.current = false;
+      setIsMicPressed(false);
+    }
   };
 
   const handleMicPressOut = async () => {
+    const shouldStopRecording = micRecordingStartedRef.current || isRecording;
     micHoldActiveRef.current = false;
+    setIsMicPressed(false);
 
-    if (micRecordingStartedRef.current || isRecording) {
+    if (shouldStopRecording) {
       micRecordingStartedRef.current = false;
       await stopVoiceRecordingAndSend();
     }
-
-    setTimeout(() => {
-      didLongPressMicRef.current = false;
-    }, 300);
   };
 
   const handleSpeakerPress = () => {
@@ -535,18 +525,16 @@ export default function AIChatInterface({
             <TouchableOpacity
               style={[
                 styles.voiceInputButton,
-                isRecording && [styles.voiceInputButtonActive, { backgroundColor: theme.accent }],
+                isMicActive && [styles.voiceInputButtonActive, { backgroundColor: theme.danger, shadowColor: theme.danger }],
                 (isChatLoading || isTranscribing) && styles.voiceInputButtonDisabled,
               ]}
-              onPress={handleMicTap}
-              onLongPress={handleMicLongPress}
+              onPressIn={handleMicPressIn}
               onPressOut={handleMicPressOut}
-              delayLongPress={240}
               disabled={isChatLoading || isTranscribing}
               activeOpacity={0.78}
               hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
             >
-              <Svg width="24" height="24" fill="none" stroke={isRecording ? '#ffffff' : theme.accent} strokeWidth="2.3" viewBox="0 0 24 24">
+              <Svg width="24" height="24" fill="none" stroke={isMicActive ? '#ffffff' : theme.accent} strokeWidth="2.3" viewBox="0 0 24 24">
                 <Path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
               </Svg>
             </TouchableOpacity>
