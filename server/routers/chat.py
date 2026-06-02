@@ -110,6 +110,9 @@ If sources conflict, use the most recent web result.
 - 2-4 short, clear sentences. Replies are plain natural language for chat and TTS.
 - Do not use markdown formatting of any kind: no bullets, numbered lists,
   bold/italic markers, headings, tables, or code fences.
+- Do not emit tool calls, XML tags, JSON action objects, or function-call
+  syntax. If Naver Map is useful, say in natural language that you can open it.
+  The backend will attach the actual Naver action button separately.
 - When listing options, write them as spoken sentences: "First..., then..., finally..."
 - If user is moving, keep it brief. Safety comes first.
 
@@ -409,10 +412,24 @@ async def _get_itinerary_context_for_trace(session_id: str) -> str:
 
 
 def _strip_thinking(text: str | None) -> str:
-    """Remove <think>...</think> reasoning traces from model output (for TTS safety)."""
+    """Remove non-user-facing model control traces from output."""
     if not text:
         return ""
-    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+
+    cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL | re.IGNORECASE)
+    cleaned = re.sub(r"<tool_call>.*?</tool_call>", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
+    cleaned = re.sub(r"<tool_calls>.*?</tool_calls>", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
+    return cleaned.strip()
+
+
+def _sanitize_assistant_reply(text: str | None, *, has_action: bool = False) -> str:
+    """Return only user-facing assistant prose."""
+    cleaned = _strip_thinking(text)
+    if cleaned:
+        return cleaned
+    if has_action:
+        return "I can open that search in Naver Map for you."
+    return ""
 
 
 def _extract_json_object(text: str) -> dict | None:
@@ -1648,6 +1665,8 @@ async def _complete_prepared_chat(
         )
         raise
 
+    reply = _sanitize_assistant_reply(reply, has_action=bool(prepared["naver_action_payload"]))
+
     await save_chat_message(session_id, "user", history_user_message)
     await save_chat_message(session_id, "assistant", reply)
 
@@ -1806,7 +1825,10 @@ async def chat_stream(req: ChatRequest):
                 chunks.append(delta)
                 yield _stream_event("delta", text=delta)
 
-            reply = _strip_thinking("".join(chunks))
+            reply = _sanitize_assistant_reply(
+                "".join(chunks),
+                has_action=bool(prepared["naver_action_payload"]),
+            )
             await save_chat_message(session_id, "user", req.message)
             await save_chat_message(session_id, "assistant", reply)
             naver_action_payload = prepared["naver_action_payload"]

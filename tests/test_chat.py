@@ -45,6 +45,18 @@ async def test_health(client):
     assert "version" in data
 
 
+def test_sanitize_assistant_reply_removes_tool_call_markup():
+    """Pseudo tool calls are backend control leakage, not user-facing prose."""
+    from server.routers.chat import _sanitize_assistant_reply
+
+    reply = _sanitize_assistant_reply(
+        '<tool_call>\n{"name":"naver_map_search","arguments":{"query":"카페 near Gyeongbokgung Palace"}}\n</tool_call>',
+        has_action=True,
+    )
+
+    assert reply == "I can open that search in Naver Map for you."
+
+
 @pytest.mark.asyncio
 async def test_call_llm_uses_openrouter_first(monkeypatch):
     """The shared LLM helper sends primary requests to OpenRouter."""
