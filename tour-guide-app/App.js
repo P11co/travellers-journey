@@ -49,7 +49,7 @@ export default function App() {
             contentStyle: { backgroundColor: theme.background },
           }}
         >
-          <Stack.Screen name="Home" component={HomeScreen} />
+          <Stack.Screen name="Home" component={HomeScreen} options={{ gestureEnabled: false }} />
           <Stack.Screen name="PlanJourney" component={PlanYourJourneyView} />
           <Stack.Screen
             name="HotspotDetail"

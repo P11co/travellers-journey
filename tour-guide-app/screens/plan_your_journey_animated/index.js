@@ -480,7 +480,7 @@ export default function PlanYourJourneyView({ navigation }) {
       setReviewError('Unable to save this itinerary. Please try generating again.');
       return;
     }
-    navigation.navigate('Home');
+    navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
   };
 
   const handleGenerateItinerary = async () => {

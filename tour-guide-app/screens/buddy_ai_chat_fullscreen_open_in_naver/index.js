@@ -235,7 +235,7 @@ export default function AIChatInterface({
     onOutsidePress?.();
 
     if (!isEmbedded) {
-      (onChatPress || (() => navigation.goBack()))();
+      (onChatPress || (() => navigation.reset({ index: 0, routes: [{ name: 'Home' }] })))();
       return;
     }
 
@@ -377,7 +377,7 @@ export default function AIChatInterface({
         activeKey="chat"
         placement="top"
         topOffset={dockTopOffset}
-        onItineraryPress={onItineraryPress}
+        onItineraryPress={onItineraryPress || (() => navigation.reset({ index: 0, routes: [{ name: 'Home' }] }))}
         onChatPress={handleDockChatPress}
         onSettingsPress={onSettingsPress}
         style={isEmbedded && !isFullPanel ? styles.embeddedDockFrontLayer : null}

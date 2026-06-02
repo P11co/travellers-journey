@@ -54,11 +54,7 @@ export default function SettingsConfigurationView({ navigation }) {
   }, []);
 
   const handleGoBack = () => {
-    if (navigation.canGoBack()) {
-      navigation.goBack();
-      return;
-    }
-    navigation.navigate('Home');
+    navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
   };
 
   const handleResetStudySession = () => {
@@ -72,7 +68,7 @@ export default function SettingsConfigurationView({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             await resetStudySession();
-            navigation.navigate('Home');
+            navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
           },
         },
       ],
@@ -379,7 +375,12 @@ export default function SettingsConfigurationView({ navigation }) {
 
       </ScrollView>
 
-      <TrioDock navigation={navigation} activeKey="settings" bottomOffset={24} />
+      <TrioDock 
+        navigation={navigation} 
+        activeKey="settings" 
+        bottomOffset={24} 
+        onItineraryPress={() => navigation.reset({ index: 0, routes: [{ name: 'Home' }] })}
+      />
 
     </View>
   );

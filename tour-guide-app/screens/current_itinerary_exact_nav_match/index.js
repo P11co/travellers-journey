@@ -60,12 +60,12 @@ export default function CurrentItineraryView({ navigation, route }) {
       navigation.goBack();
       return;
     }
-    navigation.navigate('Home');
+    navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
   };
 
-  const handleEndTourAndPlanNew = () => {
+  const handleEndTour = () => {
     endTour();
-    navigation.navigate('PlanJourney');
+    navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
   };
 
   const renderTimelineStop = (stop, index) => {
@@ -185,12 +185,12 @@ export default function CurrentItineraryView({ navigation, route }) {
         {isViewingActiveTour && (
           <TouchableOpacity
             style={[styles.secondaryActionButton, { borderColor: theme.border, backgroundColor: theme.surface }]}
-            onPress={handleEndTourAndPlanNew}
+            onPress={handleEndTour}
           >
             <Svg width="17" height="17" fill="none" stroke={theme.mutedText} strokeWidth="2" viewBox="0 0 24 24" style={styles.tagIconSpace}>
               <Path strokeLinecap="round" strokeLinejoin="round" d="M4 4v6h6M20 20v-6h-6M20 9A8 8 0 006.7 5.7L4 10m0 5a8 8 0 0013.3 3.3L20 14" />
             </Svg>
-            <Text style={[styles.secondaryButtonText, { color: theme.text }]}>End Tour & Plan New Route</Text>
+            <Text style={[styles.secondaryButtonText, { color: theme.text }]}>End Tour</Text>
           </TouchableOpacity>
         )}
         <TouchableOpacity
