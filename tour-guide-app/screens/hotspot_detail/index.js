@@ -48,6 +48,9 @@ export default function HotspotDetailScreen({ navigation, route }) {
 
   const imageSource = hotspotImages[hotspot.id];
   const selected = Boolean(activities[hotspot.id]);
+  const openingHours = hotspot.opening_hours;
+  const isUnavailable = openingHours?.status === 'unavailable';
+  const openingHoursLabel = openingHours?.display || 'Hours vary by location';
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 20 }]}>
@@ -81,22 +84,25 @@ export default function HotspotDetailScreen({ navigation, route }) {
           <Text style={styles.description}>{hotspot.short_desc}</Text>
 
           <View style={styles.metaRow}>
-            <Text style={styles.metaText}>Lat {hotspot.lat.toFixed(4)}</Text>
-            <Text style={styles.metaText}>Lng {hotspot.lng.toFixed(4)}</Text>
+            <View style={[styles.hoursPill, isUnavailable && styles.hoursPillUnavailable]}>
+              <Text style={[styles.hoursPillText, isUnavailable && styles.hoursPillTextUnavailable]}>
+                {openingHoursLabel}
+              </Text>
+            </View>
           </View>
 
           <TouchableOpacity
             style={[
               styles.selectButton,
               selected && styles.selectButtonActive,
-              isPlanLocked && styles.selectButtonLocked,
+              (isPlanLocked || isUnavailable) && styles.selectButtonLocked,
             ]}
             onPress={() => toggleDraftActivity(hotspot.id)}
-            disabled={isPlanLocked}
+            disabled={isPlanLocked || isUnavailable}
             activeOpacity={0.86}
           >
             <Text style={styles.selectButtonText}>
-              {isPlanLocked ? 'Route Locked' : selected ? 'Included in Route' : 'Add to Route'}
+              {isPlanLocked ? 'Route Locked' : isUnavailable ? 'Closed to Public Visits' : selected ? 'Included in Route' : 'Add to Route'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -187,14 +193,28 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 18,
   },
-  metaText: {
-    color: '#a1a1aa',
+  hoursPill: {
+    maxWidth: '100%',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(34, 197, 94, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(74, 222, 128, 0.34)',
+    borderRadius: 999,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+  },
+  hoursPillUnavailable: {
+    backgroundColor: 'rgba(239, 68, 68, 0.14)',
+    borderColor: 'rgba(248, 113, 113, 0.38)',
+  },
+  hoursPillText: {
+    color: '#86efac',
     fontSize: 12,
-    backgroundColor: '#202126',
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    overflow: 'hidden',
+    fontWeight: '800',
+    lineHeight: 16,
+  },
+  hoursPillTextUnavailable: {
+    color: '#fca5a5',
   },
   selectButton: {
     marginTop: 22,

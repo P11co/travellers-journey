@@ -7,7 +7,21 @@
         "short_desc": "The largest and most iconic royal palace of the Joseon Dynasty. Famous for the Royal Guard Changing Ceremony.",
         "est_duration_mins": 120,
         "lat": 37.5796,
-        "lng": 126.977
+        "lng": 126.977,
+        "opening_hours": {
+            "status": "open",
+            "seasonal_windows": [
+                { "months": [1, 2], "open": "09:00", "close": "17:00" },
+                { "months": [3, 4, 5], "open": "09:00", "close": "18:00" },
+                { "months": [6, 7, 8], "open": "09:00", "close": "18:30" },
+                { "months": [9, 10], "open": "09:00", "close": "18:00" },
+                { "months": [11, 12], "open": "09:00", "close": "17:00" }
+            ],
+            "closed_weekdays": ["tue"],
+            "display": "09:00-17:00/18:00/18:30 seasonally; closed Tuesdays",
+            "source_url": "https://www.royalpalacekr.org/html/eng_gbg/guide/guide01_tab01.html",
+            "confidence": "official"
+        }
     },
     {
         "id": "h_002",
@@ -17,7 +31,14 @@
         "short_desc": "The central plaza featuring the iconic statues of King Sejong (creator of Hangul) and Admiral Yi Sun-sin.",
         "est_duration_mins": 45,
         "lat": 37.5726,
-        "lng": 126.9769
+        "lng": 126.9769,
+        "opening_hours": {
+            "status": "open",
+            "windows": [{ "open": "00:00", "close": "24:00" }],
+            "display": "Open 24 hours",
+            "source_url": "https://uri.seoul.go.kr/ghm-eng/contents/91.do?mid=1032",
+            "confidence": "official"
+        }
     },
     {
         "id": "h_003",
@@ -27,7 +48,15 @@
         "short_desc": "A unique palace blending traditional Korean and Western-style architecture.",
         "est_duration_mins": 90,
         "lat": 37.5658,
-        "lng": 126.9751
+        "lng": 126.9751,
+        "opening_hours": {
+            "status": "open",
+            "windows": [{ "open": "09:00", "close": "21:00" }],
+            "closed_weekdays": ["mon"],
+            "display": "09:00-21:00; closed Mondays",
+            "source_url": "https://english.visitkorea.or.kr/svc/contents/contentsViewCid.do?cmsCid=1942577",
+            "confidence": "official"
+        }
     },
     {
         "id": "h_004",
@@ -37,7 +66,14 @@
         "short_desc": "A famous, romantic walking path wrapping around Deoksugung Palace.",
         "est_duration_mins": 30,
         "lat": 37.5663,
-        "lng": 126.974
+        "lng": 126.974,
+        "opening_hours": {
+            "status": "open",
+            "windows": [{ "open": "00:00", "close": "24:00" }],
+            "display": "Open year round",
+            "source_url": "https://english.visitseoul.net/attractions/Deoksugung-Stone-Wall-Path/ENP023563",
+            "confidence": "official"
+        }
     },
     {
         "id": "h_005",
@@ -47,7 +83,14 @@
         "short_desc": "The former presidential residence located right behind Gyeongbokgung, now open to the public as a massive park.",
         "est_duration_mins": 90,
         "lat": 37.5866,
-        "lng": 126.9748
+        "lng": 126.9748,
+        "opening_hours": {
+            "status": "unavailable",
+            "windows": [],
+            "display": "Closed to public visits as of August 1, 2025",
+            "source_url": "https://english.visitkorea.or.kr/svc/contents/contentsView.do?vcontsId=230192",
+            "confidence": "official"
+        }
     },
     {
         "id": "h_006",
@@ -57,7 +100,15 @@
         "short_desc": "Located right on the Gyeongbokgung grounds, housing royal artifacts.",
         "est_duration_mins": 60,
         "lat": 37.5765,
-        "lng": 126.9758
+        "lng": 126.9758,
+        "opening_hours": {
+            "status": "open",
+            "windows": [{ "open": "10:00", "close": "18:00" }],
+            "closed_weekdays": ["mon"],
+            "display": "10:00-18:00; closed Mondays",
+            "source_url": "https://online.gogung.go.kr/gogungEn/main/main.do",
+            "confidence": "official"
+        }
     },
     {
         "id": "h_007",
@@ -67,7 +118,14 @@
         "short_desc": "A highly photogenic residential village filled with hundreds of preserved traditional Korean houses (hanoks).",
         "est_duration_mins": 120,
         "lat": 37.5826,
-        "lng": 126.9836
+        "lng": 126.9836,
+        "opening_hours": {
+            "status": "open",
+            "windows": [{ "open": "10:00", "close": "17:00" }],
+            "display": "10:00-17:00 in restricted residential areas",
+            "source_url": "https://english.visitseoul.net/attractions/Bukchon-Hanok-Village/ENP000261",
+            "confidence": "official"
+        }
     },
     {
         "id": "h_008",
@@ -77,7 +135,14 @@
         "short_desc": "A trendy, artistic neighborhood west of Gyeongbokgung known for hidden cafes, vintage shops, and older hanoks.",
         "est_duration_mins": 90,
         "lat": 37.5804,
-        "lng": 126.9686
+        "lng": 126.9686,
+        "opening_hours": {
+            "status": "open",
+            "windows": [{ "open": "10:00", "close": "21:00" }],
+            "display": "Planning window 10:00-21:00; individual cafes and shops vary",
+            "source_url": "https://visit.seoul.kr/en/articles/seochon-guide-2025",
+            "confidence": "heuristic"
+        }
     },
     {
         "id": "h_009",
@@ -87,7 +152,14 @@
         "short_desc": "The go-to pedestrian street for traditional Korean crafts, souvenirs, and traditional tea houses.",
         "est_duration_mins": 90,
         "lat": 37.5743,
-        "lng": 126.985
+        "lng": 126.985,
+        "opening_hours": {
+            "status": "open",
+            "windows": [{ "open": "10:00", "close": "20:00" }],
+            "display": "Planning window 10:00-20:00; individual shops vary",
+            "source_url": "https://visit.seoul.kr/en/articles/insadong-cultural-heritage-guide-2026",
+            "confidence": "heuristic"
+        }
     },
     {
         "id": "h_010",
@@ -97,7 +169,14 @@
         "short_desc": "The chief temple of Korean Buddhism, located just a short walk from Gwanghwamun, featuring beautiful lantern displays.",
         "est_duration_mins": 45,
         "lat": 37.5739,
-        "lng": 126.9822
+        "lng": 126.9822,
+        "opening_hours": {
+            "status": "open",
+            "windows": [{ "open": "00:00", "close": "24:00" }],
+            "display": "Temple grounds open 24 hours",
+            "source_url": "https://visit.seoul.kr/en/places/jogyesa-temple",
+            "confidence": "official"
+        }
     },
     {
         "id": "h_011",
@@ -107,7 +186,14 @@
         "short_desc": "Famous for its 'Yeopjeon' (brass coin) lunchbox, where visitors buy ancient coins to trade for street food like oil tteokbokki.",
         "est_duration_mins": 60,
         "lat": 37.5807,
-        "lng": 126.9698
+        "lng": 126.9698,
+        "opening_hours": {
+            "status": "open",
+            "windows": [{ "open": "07:00", "close": "21:00" }],
+            "display": "Market 07:00-21:00; Dosirak Cafe 11:00-15:00",
+            "source_url": "https://english.visitkorea.or.kr/svc/contents/contentsView.do?menuSn=351&vcontsId=79811",
+            "confidence": "official"
+        }
     },
     {
         "id": "h_012",
@@ -117,7 +203,14 @@
         "short_desc": "Famous for its bustling street food alleys, specifically Bindaetteok (mung bean pancakes) and Yukhoe (beef tartare).",
         "est_duration_mins": 120,
         "lat": 37.57,
-        "lng": 126.9996
+        "lng": 126.9996,
+        "opening_hours": {
+            "status": "open",
+            "windows": [{ "open": "09:00", "close": "23:00" }],
+            "display": "09:00-23:00; varies by store",
+            "source_url": "https://visit.seoul.kr/en/places/gwangjang-market",
+            "confidence": "official"
+        }
     },
     {
         "id": "h_013",
@@ -127,7 +220,14 @@
         "short_desc": "Legendary healthy Korean Chicken Soup with Ginseng, located in Seochon.",
         "est_duration_mins": 90,
         "lat": 37.5776,
-        "lng": 126.9715
+        "lng": 126.9715,
+        "opening_hours": {
+            "status": "open",
+            "windows": [{ "open": "10:00", "close": "22:00" }],
+            "display": "10:00-22:00",
+            "source_url": "https://autoreserve.com/en/restaurants/7NvqBSHi5oRd6m9CKmAE",
+            "confidence": "official"
+        }
     },
     {
         "id": "h_014",
@@ -137,7 +237,14 @@
         "short_desc": "A vibrant area for authentic Korean BBQ (Pork Galbi & Samgyeopsal).",
         "est_duration_mins": 90,
         "lat": 37.5695,
-        "lng": 126.986
+        "lng": 126.986,
+        "opening_hours": {
+            "status": "open",
+            "windows": [{ "open": "15:00", "close": "23:00" }],
+            "display": "Planning window 15:00-23:00; individual restaurants vary",
+            "source_url": "https://world.nol.com/en/content/pois/6d2588cd-90d9-42a1-b68b-5148a8b8fccb",
+            "confidence": "heuristic"
+        }
     },
     {
         "id": "h_015",
@@ -147,7 +254,14 @@
         "short_desc": "A traditional Korean full-course dining experience featuring dozens of side dishes served in a hanok setting.",
         "est_duration_mins": 120,
         "lat": 37.574,
-        "lng": 126.9855
+        "lng": 126.9855,
+        "opening_hours": {
+            "status": "open",
+            "windows": [{ "open": "11:30", "close": "21:30" }],
+            "display": "Planning window 11:30-21:30; individual restaurants vary",
+            "source_url": "https://english.visitkorea.or.kr/svc/contents/contentsViewCid.do?cmsCid=2673001",
+            "confidence": "heuristic"
+        }
     },
     {
         "id": "h_016",
@@ -157,7 +271,14 @@
         "short_desc": "A peaceful, sunken urban stream running through downtown Seoul. Highly recommended for evening walks and lantern festivals.",
         "est_duration_mins": 60,
         "lat": 37.5694,
-        "lng": 126.9774
+        "lng": 126.9774,
+        "opening_hours": {
+            "status": "open",
+            "windows": [{ "open": "00:00", "close": "24:00" }],
+            "display": "Open 24 hours",
+            "source_url": "https://english.visitseoul.net/nature/CheonggyecheonStream/ENP000034",
+            "confidence": "official"
+        }
     },
     {
         "id": "h_017",
@@ -167,7 +288,14 @@
         "short_desc": "Spectacular night views of the Seoul city walls and downtown skyline.",
         "est_duration_mins": 90,
         "lat": 37.5805,
-        "lng": 127.0069
+        "lng": 127.0069,
+        "opening_hours": {
+            "status": "open",
+            "windows": [{ "open": "00:00", "close": "24:00" }],
+            "display": "Open 24 hours",
+            "source_url": "https://www.theseoulguide.com/naksan-park/",
+            "confidence": "official"
+        }
     },
     {
         "id": "h_018",
@@ -177,7 +305,19 @@
         "short_desc": "A massive shopping hub just south of the Gwanghwamun area, featuring a massive basement food hall.",
         "est_duration_mins": 120,
         "lat": 37.5648,
-        "lng": 126.9816
+        "lng": 126.9816,
+        "opening_hours": {
+            "status": "open",
+            "windows": [{ "open": "10:30", "close": "20:00" }],
+            "weekday_windows": {
+                "fri": [{ "open": "10:30", "close": "20:30" }],
+                "sat": [{ "open": "10:30", "close": "20:30" }],
+                "sun": [{ "open": "10:30", "close": "20:30" }]
+            },
+            "display": "Weekdays 10:30-20:00; weekends 10:30-20:30",
+            "source_url": "https://english.visitkorea.or.kr/svc/whereToGo/locIntrdn/rgnContentsView.do?vcontsId=106961",
+            "confidence": "official"
+        }
     },
     {
         "id": "h_019",
@@ -187,7 +327,14 @@
         "short_desc": "Korea's largest and most famous bookstore, located right at Gwanghwamun Square. A great cultural and stationary shopping spot.",
         "est_duration_mins": 60,
         "lat": 37.5707,
-        "lng": 126.9778
+        "lng": 126.9778,
+        "opening_hours": {
+            "status": "open",
+            "windows": [{ "open": "09:30", "close": "22:00" }],
+            "display": "09:30-22:00",
+            "source_url": "https://english.visitkorea.or.kr/svc/contents/contentsViewCid.do?cmsCid=268095",
+            "confidence": "official"
+        }
     },
     {
         "id": "h_020",
@@ -197,6 +344,18 @@
         "short_desc": "Located right next to Gyeongbokgung, offering world-class modern art exhibitions in a beautiful architectural space.",
         "est_duration_mins": 120,
         "lat": 37.5786,
-        "lng": 126.98
+        "lng": 126.98,
+        "opening_hours": {
+            "status": "open",
+            "windows": [{ "open": "10:00", "close": "18:00" }],
+            "weekday_windows": {
+                "wed": [{ "open": "10:00", "close": "21:00" }],
+                "sat": [{ "open": "10:00", "close": "21:00" }]
+            },
+            "closed_weekdays": ["mon"],
+            "display": "10:00-18:00; Wednesdays and Saturdays 10:00-21:00; closed Mondays",
+            "source_url": "https://www.mmca.go.kr/eng/visitingInfo/seoulInfo.do",
+            "confidence": "official"
+        }
     }
 ]

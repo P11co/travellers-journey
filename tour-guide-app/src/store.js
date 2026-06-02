@@ -1213,15 +1213,16 @@ const useAppStore = create((set, get) => ({
           waypoint: waypointContext,
           lat: actionLat,
           lng: actionLng,
-        }) || await get().buildNaverActionPayload();
+        });
       }
+      const action = actionPayload ? 'OPEN_NAVER_MAP' : null;
 
       const assistantMessage = {
         id: assistantId,
         role: 'assistant',
         content: response.reply,
         timestamp: new Date().toISOString(),
-        action: response.action,
+        action,
         actionPayload,
         waypointId: response.waypoint_id,
         webSearchUsed: response.web_search_used,
@@ -1241,7 +1242,7 @@ const useAppStore = create((set, get) => ({
 
       get().logTraceEvent('chat_message_response_received', {
         response_waypoint_id: response.waypoint_id,
-        action: response.action,
+        action,
         web_search_used: response.web_search_used,
         reply_length: response.reply?.length || 0,
         backend_intent: response.debug_trace?.intent,
@@ -1282,15 +1283,16 @@ const useAppStore = create((set, get) => ({
             waypoint: waypointContext,
             lat: actionLat,
             lng: actionLng,
-          }) || await get().buildNaverActionPayload();
+          });
         }
+        const action = actionPayload ? 'OPEN_NAVER_MAP' : null;
 
         const assistantMessage = {
           id: assistantId,
           role: 'assistant',
           content: response.reply,
           timestamp: new Date().toISOString(),
-          action: response.action,
+          action,
           actionPayload,
           waypointId: response.waypoint_id,
           webSearchUsed: response.web_search_used,
@@ -1310,7 +1312,7 @@ const useAppStore = create((set, get) => ({
 
         get().logTraceEvent('chat_message_response_received', {
           response_waypoint_id: response.waypoint_id,
-          action: response.action,
+          action,
           web_search_used: response.web_search_used,
           reply_length: response.reply?.length || 0,
           backend_intent: response.debug_trace?.intent,
@@ -1406,15 +1408,16 @@ const useAppStore = create((set, get) => ({
           waypoint: waypointContext,
           lat: actionLat,
           lng: actionLng,
-        }) || await get().buildNaverActionPayload();
+        });
       }
+      const action = actionPayload ? 'OPEN_NAVER_MAP' : null;
 
       const assistantMessage = {
         id: createClientId('assistant-vision'),
         role: 'assistant',
         content: response.reply,
         timestamp: new Date().toISOString(),
-        action: response.action,
+        action,
         actionPayload,
         waypointId: response.waypoint_id,
         identifiedSubject: response.identified_subject,
@@ -1432,7 +1435,7 @@ const useAppStore = create((set, get) => ({
       get().logTraceEvent('vision_message_response_received', {
         response_waypoint_id: response.waypoint_id,
         identified_subject: response.identified_subject,
-        action: response.action,
+        action,
         has_action_payload: Boolean(actionPayload),
         reply_length: response.reply?.length || 0,
       });
@@ -1475,13 +1478,7 @@ const useAppStore = create((set, get) => ({
           lat: stopTarget.latitude,
           lng: stopTarget.longitude,
         }
-      : currentLocation?.lat && currentLocation?.lng
-        ? {
-            placeName: 'Current SeoulWalk location',
-            lat: currentLocation.lat,
-            lng: currentLocation.lng,
-          }
-        : DEFAULT_NAVER_TARGET;
+      : DEFAULT_NAVER_TARGET;
 
     try {
       const payload = await getNaverMapLink(target);

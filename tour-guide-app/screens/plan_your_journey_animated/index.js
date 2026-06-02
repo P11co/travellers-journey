@@ -452,9 +452,14 @@ export default function PlanYourJourneyView({ navigation }) {
   const routeHasTravelLegs = routeStops.some((stop) => stop.isTravelLeg);
   const bottomError = reviewError || itineraryError;
 
-  const toggleActivity = (key) => {
+  const toggleActivity = (hotspot) => {
     if (isPlanLocked) return;
-    toggleDraftActivity(key);
+    if (hotspot?.opening_hours?.status === 'unavailable') {
+      setReviewError(`${hotspot.name} is closed to public visits and cannot be added.`);
+      return;
+    }
+    setReviewError(null);
+    toggleDraftActivity(hotspot.id);
   };
 
   const cycleDraftOption = (field, options) => {
@@ -630,6 +635,7 @@ export default function PlanYourJourneyView({ navigation }) {
   const renderHotspotActivity = (hotspot) => {
     const selected = Boolean(activities[hotspot.id]);
     const imageSource = hotspotImages[hotspot.id];
+    const isUnavailable = hotspot.opening_hours?.status === 'unavailable';
 
     return (
       <View
@@ -637,12 +643,12 @@ export default function PlanYourJourneyView({ navigation }) {
         style={[
           styles.activityRowCard,
           selected && styles.activityRowCardActive,
-          isPlanLocked && styles.lockedSelectionCard,
+          (isPlanLocked || isUnavailable) && styles.lockedSelectionCard,
         ]}
       >
         <TouchableOpacity
           style={styles.activityPressArea}
-          onPress={() => toggleActivity(hotspot.id)}
+          onPress={() => toggleActivity(hotspot)}
           disabled={isPlanLocked}
           activeOpacity={0.85}
         >
@@ -662,6 +668,11 @@ export default function PlanYourJourneyView({ navigation }) {
               <Text style={styles.activityDescriptionText} numberOfLines={3}>
                 {hotspot.short_desc}
               </Text>
+              {isUnavailable && (
+                <Text style={styles.activityAvailabilityText}>
+                  Closed to public visits
+                </Text>
+              )}
             </View>
           </View>
         </TouchableOpacity>
@@ -1145,6 +1156,12 @@ const styles = StyleSheet.create({
     lineHeight: 15,
     marginTop: 5,
     flexShrink: 1,
+  },
+  activityAvailabilityText: {
+    color: '#fca5a5',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 6,
   },
   activityActionColumn: {
     width: 34,
