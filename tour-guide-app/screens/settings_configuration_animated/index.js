@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { API_BASE_URL, healthCheck } from '../../src/services/apiService';
 import useAppStore from '../../src/store';
 import { getTheme } from '../../src/theme';
+import AppleBackButton from '../../src/components/AppleBackButton';
 
 export default function SettingsConfigurationView({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -85,11 +86,7 @@ export default function SettingsConfigurationView({ navigation }) {
 
       {/* 1. FIXED CONTENT TOP APPLICATION BAR */}
       <View style={[styles.header, { backgroundColor: theme.background, borderColor: theme.border }]}>
-        <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
-          <Svg width="18" height="18" fill="none" stroke={theme.mutedText} strokeWidth="2" viewBox="0 0 24 24">
-            <Path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </Svg>
-        </TouchableOpacity>
+        <AppleBackButton onPress={handleGoBack} />
       </View>
 
       {/* 2. CORE INTERACTION SCROLL SYSTEM WORKSPACE */}

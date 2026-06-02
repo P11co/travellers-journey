@@ -7,6 +7,7 @@ import { getTheme } from '../../src/theme';
 import articles from '../../src/data/waypointArticles.json';
 import waypoints from '../../src/data/waypoints.json';
 import { getWaypointImage } from '../../src/data/waypointImages';
+import AppleBackButton from '../../src/components/AppleBackButton';
 
 export default function WaypointArticleScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
@@ -46,11 +47,7 @@ export default function WaypointArticleScreen({ navigation, route }) {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={{ height: insets.top }} />
       <View style={[styles.header, { borderColor: theme.border }]}>
-        <TouchableOpacity style={[styles.backButton, { backgroundColor: theme.surface }]} onPress={() => navigation.goBack()}>
-          <Svg width="20" height="20" fill="none" stroke={theme.text} strokeWidth="2.5" viewBox="0 0 24 24">
-            <Path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </Svg>
-        </TouchableOpacity>
+        <AppleBackButton onPress={() => navigation.goBack()} />
         <Text style={[styles.headerText, { color: theme.mutedText }]}>Waypoint Story</Text>
       </View>
 

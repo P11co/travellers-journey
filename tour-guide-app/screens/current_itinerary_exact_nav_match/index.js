@@ -12,6 +12,7 @@ import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useAppStore from '../../src/store';
 import { getTheme } from '../../src/theme';
+import AppleBackButton from '../../src/components/AppleBackButton';
 
 export default function CurrentItineraryView({ navigation, route }) {
   const insets = useSafeAreaInsets();
@@ -119,11 +120,7 @@ export default function CurrentItineraryView({ navigation, route }) {
 
       {/* 1. FIXED CONTENT SYSTEM HEADER */}
       <View style={[styles.header, { borderColor: theme.border }]}>
-        <TouchableOpacity style={styles.backButton} onPress={handleGoBack}>
-          <Svg width="18" height="18" fill="none" stroke={theme.mutedText} strokeWidth="2" viewBox="0 0 24 24">
-            <Path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </Svg>
-        </TouchableOpacity>
+        <AppleBackButton onPress={handleGoBack} />
       </View>
 
       {/* 2. CORE CONTENT SCROLL VIEW */}

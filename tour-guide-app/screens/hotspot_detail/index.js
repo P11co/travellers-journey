@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import hotspotsData from '../../src/data/hotspots.json';
 import hotspotImages from '../../src/data/hotspotImages';
 import useAppStore from '../../src/store';
+import AppleBackButton from '../../src/components/AppleBackButton';
 
 export default function HotspotDetailScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
@@ -34,9 +35,7 @@ export default function HotspotDetailScreen({ navigation, route }) {
     return (
       <View style={[styles.container, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 20 }]}>
         <View style={styles.header}>
-          <TouchableOpacity style={styles.closeButton} onPress={goBack}>
-            <Text style={styles.closeText}>{'<'}</Text>
-          </TouchableOpacity>
+          <AppleBackButton onPress={goBack} />
         </View>
         <View style={styles.emptyState}>
           <Text style={styles.emptyTitle}>Activity not found</Text>
@@ -55,13 +54,7 @@ export default function HotspotDetailScreen({ navigation, route }) {
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 20 }]}>
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.closeButton}
-          onPress={goBack}
-          hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-        >
-          <Text style={styles.closeText}>{'<'}</Text>
-        </TouchableOpacity>
+        <AppleBackButton onPress={goBack} />
         <Text style={styles.headerHint}>Swipe from left edge</Text>
       </View>
 

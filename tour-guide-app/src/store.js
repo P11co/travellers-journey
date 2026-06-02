@@ -20,7 +20,6 @@ import {
   sendChatMessageStream,
   sendVisionChat,
   synthesizeSpeech,
-  requestTtsStreamTicket,
   transcribeAudio,
 } from './services/apiService';
 import hotspotsData from './data/hotspots.json';
@@ -888,42 +887,14 @@ const useAppStore = create((set, get) => ({
         text_length: content.length,
       });
 
-      // --- Attempt 1: ticketed streaming path ---
-      let streamTicket = null;
-      try {
-        streamTicket = await requestTtsStreamTicket({
-          text: content.replace(/[*_`~]/g, ''),
-          sessionId: get().sessionId,
-        });
-        get().logTraceEvent('voice_tts_stream_ticket_created', {
-          provider: 'deepgram',
-          model: streamTicket.model,
-          stream_url: streamTicket.stream_url,
-        });
-      } catch (ticketError) {
-        get().logTraceEvent('voice_tts_stream_ticket_failed', {
-          provider: 'deepgram',
-          error: ticketError.message || 'Stream ticket request failed',
-          fallback_to: 'artifact',
-        });
-      }
+      const artifactResponse = await synthesizeSpeech({
+        text: content.replace(/[*_`~]/g, ''),
+        sessionId: get().sessionId,
+      });
 
-      const audioSource = streamTicket
-        ? { uri: streamTicket.stream_url }
-        : null;
-
-      // --- Attempt 2: saved-MP3 artifact fallback ---
-      let artifactResponse = null;
-      if (!audioSource) {
-        artifactResponse = await synthesizeSpeech({
-          text: content.replace(/[*_`~]/g, ''),
-          sessionId: get().sessionId,
-        });
-      }
-
-      const finalSource = audioSource || { uri: artifactResponse.audio_url };
-      const resolvedModel = streamTicket?.model || artifactResponse?.model;
-      const resolvedProvider = streamTicket ? 'deepgram_stream' : 'deepgram';
+      const finalSource = { uri: artifactResponse.audio_url };
+      const resolvedModel = artifactResponse.model;
+      const resolvedProvider = 'deepgram';
 
       activeTtsPlayer = createAudioPlayer(
         finalSource,

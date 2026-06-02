@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useAppStore from '../../src/store';
 import hotspotsData from '../../src/data/hotspots.json';
 import hotspotImages from '../../src/data/hotspotImages';
+import AppleBackButton from '../../src/components/AppleBackButton';
 
 const primaryLocationImage = require('../../assets/images/hotspots/gyeongbokgung-primary-location.png');
 
@@ -452,6 +453,14 @@ export default function PlanYourJourneyView({ navigation }) {
   const routeHasTravelLegs = routeStops.some((stop) => stop.isTravelLeg);
   const bottomError = reviewError || itineraryError;
 
+  const handleGoBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
+  };
+
   const toggleActivity = (hotspot) => {
     if (isPlanLocked) return;
     if (hotspot?.opening_hours?.status === 'unavailable') {
@@ -704,10 +713,7 @@ export default function PlanYourJourneyView({ navigation }) {
       {/* 1. STICKY TOP APP HEADER */}
       <View style={styles.header}>
         <View style={styles.headerLeftRow}>
-          <Svg width="18" height="18" fill="none" stroke="#5c77ff" strokeWidth="2" viewBox="0 0 24 24">
-            <Path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-          </Svg>
-          <Text style={styles.headerBrandText}>Buddy</Text>
+          <AppleBackButton onPress={handleGoBack} />
         </View>
         <TouchableOpacity style={styles.menuButton} onPress={() => navigation.navigate('Settings')}>
           <Svg width="20" height="20" fill="none" stroke="#9ca3af" strokeWidth="2" viewBox="0 0 24 24">
