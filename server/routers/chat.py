@@ -31,6 +31,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import ValidationError
 
 from server.config import (
     OPENROUTER_API_KEY,
@@ -44,6 +45,8 @@ from server.config import (
 from server.models import (
     ChatRequest,
     ChatResponse,
+    QuickRepliesRequest,
+    QuickRepliesResponse,
     VisionImageAnalysis,
     VisionChatRequest,
     VisionChatResponse,
@@ -66,9 +69,11 @@ from server.services.web_search import (
 from server.services.rag import search_rag
 from server.services.map_snapshot import get_map_snapshot
 from server.services.geocoding import geocode_search, format_geocoding_for_prompt
+from server.services.local_search import search_naver_local
+from server.services.reverse_geocoding import reverse_geocode_area
 from server.services.langsmith_tracing import sanitize_trace_payload, traceable
 from server.services.trace_artifacts import save_base64_image_artifact
-from server.routers.handoff import build_naver_search_urls
+from server.routers.handoff import build_naver_search_urls, build_naver_urls
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
@@ -172,6 +177,50 @@ Return compact JSON only with these keys:
 - safety_or_weather_cues: only visible hazards or weather cues; null if none
 - draft_answer: a brief first-pass answer to the user's image question
 - uncertainties: short list of uncertainty notes
+"""
+
+_QUICK_REPLIES_SYSTEM_PROMPT = """\
+You are a strict quick-reply generator for a mobile tour-guide chat UI.
+
+You receive only the assistant's latest message. Decide whether the message
+clearly asks the user to choose between a small number of explicit options.
+
+Return only valid JSON in this exact shape:
+{"options":[{"label":"..."}]}
+
+Rules:
+- If the assistant message does not ask a direct choice question, return {"options":[]}.
+- Only create options when the assistant explicitly presents 2 or 3 choices.
+- Do not invent choices that are not stated in the message.
+- Do not create generic follow-ups like "Tell me more", "Yes", "No", or "Continue" unless those exact choices are clearly meaningful in the assistant's question.
+- Do not create buttons for open-ended questions like "Anything else I can help with?"
+- Do not create buttons for informational answers that do not require a user choice.
+- Each label must be concise, natural to tap, and 36 characters or fewer.
+- The label is also the exact text that will be sent as the next user message.
+- Use the same language as the assistant message.
+- Prefer action phrases over fragments when possible.
+
+Examples:
+
+Assistant message:
+"Would you like me to suggest a plan for tomorrow or guide you to a nearby night spot?"
+Output:
+{"options":[{"label":"Suggest a plan for tomorrow"},{"label":"Nearby night spot"}]}
+
+Assistant message:
+"I can help you find a restroom, cafe, or subway station nearby. Which would you like?"
+Output:
+{"options":[{"label":"Find a restroom"},{"label":"Find a cafe"},{"label":"Find a subway station"}]}
+
+Assistant message:
+"Gyeongbokgung is closed for the evening, but Insadong and Cheonggyecheon are nearby night options."
+Output:
+{"options":[]}
+
+Assistant message:
+"Anything else I can help with?"
+Output:
+{"options":[]}
 """
 
 _MAP_SNAPSHOT_NOTE = """\
@@ -389,6 +438,34 @@ def _extract_json_object(text: str) -> dict | None:
         if isinstance(parsed, dict):
             return parsed
     return None
+
+
+def _parse_quick_replies(raw: str) -> QuickRepliesResponse:
+    """Strictly parse the quick-reply model output."""
+    cleaned = (raw or "").strip()
+    try:
+        payload = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Quick-reply model did not return valid JSON.",
+                "error": str(exc),
+                "raw_model_output": cleaned[:500],
+            },
+        ) from exc
+
+    try:
+        return QuickRepliesResponse.model_validate(payload)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Quick-reply model returned JSON that does not match the required schema.",
+                "errors": json.loads(exc.json()),
+                "raw_model_output": cleaned[:500],
+            },
+        ) from exc
 
 
 def _string_or_none(value) -> str | None:
@@ -757,6 +834,21 @@ _AMENITY_SEARCH_TERMS = [
     ),
 ]
 
+_LOCAL_CATEGORY_TERMS = [
+    (("restaurant", "restaurants", "food", "dinner", "lunch", "eat", "meal"), "restaurant", "식당"),
+    (("gallery", "galleries", "art gallery", "museum"), "gallery", "갤러리"),
+    (("tea house", "teahouse", "traditional tea", "tea"), "tea house", "찻집"),
+]
+
+_KNOWN_AREA_ALIASES = [
+    (("seochon", "seo chon", "서촌"), "서촌", "Seochon"),
+    (("gyeongbokgung", "kyongbokgung", "gyeongbok palace", "경복궁"), "경복궁", "Gyeongbokgung"),
+    (("gwanghwamun", "광화문"), "광화문", "Gwanghwamun"),
+    (("insadong", "인사동"), "인사동", "Insadong"),
+    (("cheonggyecheon", "청계천"), "청계천", "Cheonggyecheon"),
+    (("bukchon", "북촌"), "북촌", "Bukchon"),
+]
+
 _WAYPOINT_NAVER_QUERIES = {
     "main_gate": "광화문 경복궁",
     "ticket_booth": "경복궁 매표소",
@@ -801,6 +893,230 @@ def _detect_amenity_search(message: str) -> dict | None:
     return None
 
 
+def _detect_local_category(message: str) -> dict | None:
+    """Return Korean category search terms for local discovery requests."""
+    amenity = _detect_amenity_search(message)
+    if amenity:
+        return amenity
+
+    normalized = f" {message.lower()} "
+    for triggers, query, naver_query in _LOCAL_CATEGORY_TERMS:
+        if any(f" {trigger} " in normalized or trigger in normalized for trigger in triggers):
+            return {
+                "query": query,
+                "naver_query": naver_query,
+            }
+    return None
+
+
+def _known_area_from_text(text: str | None) -> dict | None:
+    normalized = f" {(text or '').lower()} "
+    for triggers, naver_query, display_query in _KNOWN_AREA_ALIASES:
+        if any(trigger in normalized for trigger in triggers):
+            return {
+                "naver_query": naver_query,
+                "display_query": display_query,
+                "source": "known_area_alias",
+            }
+    return None
+
+
+def _first_nonempty(*values: str | None) -> str | None:
+    for value in values:
+        text = (value or "").strip()
+        if text:
+            return text
+    return None
+
+
+def _build_local_discovery_query(area_query: str | None, category_query: str | None) -> str | None:
+    area = (area_query or "").strip()
+    category = (category_query or "").strip()
+    if not area or not category:
+        return None
+    return f"{area} {category}"
+
+
+async def _resolve_local_discovery_area(
+    *,
+    target_area: str | None,
+    display_area: str | None,
+    last_ai_message: str,
+    latitude: float | None,
+    longitude: float | None,
+    session_id: str,
+) -> dict | None:
+    """Resolve an area label and optional center for category discovery."""
+    area = None
+    explicit_target = (target_area or "").strip()
+    if explicit_target:
+        known = _known_area_from_text(explicit_target)
+        area = {
+            "naver_query": known["naver_query"] if known else explicit_target,
+            "display_query": display_area or (known["display_query"] if known else explicit_target),
+            "source": "classifier_target_area",
+            "latitude": None,
+            "longitude": None,
+        }
+    else:
+        known = _known_area_from_text(last_ai_message)
+        if known:
+            area = {
+                **known,
+                "latitude": None,
+                "longitude": None,
+            }
+
+    if area:
+        await _trace_chat_event(
+            session_id,
+            "chat_local_discovery_area_geocode_started",
+            {
+                "target_area": area["naver_query"],
+                "source": area["source"],
+                "center_lat": latitude,
+                "center_lng": longitude,
+            },
+        )
+        geo_results = await geocode_search(
+            query=area["naver_query"],
+            center_lng=longitude,
+            center_lat=latitude,
+            count=1,
+            language="kor",
+        )
+        await _trace_chat_event(
+            session_id,
+            "chat_local_discovery_area_geocode_completed",
+            {"target_area": area["naver_query"], "result_count": len(geo_results or [])},
+        )
+        if geo_results:
+            area["latitude"] = geo_results[0].get("latitude")
+            area["longitude"] = geo_results[0].get("longitude")
+        return area
+
+    if latitude is None or longitude is None:
+        return None
+
+    await _trace_chat_event(
+        session_id,
+        "chat_reverse_geocode_started",
+        {"latitude": latitude, "longitude": longitude},
+    )
+    reverse_area = await reverse_geocode_area(latitude=latitude, longitude=longitude)
+    await _trace_chat_event(
+        session_id,
+        "chat_reverse_geocode_completed",
+        {
+            "resolved": bool(reverse_area),
+            "locality_label": reverse_area.get("locality_label") if reverse_area else None,
+        },
+    )
+    if not reverse_area:
+        return None
+    return {
+        "naver_query": reverse_area["locality_label"],
+        "display_query": reverse_area.get("display_label") or reverse_area["locality_label"],
+        "source": "reverse_geocode",
+        "latitude": reverse_area.get("latitude"),
+        "longitude": reverse_area.get("longitude"),
+    }
+
+
+async def _build_local_discovery_payload(
+    *,
+    route: dict,
+    amenity_search: dict | None,
+    message: str,
+    last_ai_message: str,
+    latitude: float | None,
+    longitude: float | None,
+    session_id: str,
+) -> dict | None:
+    """Build an area-aware category search handoff when enough context exists."""
+    category_query = _first_nonempty(route.get("category_query"), amenity_search.get("naver_query") if amenity_search else None)
+    category_display = _first_nonempty(amenity_search.get("query") if amenity_search else None, route.get("display_query"), category_query)
+    local_category = _detect_local_category(message)
+    if not category_query and local_category:
+        category_query = local_category["naver_query"]
+        category_display = local_category["query"]
+    if not category_query:
+        return None
+
+    should_try = bool(route.get("local_category_search") or route.get("target_area"))
+    if not should_try and _known_area_from_text(last_ai_message) and local_category:
+        should_try = True
+    if not should_try:
+        return None
+
+    area = await _resolve_local_discovery_area(
+        target_area=route.get("target_area"),
+        display_area=route.get("display_query"),
+        last_ai_message=last_ai_message,
+        latitude=latitude,
+        longitude=longitude,
+        session_id=session_id,
+    )
+    if not area:
+        return None
+
+    local_query = _build_local_discovery_query(area["naver_query"], category_query)
+    if not local_query:
+        return None
+
+    center_lat = area.get("latitude") if area.get("latitude") is not None else latitude
+    center_lng = area.get("longitude") if area.get("longitude") is not None else longitude
+    await _trace_chat_event(
+        session_id,
+        "chat_local_search_started",
+        {
+            "query": local_query,
+            "area": area["naver_query"],
+            "category": category_query,
+            "center_lat": center_lat,
+            "center_lng": center_lng,
+        },
+    )
+    local_results = await search_naver_local(
+        local_query,
+        center_latitude=center_lat,
+        center_longitude=center_lng,
+    )
+    coordinate_count = sum(1 for result in local_results if result.get("latitude") is not None and result.get("longitude") is not None)
+    await _trace_chat_event(
+        session_id,
+        "chat_local_search_completed",
+        {
+            "query": local_query,
+            "result_count": len(local_results),
+            "coordinate_count": coordinate_count,
+            "distance_ranked": center_lat is not None and center_lng is not None and coordinate_count > 0,
+        },
+    )
+
+    urls = build_naver_search_urls(local_query, latitude=center_lat, longitude=center_lng)
+    top_result = local_results[0] if local_results else None
+    return {
+        "place_name": category_display or local_query,
+        "query": local_query,
+        "naver_query": local_query,
+        "latitude": center_lat,
+        "longitude": center_lng,
+        "naver_app_url": urls["naver_app_url"],
+        "naver_web_url": urls["naver_web_url"],
+        "handoff_type": "local_discovery_search",
+        "search_center_latitude": center_lat,
+        "search_center_longitude": center_lng,
+        "search_area_label": area["display_query"],
+        "search_area_query": area["naver_query"],
+        "category_query": category_query,
+        "local_search_result_count": len(local_results),
+        "local_search_coordinate_count": coordinate_count,
+        "local_search_source": area["source"],
+        "top_result": top_result,
+    }
+
+
 def _is_contextual_place_reference(message: str) -> bool:
     """Detect direction requests where 'this/here' refers to attached waypoint context."""
     normalized = f" {message.lower()} "
@@ -828,6 +1144,86 @@ def _is_contextual_place_reference(message: str) -> bool:
     return any(term in normalized for term in reference_terms) and any(
         term in normalized for term in direction_terms
     )
+
+
+def _is_itinerary_navigation_request(message: str) -> bool:
+    """Detect requests where the saved route's next destination should be actionable."""
+    normalized = f" {message.lower()} "
+    route_terms = (
+        "where to go",
+        "where should we go",
+        "where should i go",
+        "go next",
+        "next stop",
+        "what's next",
+        "what is next",
+        "where next",
+        "show me the way",
+        "give me directions",
+        "exact directions",
+        "navigate",
+        "route",
+        "open naver",
+        "naver map",
+    )
+    return any(term in normalized for term in route_terms)
+
+
+def _first_itinerary_destination_with_coords(items: list[dict]) -> dict | None:
+    """Return the first real itinerary destination, skipping generated travel legs."""
+    for item in items:
+        if item.get("latitude") is None or item.get("longitude") is None:
+            continue
+        place = (item.get("place") or "").strip()
+        if not place:
+            continue
+        lower_place = place.lower()
+        if lower_place.startswith("walk to ") or lower_place.startswith("taxi to "):
+            continue
+        return item
+    return None
+
+
+def _itinerary_destination_from_reply(items: list[dict], reply: str) -> dict | None:
+    """Prefer the saved itinerary destination explicitly named in the assistant reply."""
+    reply_normalized = f" {(reply or '').lower()} "
+    destinations = [
+        item
+        for item in items
+        if item.get("latitude") is not None
+        and item.get("longitude") is not None
+        and (item.get("place") or "").strip()
+    ]
+    matches = []
+    for item in destinations:
+        place = (item.get("place") or "").strip()
+        position = reply_normalized.rfind(place.lower())
+        if position >= 0:
+            matches.append((position, item))
+    if matches:
+        return max(matches, key=lambda match: match[0])[1]
+    return _first_itinerary_destination_with_coords(destinations)
+
+
+def _build_naver_action_payload_from_itinerary_item(item: dict) -> dict | None:
+    """Build an exact-place handoff from a saved itinerary destination."""
+    lat = item.get("latitude")
+    lng = item.get("longitude")
+    place = (item.get("place") or "").strip()
+    if lat is None or lng is None or not place:
+        return None
+
+    urls = build_naver_urls(place, latitude=lat, longitude=lng)
+    return {
+        "place_name": place,
+        "query": place,
+        "naver_query": place,
+        "latitude": lat,
+        "longitude": lng,
+        "naver_app_url": item.get("naver_map_url") or urls["naver_app_url"],
+        "naver_web_url": urls["naver_web_url"],
+        "handoff_type": "itinerary_place",
+    }
 
 
 def _build_naver_action_payload_from_search(
@@ -912,10 +1308,19 @@ async def _prepare_chat_completion(
         intent = route
         naver_search_query = None
         display_query = None
+        route_payload = {
+            "intent": intent,
+            "naver_search_query": None,
+            "display_query": None,
+            "category_query": None,
+            "target_area": None,
+            "local_category_search": False,
+        }
     else:
         intent = route["intent"]
         naver_search_query = route.get("naver_search_query")
         display_query = route.get("display_query")
+        route_payload = route
 
     if intent == "MAP_GEOCODE" and waypoint and _is_contextual_place_reference(req.message):
         naver_search_query = _naver_query_for_waypoint(waypoint)
@@ -931,6 +1336,9 @@ async def _prepare_chat_completion(
             "has_last_assistant_message": bool(last_ai_message),
             "naver_search_query": naver_search_query,
             "display_query": display_query,
+            "category_query": route_payload.get("category_query"),
+            "target_area": route_payload.get("target_area"),
+            "local_category_search": route_payload.get("local_category_search"),
             "amenity_search_query": amenity_search["query"] if amenity_search else None,
             "amenity_naver_query": amenity_search["naver_query"] if amenity_search else None,
         },
@@ -944,7 +1352,11 @@ async def _prepare_chat_completion(
         if results:
             search_block = "\n\n" + format_search_results_for_prompt(results)
             search_used = True
-    elif intent == "MAP_GEOCODE" and not amenity_search:
+    elif (
+        intent == "MAP_GEOCODE"
+        and not amenity_search
+        and not route_payload.get("local_category_search")
+    ):
         await _emit_prepare_status(status_callback, "Searching Naver Maps")
         lat = req.latitude
         lng = req.longitude
@@ -1055,6 +1467,59 @@ async def _prepare_chat_completion(
             },
         )
 
+    if not naver_action_payload:
+        local_discovery_payload = await _build_local_discovery_payload(
+            route=route_payload,
+            amenity_search=amenity_search,
+            message=req.message,
+            last_ai_message=last_ai_message,
+            latitude=lat,
+            longitude=lng,
+            session_id=session_id,
+        )
+        if local_discovery_payload:
+            naver_action_payload = local_discovery_payload
+            await _trace_chat_event(
+                session_id,
+                "chat_naver_handoff_target_resolved",
+                {
+                    "place_name": naver_action_payload["place_name"],
+                    "query": naver_action_payload["query"],
+                    "naver_query": naver_action_payload["naver_query"],
+                    "latitude": naver_action_payload["latitude"],
+                    "longitude": naver_action_payload["longitude"],
+                    "source": "local_discovery_search",
+                    "search_area_label": naver_action_payload.get("search_area_label"),
+                    "local_search_result_count": naver_action_payload.get("local_search_result_count"),
+                },
+            )
+
+    if (
+        not naver_action_payload
+        and intent == "MAP_GEOCODE"
+        and naver_search_query
+    ):
+        naver_action_payload = _build_naver_action_payload_from_exact_search(
+            req.message,
+            naver_search_query,
+            display_query,
+            latitude=lat,
+            longitude=lng,
+        )
+        if naver_action_payload:
+            await _trace_chat_event(
+                session_id,
+                "chat_naver_handoff_target_resolved",
+                {
+                    "place_name": naver_action_payload["place_name"],
+                    "query": naver_action_payload["query"],
+                    "naver_query": naver_action_payload["naver_query"],
+                    "latitude": naver_action_payload["latitude"],
+                    "longitude": naver_action_payload["longitude"],
+                    "source": "classifier_exact_search_fallback",
+                },
+            )
+
     if amenity_search and not naver_action_payload:
         naver_action_payload = _build_naver_action_payload_from_search(
             amenity_search["query"],
@@ -1123,6 +1588,7 @@ async def _prepare_chat_completion(
         "gps_context": gps_context,
         "activity_context": activity_context,
         "itinerary_context": itinerary_context,
+        "itinerary_items": await get_itinerary_items(session_id) if itinerary_context else [],
         "search_block": search_block,
         "geocode_block": geocode_block,
         "search_used": search_used,
@@ -1186,6 +1652,26 @@ async def _complete_prepared_chat(
     await save_chat_message(session_id, "assistant", reply)
 
     naver_action_payload = prepared["naver_action_payload"]
+    if (
+        not naver_action_payload
+        and prepared.get("itinerary_items")
+        and _is_itinerary_navigation_request(history_user_message)
+    ):
+        itinerary_destination = _itinerary_destination_from_reply(prepared["itinerary_items"], reply)
+        if itinerary_destination:
+            naver_action_payload = _build_naver_action_payload_from_itinerary_item(itinerary_destination)
+            if naver_action_payload:
+                await _trace_chat_event(
+                    session_id,
+                    "chat_naver_handoff_target_resolved",
+                    {
+                        "place_name": naver_action_payload["place_name"],
+                        "naver_query": naver_action_payload["naver_query"],
+                        "latitude": naver_action_payload["latitude"],
+                        "longitude": naver_action_payload["longitude"],
+                        "source": "itinerary_reply_destination",
+                    },
+                )
     action = "OPEN_NAVER_MAP" if naver_action_payload else None
     await _trace_chat_event(
         session_id,
@@ -1324,6 +1810,26 @@ async def chat_stream(req: ChatRequest):
             await save_chat_message(session_id, "user", req.message)
             await save_chat_message(session_id, "assistant", reply)
             naver_action_payload = prepared["naver_action_payload"]
+            if (
+                not naver_action_payload
+                and prepared.get("itinerary_items")
+                and _is_itinerary_navigation_request(req.message)
+            ):
+                itinerary_destination = _itinerary_destination_from_reply(prepared["itinerary_items"], reply)
+                if itinerary_destination:
+                    naver_action_payload = _build_naver_action_payload_from_itinerary_item(itinerary_destination)
+                    if naver_action_payload:
+                        await _trace_chat_event(
+                            session_id,
+                            "chat_naver_handoff_target_resolved",
+                            {
+                                "place_name": naver_action_payload["place_name"],
+                                "naver_query": naver_action_payload["naver_query"],
+                                "latitude": naver_action_payload["latitude"],
+                                "longitude": naver_action_payload["longitude"],
+                                "source": "itinerary_reply_destination",
+                            },
+                        )
             action = "OPEN_NAVER_MAP" if naver_action_payload else None
             await _trace_chat_event(
                 session_id,
@@ -1368,6 +1874,81 @@ async def chat_stream(req: ChatRequest):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /chat/quick-replies — Generate optional tap targets from one reply
+# ---------------------------------------------------------------------------
+
+@router.post("/quick-replies", response_model=QuickRepliesResponse)
+@traceable(
+    name="SeoulWalk Quick Replies",
+    run_type="chain",
+    process_inputs=sanitize_trace_payload,
+    process_outputs=sanitize_trace_payload,
+)
+async def quick_replies(req: QuickRepliesRequest):
+    """
+    Generate optional quick-reply buttons from the assistant's latest message.
+    This deliberately uses only that message, not full chat context.
+    """
+    provider = "openrouter"
+    model = req.model_override or LLM_MODEL_ID
+    session_id = req.session_id
+    started_at = time.perf_counter()
+    if not OPENROUTER_API_KEY and not NVIDIA_API_KEY:
+        raise HTTPException(status_code=500, detail="Missing OpenRouter and NVIDIA API keys")
+
+    if session_id:
+        if not await get_session(session_id):
+            await create_session(session_id, location="Gwanghwamun")
+        await _trace_chat_event(
+            session_id,
+            "quick_replies_generation_started",
+            {"assistant_message_length": len(req.assistant_message), "model": model},
+        )
+
+    raw = await _call_llm(
+        messages=[
+            {"role": "system", "content": _QUICK_REPLIES_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": f"Assistant message:\n{req.assistant_message}",
+            },
+        ],
+        model=model,
+        temperature=0.0,
+        provider=provider,
+    )
+
+    try:
+        parsed = _parse_quick_replies(raw)
+    except HTTPException as exc:
+        if session_id:
+            await _trace_chat_event(
+                session_id,
+                "quick_replies_generation_failed",
+                {
+                    "status_code": exc.status_code,
+                    "duration_ms": round((time.perf_counter() - started_at) * 1000),
+                    "detail": exc.detail,
+                },
+            )
+        raise
+
+    if session_id:
+        event_type = "quick_replies_generated" if parsed.options else "quick_replies_skipped"
+        await _trace_chat_event(
+            session_id,
+            event_type,
+            {
+                "option_count": len(parsed.options),
+                "labels": [option.label for option in parsed.options],
+                "duration_ms": round((time.perf_counter() - started_at) * 1000),
+            },
+        )
+
+    return parsed
 
 
 # ---------------------------------------------------------------------------

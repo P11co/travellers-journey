@@ -1,3 +1,5 @@
+import * as FileSystem from 'expo-file-system';
+
 const DEFAULT_BASE_URL = 'http://localhost:8000';
 const DEFAULT_TIMEOUT_MS = 120000;
 
@@ -32,6 +34,50 @@ const normalizeErrorMessage = (payload, fallback) => {
   if (typeof payload.message === 'string') return payload.message;
   return fallback;
 };
+
+const writeBlobToCachedMp3 = async (blob) => {
+  if (!FileSystem.Paths?.cache || !FileSystem.File) {
+    throw new ApiError('Audio cache directory is unavailable.');
+  }
+  const audioBytes = blob instanceof Uint8Array
+    ? blob
+    : new Uint8Array(await blob.arrayBuffer());
+  const audioFile = new FileSystem.File(
+    FileSystem.Paths.cache,
+    `seoulwalk-deepgram-${Date.now()}.mp3`,
+  );
+  audioFile.write(audioBytes);
+  return audioFile.uri;
+};
+
+const fetchBinary = ({ url, headers, body, timeoutMs = 60000 }) => new Promise((resolve, reject) => {
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', url);
+  xhr.responseType = 'arraybuffer';
+  xhr.timeout = timeoutMs;
+  Object.entries(headers || {}).forEach(([key, value]) => {
+    xhr.setRequestHeader(key, value);
+  });
+  xhr.onload = () => {
+    const status = xhr.status || 0;
+    if (status < 200 || status >= 300) {
+      const errorText = typeof xhr.responseText === 'string' ? xhr.responseText : '';
+      reject(new ApiError(
+        `Direct Deepgram TTS failed with status ${status}.${errorText ? ` ${errorText.slice(0, 160)}` : ''}`,
+        { status },
+      ));
+      return;
+    }
+    if (!xhr.response) {
+      reject(new ApiError('Direct Deepgram TTS returned empty audio.'));
+      return;
+    }
+    resolve(new Uint8Array(xhr.response));
+  };
+  xhr.onerror = () => reject(new ApiError('Unable to reach Deepgram directly.'));
+  xhr.ontimeout = () => reject(new ApiError('Direct Deepgram TTS timed out.'));
+  xhr.send(body);
+});
 
 async function request(path, options = {}) {
   const {
@@ -227,6 +273,22 @@ export function sendVisionChat({
   });
 }
 
+export function generateQuickReplies({
+  assistantMessage,
+  sessionId,
+  modelOverride,
+}) {
+  return request('/chat/quick-replies', {
+    method: 'POST',
+    timeoutMs: 20000,
+    body: {
+      assistant_message: assistantMessage,
+      session_id: sessionId || undefined,
+      model_override: modelOverride || undefined,
+    },
+  });
+}
+
 export async function transcribeAudio({
   uri,
   mimeType = 'audio/m4a',
@@ -319,6 +381,52 @@ export async function requestTtsStreamTicket({
   };
 }
 
+export async function requestDeepgramTtsToken({
+  sessionId,
+  model,
+} = {}) {
+  return request('/voice/deepgram-token', {
+    method: 'POST',
+    timeoutMs: 15000,
+    body: {
+      session_id: sessionId || undefined,
+      model: model || undefined,
+    },
+  });
+}
+
+export async function synthesizeSpeechDirectDeepgram({
+  text,
+  sessionId,
+  model,
+}) {
+  const tokenPayload = await requestDeepgramTtsToken({ sessionId, model });
+  const resolvedModel = tokenPayload.model || model;
+  const startedAt = Date.now();
+  const url = `${tokenPayload.speak_url}?model=${encodeURIComponent(resolvedModel)}&encoding=mp3`;
+
+  const audioBytes = await fetchBinary({
+    url,
+    headers: {
+      Authorization: `Bearer ${tokenPayload.access_token}`,
+      Accept: 'audio/mpeg',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ text }),
+    timeoutMs: 60000,
+  });
+  const audioFileUri = await writeBlobToCachedMp3(audioBytes);
+  return {
+    provider: 'deepgram_direct',
+    model: resolvedModel,
+    session_id: tokenPayload.session_id,
+    audio_url: audioFileUri,
+    mime_type: 'audio/mpeg',
+    size_bytes: audioBytes.byteLength,
+    duration_ms: Date.now() - startedAt,
+  };
+}
+
 export function generateItinerary({
   location,
   hotspots,
@@ -407,9 +515,12 @@ export default {
   sendChatMessage,
   sendChatMessageStream,
   sendVisionChat,
+  generateQuickReplies,
   transcribeAudio,
   synthesizeSpeech,
   requestTtsStreamTicket,
+  requestDeepgramTtsToken,
+  synthesizeSpeechDirectDeepgram,
   generateItinerary,
   getItinerary,
   reorderItinerary,

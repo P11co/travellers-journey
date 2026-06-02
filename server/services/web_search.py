@@ -60,7 +60,10 @@ Return compact JSON only:
 {
   "intent": "RAG" | "WEB_SEARCH" | "MAP_STATIC" | "MAP_GEOCODE",
   "naver_search_query": string or null,
-  "display_query": string or null
+  "display_query": string or null,
+  "category_query": string or null,
+  "target_area": string or null,
+  "local_category_search": true or false
 }
 
 For MAP_GEOCODE:
@@ -69,16 +72,25 @@ For MAP_GEOCODE:
   Naver Map search quality is usually better with Korean place/category names.
 - Preserve useful local qualifiers like 광화문, 경복궁, 종로, or the branch name.
 - display_query should be a user-facing English or bilingual label.
+- For category discovery like restaurants, cafes, galleries, bathrooms, or shops
+  in/near a target area, set local_category_search to true, category_query to
+  the Korean category keyword, and target_area to the Korean area/place label.
+- If the current message is a short follow-up, use the last assistant reply to
+  preserve the target area when it is clear.
 
 Examples:
 - "How do I get to Kyobo Bookstore?" →
-  {"intent":"MAP_GEOCODE","naver_search_query":"교보문고 광화문","display_query":"Kyobo Bookstore Gwanghwamun"}
+  {"intent":"MAP_GEOCODE","naver_search_query":"교보문고 광화문","display_query":"Kyobo Bookstore Gwanghwamun","category_query":null,"target_area":null,"local_category_search":false}
 - "nearest bathroom" →
-  {"intent":"MAP_GEOCODE","naver_search_query":"화장실","display_query":"bathroom"}
+  {"intent":"MAP_GEOCODE","naver_search_query":"화장실","display_query":"bathroom","category_query":"화장실","target_area":null,"local_category_search":false}
 - "Is there a subway nearby?" →
-  {"intent":"MAP_GEOCODE","naver_search_query":"지하철역","display_query":"subway station"}
+  {"intent":"MAP_GEOCODE","naver_search_query":"지하철역","display_query":"subway station","category_query":"지하철역","target_area":null,"local_category_search":false}
+- "Find restaurants near Gyeongbokgung" →
+  {"intent":"MAP_GEOCODE","naver_search_query":"경복궁 식당","display_query":"restaurants near Gyeongbokgung","category_query":"식당","target_area":"경복궁","local_category_search":true}
+- If the last assistant reply discussed Seochon and the user says "Find a cafe" →
+  {"intent":"MAP_GEOCODE","naver_search_query":"서촌 카페","display_query":"cafes in Seochon","category_query":"카페","target_area":"서촌","local_category_search":true}
 
-For non-MAP_GEOCODE intents, set naver_search_query and display_query to null.
+For non-MAP_GEOCODE intents, set all query fields to null and local_category_search to false.
 """
 
 _CLASSIFIER_USER_TEMPLATE = """\
@@ -152,7 +164,7 @@ async def classify_intent(
                                 {"role": "user", "content": prompt},
                             ],
                             "temperature": 0.0,  # Deterministic classification
-                            "max_tokens": 120,
+                            "max_tokens": 220,
                             **({"provider": {"only": ["alibaba"], "allow_fallbacks": False}} if active_provider == "openrouter" and model == "deepseek/deepseek-v4-flash" else {}),
                         },
                     )
@@ -195,6 +207,9 @@ def _route_result(
     intent: str,
     naver_search_query: str | None = None,
     display_query: str | None = None,
+    category_query: str | None = None,
+    target_area: str | None = None,
+    local_category_search: bool = False,
 ) -> dict:
     valid_intents = {"RAG", "WEB_SEARCH", "MAP_STATIC", "MAP_GEOCODE"}
     normalized_intent = intent.strip().upper() if intent else "RAG"
@@ -203,10 +218,16 @@ def _route_result(
     if normalized_intent != "MAP_GEOCODE":
         naver_search_query = None
         display_query = None
+        category_query = None
+        target_area = None
+        local_category_search = False
     return {
         "intent": normalized_intent,
         "naver_search_query": naver_search_query.strip() if naver_search_query else None,
         "display_query": display_query.strip() if display_query else None,
+        "category_query": category_query.strip() if category_query else None,
+        "target_area": target_area.strip() if target_area else None,
+        "local_category_search": bool(local_category_search),
     }
 
 
@@ -224,6 +245,9 @@ def _parse_classifier_route(raw_answer: str) -> dict:
             str(data.get("intent") or ""),
             data.get("naver_search_query"),
             data.get("display_query"),
+            data.get("category_query"),
+            data.get("target_area"),
+            bool(data.get("local_category_search")),
         )
     except (json.JSONDecodeError, TypeError, ValueError):
         legacy = answer.upper()

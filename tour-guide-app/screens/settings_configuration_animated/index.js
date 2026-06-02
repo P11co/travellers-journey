@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Switch,
   Alert,
 } from 'react-native';
+import * as Speech from 'expo-speech';
 import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { API_BASE_URL, healthCheck } from '../../src/services/apiService';
@@ -15,10 +16,22 @@ import useAppStore from '../../src/store';
 import { getTheme } from '../../src/theme';
 import AppleBackButton from '../../src/components/AppleBackButton';
 
+const sortVoicesForDisplay = (voices) => voices.filter((voice) => (
+  String(voice.language || '').toLowerCase() === 'en-us'
+)).sort((a, b) => {
+  const aEnhanced = a.quality === Speech.VoiceQuality.Enhanced ? 0 : 1;
+  const bEnhanced = b.quality === Speech.VoiceQuality.Enhanced ? 0 : 1;
+  if (aEnhanced !== bEnhanced) return aEnhanced - bEnhanced;
+
+  return `${a.language || ''} ${a.name || ''}`.localeCompare(`${b.language || ''} ${b.name || ''}`);
+});
+
 export default function SettingsConfigurationView({ navigation }) {
   const insets = useSafeAreaInsets();
   const [serverStatus, setServerStatus] = useState('checking');
   const [unavailableExpanded, setUnavailableExpanded] = useState(false);
+  const [systemVoices, setSystemVoices] = useState([]);
+  const [systemVoicesStatus, setSystemVoicesStatus] = useState('loading');
   const themeMode = useAppStore((s) => s.themeMode);
   const setThemeMode = useAppStore((s) => s.setThemeMode);
   const hotspotSuggestionsEnabled = useAppStore((s) => s.hotspotSuggestionsEnabled);
@@ -26,12 +39,14 @@ export default function SettingsConfigurationView({ navigation }) {
   const voiceModeEnabled = useAppStore((s) => s.voiceModeEnabled);
   const setVoiceModeEnabled = useAppStore((s) => s.setVoiceModeEnabled);
   const voiceOutputProvider = useAppStore((s) => s.voiceOutputProvider);
+  const systemVoiceIdentifier = useAppStore((s) => s.systemVoiceIdentifier);
   const setVoiceOutputProvider = useAppStore((s) => s.setVoiceOutputProvider);
   const testVoiceOutput = useAppStore((s) => s.testVoiceOutput);
   const isSpeaking = useAppStore((s) => s.isSpeaking);
   const voiceError = useAppStore((s) => s.voiceError);
   const resetStudySession = useAppStore((s) => s.resetStudySession);
   const theme = getTheme(themeMode);
+  const sortedSystemVoices = useMemo(() => sortVoicesForDisplay(systemVoices), [systemVoices]);
 
   useEffect(() => {
     let mounted = true;
@@ -45,6 +60,28 @@ export default function SettingsConfigurationView({ navigation }) {
       .catch(() => {
         if (mounted) {
           setServerStatus('offline');
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    Speech.getAvailableVoicesAsync()
+      .then((voices) => {
+        if (mounted) {
+          setSystemVoices(Array.isArray(voices) ? voices : []);
+          setSystemVoicesStatus('ready');
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setSystemVoices([]);
+          setSystemVoicesStatus('failed');
         }
       });
 
@@ -165,7 +202,7 @@ export default function SettingsConfigurationView({ navigation }) {
                 >
                   <View style={styles.radioSplitFlexRow}>
                     <View style={styles.radioCardTextCoreArea}>
-                      <Text style={[styles.radioCardTitleMain, { color: theme.text }]}>Deepgram Aura</Text>
+                      <Text style={[styles.radioCardTitleMain, { color: theme.text }]}>Deepgram Aura (Deprecated)</Text>
                       <Text style={[styles.radioCardDescriptionLabel, { color: theme.mutedText }]}>Neural server voice. Falls back to the default device voice if unavailable.</Text>
                     </View>
                     {voiceOutputProvider === 'deepgram' && (
@@ -175,30 +212,61 @@ export default function SettingsConfigurationView({ navigation }) {
                     )}
                   </View>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.radioSelectionCardBase,
-                    voiceOutputProvider === 'system' ? styles.radioCardActive : styles.radioCardMuted,
-                    {
-                      backgroundColor: voiceOutputProvider === 'system' ? theme.accentSoft : theme.background,
-                      borderColor: voiceOutputProvider === 'system' ? theme.accent : theme.border,
-                    },
-                  ]}
-                  onPress={() => setVoiceOutputProvider('system')}
-                  activeOpacity={0.82}
-                >
-                  <View style={styles.radioSplitFlexRow}>
-                    <View style={styles.radioCardTextCoreArea}>
-                      <Text style={[styles.radioCardTitleMain, { color: theme.text }]}>Default Device Voice</Text>
-                      <Text style={[styles.radioCardDescriptionLabel, { color: theme.mutedText }]}>Built-in iOS or Android speech. More robotic, but works without the TTS API.</Text>
-                    </View>
-                    {voiceOutputProvider === 'system' && (
-                      <Svg width="20" height="20" fill={theme.accent} viewBox="0 0 20 20">
-                        <Path fillRule="evenodd" clipRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.7-9.7a1 1 0 00-1.4-1.4L9 10.17 7.7 8.88a1 1 0 10-1.4 1.42l2 2a1 1 0 001.4 0l4-4z" />
-                      </Svg>
-                    )}
-                  </View>
-                </TouchableOpacity>
+                {systemVoicesStatus === 'loading' && (
+                  <Text style={[styles.radioCardDescriptionLabel, { color: theme.mutedText }]}>Loading installed US voices...</Text>
+                )}
+                {systemVoicesStatus === 'failed' && (
+                  <Text style={[styles.voiceErrorText, { color: theme.danger }]}>Could not load installed device voices.</Text>
+                )}
+                {systemVoicesStatus === 'ready' && sortedSystemVoices.length === 0 && (
+                  <Text style={[styles.radioCardDescriptionLabel, { color: theme.mutedText }]}>No en-US device voices are installed.</Text>
+                )}
+                {sortedSystemVoices.map((voice) => {
+                  const isSelected = voiceOutputProvider === 'system' && systemVoiceIdentifier === voice.identifier;
+                  return (
+                    <TouchableOpacity
+                      key={voice.identifier}
+                      style={[
+                        styles.radioSelectionCardBase,
+                        isSelected ? styles.radioCardActive : styles.radioCardMuted,
+                        {
+                          backgroundColor: isSelected ? theme.accentSoft : theme.background,
+                          borderColor: isSelected ? theme.accent : theme.border,
+                        },
+                      ]}
+                      onPress={() => setVoiceOutputProvider('system', voice.identifier)}
+                      activeOpacity={0.82}
+                    >
+                      <View style={styles.radioSplitFlexRow}>
+                        <View style={styles.radioCardTextCoreArea}>
+                          <Text style={[styles.radioCardTitleMain, { color: theme.text }]}>{voice.name || 'Unnamed Voice'}</Text>
+                          <View style={styles.voiceMetaRow}>
+                            <Text style={[styles.voiceMetaText, { color: theme.mutedText }]}>{voice.language || 'Unknown language'}</Text>
+                            <View style={[
+                              styles.voiceQualityBadge,
+                              { borderColor: voice.quality === Speech.VoiceQuality.Enhanced ? theme.accent : theme.border },
+                            ]}>
+                              <Text style={[
+                                styles.voiceQualityText,
+                                { color: voice.quality === Speech.VoiceQuality.Enhanced ? theme.accent : theme.mutedText },
+                              ]}>
+                                {voice.quality || 'Default'}
+                              </Text>
+                            </View>
+                          </View>
+                          <Text style={[styles.voiceIdentifierText, { color: theme.mutedText }]} numberOfLines={1}>
+                            {voice.identifier}
+                          </Text>
+                        </View>
+                        {isSelected && (
+                          <Svg width="20" height="20" fill={theme.accent} viewBox="0 0 20 20">
+                            <Path fillRule="evenodd" clipRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.7-9.7a1 1 0 00-1.4-1.4L9 10.17 7.7 8.88a1 1 0 10-1.4 1.42l2 2a1 1 0 001.4 0l4-4z" />
+                          </Svg>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
               {voiceError && (
                 <Text style={[styles.voiceErrorText, { color: theme.danger }]}>{voiceError}</Text>
@@ -523,6 +591,32 @@ const styles = StyleSheet.create({
   voiceErrorText: {
     fontSize: 13,
     lineHeight: 18,
+  },
+  voiceMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  voiceMetaText: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  voiceQualityBadge: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  voiceQualityText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  voiceIdentifierText: {
+    fontSize: 11,
+    lineHeight: 15,
   },
   testVoiceButton: {
     minHeight: 44,

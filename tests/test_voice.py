@@ -47,6 +47,45 @@ async def test_voice_transcribe_falls_back_to_assemblyai(client):
 
 
 @pytest.mark.asyncio
+async def test_assemblyai_uses_current_speech_models(monkeypatch):
+    """AssemblyAI fallback uses the current speech_models field, not deprecated speech_model."""
+    import server.routers.voice as voice_module
+
+    class FakeResponse:
+        def __init__(self, status_code, payload):
+            self.status_code = status_code
+            self._payload = payload
+            self.text = str(payload)
+
+        def json(self):
+            return self._payload
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def post(self, url, headers=None, content=None, json=None):
+            if url.endswith("/upload"):
+                return FakeResponse(200, {"upload_url": "https://audio.example/file.m4a"})
+            assert url.endswith("/transcript")
+            assert "speech_model" not in json
+            assert json["speech_models"] == ["universal-3-pro", "universal-2"]
+            return FakeResponse(200, {"id": "transcript-id"})
+
+        async def get(self, url, headers=None):
+            return FakeResponse(200, {"status": "completed", "text": "Hello SeoulWalk."})
+
+    monkeypatch.setattr(voice_module, "ASSEMBLYAI_API_KEY", "assembly-key")
+    monkeypatch.setattr(voice_module.httpx, "AsyncClient", lambda timeout=45.0: FakeClient())
+
+    transcript = await voice_module._transcribe_with_assemblyai(b"audio")
+    assert transcript == "Hello SeoulWalk."
+
+
+@pytest.mark.asyncio
 async def test_voice_transcribe_all_providers_fail(client):
     """Voice endpoint returns 502 if no STT provider succeeds."""
     with patch("server.routers.voice._transcribe_with_deepgram", new_callable=AsyncMock) as mock_deepgram, \
@@ -114,6 +153,45 @@ async def test_voice_synthesize_deepgram_failure_returns_502(client):
     assert "Voice synthesis failed" in resp.json()["detail"]
 
 
+@pytest.mark.asyncio
+async def test_voice_deepgram_token_success(client):
+    """Backend returns a temporary Deepgram client token without exposing the API key."""
+    with patch("server.routers.voice._create_deepgram_access_token", new_callable=AsyncMock) as mock_token:
+        mock_token.return_value = {
+            "access_token": "temporary-client-token",
+            "expires_in": 30,
+        }
+
+        resp = await client.post(
+            "/voice/deepgram-token",
+            json={"session_id": "voice-token-session"},
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["provider"] == "deepgram"
+    assert data["session_id"] == "voice-token-session"
+    assert data["model"]
+    assert data["access_token"] == "temporary-client-token"
+    assert data["expires_in_seconds"] == 30
+    assert data["speak_url"] == "https://api.deepgram.com/v1/speak"
+
+
+@pytest.mark.asyncio
+async def test_voice_deepgram_token_failure_returns_502(client):
+    """Frontend can fall back when temporary token creation fails."""
+    with patch("server.routers.voice._create_deepgram_access_token", new_callable=AsyncMock) as mock_token:
+        mock_token.side_effect = RuntimeError("Deepgram token unavailable")
+
+        resp = await client.post(
+            "/voice/deepgram-token",
+            json={"session_id": "voice-token-fail-session"},
+        )
+
+    assert resp.status_code == 502
+    assert "Deepgram token grant failed" in resp.json()["detail"]
+
+
 # ---------------------------------------------------------------------------
 # Streaming TTS — additive tests
 # ---------------------------------------------------------------------------
@@ -134,6 +212,7 @@ async def test_voice_stream_ticket_returns_stream_url(client):
     assert data["session_id"] == "stream-ticket-session"
     assert data["model"]
     assert data["stream_url"].startswith("/voice/stream/")
+    assert data["stream_url"].endswith(".mp3")
     assert data["expires_in_seconds"] > 0
 
 
@@ -142,6 +221,30 @@ async def test_voice_stream_missing_ticket_returns_404(client):
     """GET /voice/stream/<unknown> returns 404."""
     resp = await client.get("/voice/stream/nonexistentticket")
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_voice_stream_head_probe_does_not_consume_ticket(client):
+    """Native audio players can probe a stream URL with HEAD before GET."""
+    import server.routers.voice as voice_module
+
+    async def fake_stream(text, model):
+        yield b"audio"
+
+    ticket_resp = await client.post(
+        "/voice/stream-ticket",
+        json={"text": "Probe me first.", "session_id": "head-probe-session"},
+    )
+    ticket_path = ticket_resp.json()["stream_url"]
+
+    head_resp = await client.head(ticket_path)
+    assert head_resp.status_code == 200
+    assert head_resp.headers["content-type"].startswith("audio/mpeg")
+
+    with patch.object(voice_module, "_stream_deepgram_audio", side_effect=fake_stream):
+        get_resp = await client.get(ticket_path)
+    assert get_resp.status_code == 200
+    assert get_resp.content == b"audio"
 
 
 @pytest.mark.asyncio
@@ -172,8 +275,8 @@ async def test_voice_stream_audio_yields_chunks(client):
 
 
 @pytest.mark.asyncio
-async def test_voice_stream_ticket_is_single_use(client):
-    """A stream ticket can only be consumed once; the second GET returns 404."""
+async def test_voice_stream_ticket_allows_repeated_gets_within_ttl(client):
+    """Native audio players may retry a stream URL during setup."""
     import server.routers.voice as voice_module
 
     async def fake_stream(text, model):
@@ -190,8 +293,10 @@ async def test_voice_stream_ticket_is_single_use(client):
         first = await client.get(ticket_path)
     assert first.status_code == 200
 
-    second = await client.get(ticket_path)
-    assert second.status_code == 404
+    with patch.object(voice_module, "_stream_deepgram_audio", side_effect=fake_stream):
+        second = await client.get(ticket_path)
+    assert second.status_code == 200
+    assert second.content == b"audio"
 
 
 @pytest.mark.asyncio

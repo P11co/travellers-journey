@@ -167,6 +167,41 @@ async def test_classifier_returns_naver_search_query_for_route():
         "intent": "MAP_GEOCODE",
         "naver_search_query": "교보문고 광화문",
         "display_query": "Kyobo Bookstore Gwanghwamun",
+        "category_query": None,
+        "target_area": None,
+        "local_category_search": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_classifier_returns_local_category_route_fields():
+    """Structured classifier output can preserve area-aware category search intent."""
+    classifier_reply = (
+        '{"intent":"MAP_GEOCODE","naver_search_query":"서촌 카페",'
+        '"display_query":"cafes in Seochon","category_query":"카페",'
+        '"target_area":"서촌","local_category_search":true}'
+    )
+    with patch("server.services.web_search.httpx.AsyncClient") as MockClient:
+        mock = AsyncMock()
+        mock.post.return_value = _make_openrouter_response(classifier_reply)
+        mock.__aenter__ = AsyncMock(return_value=mock)
+        mock.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock
+
+        from server.services.web_search import classify_intent
+        result = await classify_intent(
+            "Find a cafe",
+            last_ai_message="Seochon is nearby and has cafes.",
+            return_route=True,
+        )
+
+    assert result == {
+        "intent": "MAP_GEOCODE",
+        "naver_search_query": "서촌 카페",
+        "display_query": "cafes in Seochon",
+        "category_query": "카페",
+        "target_area": "서촌",
+        "local_category_search": True,
     }
 
 

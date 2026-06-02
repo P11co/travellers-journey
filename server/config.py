@@ -31,8 +31,8 @@ ASSEMBLYAI_API_KEY: str = (
 )
 
 DEEPGRAM_API_KEY: str = (
-    os.getenv("EXPO_PUBLIC_DEEPGRAM_API_KEY")
-    or os.getenv("DEEPGRAM_API_KEY")
+    os.getenv("DEEPGRAM_API_KEY")
+    or os.getenv("EXPO_PUBLIC_DEEPGRAM_API_KEY")
     or ""
 )
 DEEPGRAM_TTS_MODEL_ID: str = os.getenv("DEEPGRAM_TTS_MODEL_ID") or "aura-2-thalia-en"
@@ -50,6 +50,21 @@ LANGSMITH_PROJECT: str = os.getenv("LANGSMITH_PROJECT") or "seoulwalk-user-study
 # Naver Maps API keys
 NAVER_MAP_CLIENT_ID: str = os.getenv("NAVER_MAP_CLIENT_ID") or ""
 NAVER_MAP_CLIENT_SECRET: str = os.getenv("NAVER_MAP_CLIENT_SECRET") or ""
+
+# Naver Developers Local Search API keys. These are intentionally separate
+# from Naver Cloud Maps keys because the products may be provisioned separately.
+NAVER_LOCAL_CLIENT_ID: str = (
+    os.getenv("NAVER_LOCAL_CLIENT_ID")
+    or os.getenv("NAVER_SEARCH_CLIENT_ID")
+    or os.getenv("NAVER_CLIENT_ID")
+    or ""
+)
+NAVER_LOCAL_CLIENT_SECRET: str = (
+    os.getenv("NAVER_LOCAL_CLIENT_SECRET")
+    or os.getenv("NAVER_SEARCH_CLIENT_SECRET")
+    or os.getenv("NAVER_CLIENT_SECRET")
+    or ""
+)
 
 # ---------------------------------------------------------------------------
 # LLM Config

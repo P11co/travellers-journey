@@ -156,6 +156,82 @@ def test_system_prompt_requires_plain_natural_language():
     assert "no bullets" in _SYSTEM_PROMPT
 
 
+def test_quick_replies_prompt_is_conservative():
+    """The quick-reply contract favors no buttons over bad buttons."""
+    from server.routers.chat import _QUICK_REPLIES_SYSTEM_PROMPT
+
+    assert 'return {"options":[]}' in _QUICK_REPLIES_SYSTEM_PROMPT
+    assert "Only create options when the assistant explicitly presents 2 or 3 choices" in _QUICK_REPLIES_SYSTEM_PROMPT
+    assert "Do not invent choices" in _QUICK_REPLIES_SYSTEM_PROMPT
+
+
+@pytest.mark.asyncio
+async def test_quick_replies_generates_options(client, monkeypatch):
+    """POST /chat/quick-replies returns validated labels from strict JSON."""
+    monkeypatch.setattr("server.routers.chat.OPENROUTER_API_KEY", "test-openrouter-key")
+    llm = AsyncMock(return_value='{"options":[{"label":"Suggest a plan for tomorrow"},{"label":"Nearby night spot"}]}')
+
+    with patch("server.routers.chat._call_llm", new=llm):
+        resp = await client.post("/chat/quick-replies", json={
+            "assistant_message": (
+                "Would you like me to suggest a plan for tomorrow or guide you to a nearby night spot?"
+            ),
+            "session_id": "quick-replies-test",
+        })
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "options": [
+            {"label": "Suggest a plan for tomorrow"},
+            {"label": "Nearby night spot"},
+        ]
+    }
+    sent_messages = llm.await_args.kwargs["messages"]
+    assert "suggest a plan for tomorrow" in sent_messages[-1]["content"]
+
+
+@pytest.mark.asyncio
+async def test_quick_replies_allows_empty_options(client, monkeypatch):
+    """No buttons is a valid response when the assistant did not ask a choice question."""
+    monkeypatch.setattr("server.routers.chat.OPENROUTER_API_KEY", "test-openrouter-key")
+
+    with patch("server.routers.chat._call_llm", new=AsyncMock(return_value='{"options":[]}')):
+        resp = await client.post("/chat/quick-replies", json={
+            "assistant_message": "Gyeongbokgung is closed for the evening, but Insadong is nearby.",
+        })
+
+    assert resp.status_code == 200
+    assert resp.json() == {"options": []}
+
+
+@pytest.mark.asyncio
+async def test_quick_replies_rejects_non_json_model_output(client, monkeypatch):
+    """Malformed model output fails loudly for backend debugging."""
+    monkeypatch.setattr("server.routers.chat.OPENROUTER_API_KEY", "test-openrouter-key")
+
+    with patch("server.routers.chat._call_llm", new=AsyncMock(return_value='No quick replies.')):
+        resp = await client.post("/chat/quick-replies", json={
+            "assistant_message": "Anything else I can help with?",
+        })
+
+    assert resp.status_code == 422
+    assert resp.json()["detail"]["message"] == "Quick-reply model did not return valid JSON."
+
+
+@pytest.mark.asyncio
+async def test_quick_replies_rejects_wrong_json_shape(client, monkeypatch):
+    """JSON that does not match the declared options schema is a 422."""
+    monkeypatch.setattr("server.routers.chat.OPENROUTER_API_KEY", "test-openrouter-key")
+
+    with patch("server.routers.chat._call_llm", new=AsyncMock(return_value='{"buttons":["Nearby night spot"]}')):
+        resp = await client.post("/chat/quick-replies", json={
+            "assistant_message": "Would you like a plan for tomorrow or a nearby night spot?",
+        })
+
+    assert resp.status_code == 422
+    assert resp.json()["detail"]["message"] == "Quick-reply model returned JSON that does not match the required schema."
+
+
 # ---------------------------------------------------------------------------
 # POST /chat — basic message
 # ---------------------------------------------------------------------------
@@ -260,6 +336,63 @@ async def test_chat_naver_mention_without_payload_does_not_trigger_action(client
     data = resp.json()
     assert data["action"] is None
     assert data["action_payload"] is None
+
+
+@pytest.mark.asyncio
+async def test_chat_next_stop_request_returns_itinerary_naver_payload(client):
+    """Route-progress questions use saved itinerary coordinates for Naver handoff."""
+    from server.database import create_session, save_itinerary_items
+
+    session_id = "chat-itinerary-naver-test"
+    await create_session(session_id, location="Gwanghwamun")
+    await save_itinerary_items(session_id, [
+        {
+            "order": 1,
+            "time": "08:15 PM",
+            "place": "Gyeongbokgung Palace",
+            "activity": "Start at the palace grounds.",
+            "duration_minutes": 30,
+            "estimated_cost_krw": 0,
+            "latitude": 37.57865,
+            "longitude": 126.97711,
+        },
+        {
+            "order": 2,
+            "time": "08:45 PM",
+            "place": "Naksan Park",
+            "activity": "Walk the ridge trail and city viewpoint.",
+            "duration_minutes": 45,
+            "estimated_cost_krw": 0,
+            "latitude": 37.58083,
+            "longitude": 127.00753,
+        },
+    ])
+
+    with patch("server.routers.chat.classify_intent", new=AsyncMock(return_value="RAG")), \
+         patch("server.routers.chat.search_rag", return_value="PALACE_KNOWLEDGE: context"), \
+         patch("server.routers.chat.geocode_search", new=AsyncMock()) as mock_geocode, \
+         patch("server.routers.chat.get_map_snapshot", new=AsyncMock(return_value=None)), \
+         patch("server.routers.chat._get_live_environment", new=AsyncMock(return_value="Current Time: test")), \
+         patch("server.routers.chat._call_llm", new=AsyncMock(return_value=(
+             "You're on the grounds of Gyeongbokgung Palace. According to your saved itinerary, "
+             "the next stop is Naksan Park. I can open Naver Map to give you exact directions."
+         ))):
+        resp = await client.post("/chat", json={
+            "message": "Hey where are we, and where to go",
+            "session_id": session_id,
+            "latitude": 37.57865,
+            "longitude": 126.97711,
+        })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["action"] == "OPEN_NAVER_MAP"
+    assert data["action_payload"]["handoff_type"] == "itinerary_place"
+    assert data["action_payload"]["place_name"] == "Naksan Park"
+    assert data["action_payload"]["latitude"] == 37.58083
+    assert data["action_payload"]["longitude"] == 127.00753
+    assert data["action_payload"]["naver_app_url"].startswith("nmap://place")
+    mock_geocode.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -446,6 +579,189 @@ async def test_chat_subway_request_returns_naver_search_payload(client):
     assert data["action_payload"]["naver_app_url"].startswith("nmap://search")
     assert f"/search/{quote('지하철역', safe='')}/" in data["action_payload"]["naver_web_url"]
     mock_geocode.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_chat_followup_cafe_uses_seochon_local_discovery(client):
+    """Short quick-reply follow-ups preserve the area from the last assistant reply."""
+    from server.database import create_session, save_chat_message
+
+    session_id = "seochon-local-discovery-test"
+    await create_session(session_id, location="Gwanghwamun")
+    await save_chat_message(
+        session_id,
+        "assistant",
+        "Seochon is west of Gwanghwamun Gate. Would you like a cafe, restaurant, or gallery there?",
+    )
+
+    geocode_mock = AsyncMock(return_value=[{
+        "road_address": "Seochon, Seoul",
+        "building_name": "",
+        "longitude": 126.9702,
+        "latitude": 37.5792,
+        "distance": 0,
+    }])
+    local_mock = AsyncMock(return_value=[{
+        "rank": 1,
+        "name": "Cafe Seochon",
+        "category": "카페",
+        "road_address": "서울특별시 종로구 자하문로",
+        "latitude": 37.5793,
+        "longitude": 126.9703,
+        "distance_meters": 25,
+        "source_query": "서촌 카페",
+    }])
+
+    with patch("server.routers.chat.classify_intent", new=AsyncMock(return_value={
+            "intent": "MAP_GEOCODE",
+            "naver_search_query": None,
+            "display_query": "cafes",
+            "category_query": "카페",
+            "target_area": None,
+            "local_category_search": False,
+         })), \
+         patch("server.routers.chat.geocode_search", new=geocode_mock), \
+         patch("server.routers.chat.search_naver_local", new=local_mock), \
+         patch("server.routers.chat.reverse_geocode_area", new=AsyncMock()) as mock_reverse, \
+         patch("server.routers.chat.search_rag", return_value="PALACE_KNOWLEDGE: context"), \
+         patch("server.routers.chat.get_map_snapshot", new=AsyncMock(return_value=None)), \
+         patch("server.routers.chat._get_live_environment", new=AsyncMock(return_value="Current Time: test")), \
+         patch("server.routers.chat._call_llm", new=AsyncMock(return_value="Let me search for cafes in Seochon for you.")):
+        resp = await client.post("/chat", json={
+            "message": "Find a cafe",
+            "session_id": session_id,
+            "latitude": 37.57865,
+            "longitude": 126.97711,
+        })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["action"] == "OPEN_NAVER_MAP"
+    assert data["action_payload"]["handoff_type"] == "local_discovery_search"
+    assert data["action_payload"]["naver_query"] == "서촌 카페"
+    assert data["action_payload"]["search_area_label"] == "Seochon"
+    assert data["action_payload"]["search_center_latitude"] == 37.5792
+    assert data["action_payload"]["local_search_result_count"] == 1
+    assert "query=%EC%84%9C%EC%B4%8C%20%EC%B9%B4%ED%8E%98" in data["action_payload"]["naver_app_url"]
+    geocode_mock.assert_awaited_once()
+    assert geocode_mock.await_args.kwargs["query"] == "서촌"
+    local_mock.assert_awaited_once()
+    assert local_mock.await_args.args[0] == "서촌 카페"
+    mock_reverse.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_chat_plain_cafe_still_uses_generic_amenity_fallback(client):
+    """No-area cafe requests keep the simple amenity behavior."""
+    with patch("server.routers.chat.classify_intent", new=AsyncMock(return_value="MAP_GEOCODE")), \
+         patch("server.routers.chat.geocode_search", new=AsyncMock()) as mock_geocode, \
+         patch("server.routers.chat.search_naver_local", new=AsyncMock()) as mock_local, \
+         patch("server.routers.chat.reverse_geocode_area", new=AsyncMock()) as mock_reverse, \
+         patch("server.routers.chat.search_rag", return_value="PALACE_KNOWLEDGE: context"), \
+         patch("server.routers.chat.get_map_snapshot", new=AsyncMock(return_value=None)), \
+         patch("server.routers.chat._get_live_environment", new=AsyncMock(return_value="Current Time: test")), \
+         patch("server.routers.chat._call_llm", new=AsyncMock(return_value="I can search Naver for cafes nearby.")):
+        resp = await client.post("/chat", json={
+            "message": "Find a cafe",
+            "latitude": 37.57865,
+            "longitude": 126.97711,
+        })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["action_payload"]["handoff_type"] == "search"
+    assert data["action_payload"]["query"] == "cafe"
+    assert data["action_payload"]["naver_query"] == "카페"
+    mock_geocode.assert_not_awaited()
+    mock_local.assert_not_awaited()
+    mock_reverse.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_chat_restaurants_near_gyeongbokgung_uses_local_search_center(client):
+    """Area category searches geocode the area, then run local search against that center."""
+    geocode_mock = AsyncMock(return_value=[{
+        "road_address": "Gyeongbokgung, Seoul",
+        "building_name": "Gyeongbokgung Palace",
+        "longitude": 126.9770,
+        "latitude": 37.5796,
+        "distance": 0,
+    }])
+    local_mock = AsyncMock(return_value=[
+        {
+            "rank": 1,
+            "name": "Nearby Restaurant",
+            "category": "식당",
+            "latitude": 37.5798,
+            "longitude": 126.9772,
+            "distance_meters": 30,
+            "source_query": "경복궁 식당",
+        },
+    ])
+
+    with patch("server.routers.chat.classify_intent", new=AsyncMock(return_value={
+            "intent": "MAP_GEOCODE",
+            "naver_search_query": "경복궁 식당",
+            "display_query": "restaurants near Gyeongbokgung",
+            "category_query": "식당",
+            "target_area": "경복궁",
+            "local_category_search": True,
+         })), \
+         patch("server.routers.chat.geocode_search", new=geocode_mock), \
+         patch("server.routers.chat.search_naver_local", new=local_mock), \
+         patch("server.routers.chat.get_map_snapshot", new=AsyncMock(return_value=None)), \
+         patch("server.routers.chat._get_live_environment", new=AsyncMock(return_value="Current Time: test")), \
+         patch("server.routers.chat._call_llm", new=AsyncMock(return_value="Let me search for restaurants near Gyeongbokgung.")):
+        resp = await client.post("/chat", json={
+            "message": "Find restaurants near Gyeongbokgung",
+            "latitude": 37.57865,
+            "longitude": 126.97711,
+        })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["action_payload"]["handoff_type"] == "local_discovery_search"
+    assert data["action_payload"]["naver_query"] == "경복궁 식당"
+    assert data["action_payload"]["search_center_latitude"] == 37.5796
+    assert data["action_payload"]["search_center_longitude"] == 126.9770
+    geocode_mock.assert_awaited_once()
+    assert geocode_mock.await_args.kwargs["query"] == "경복궁"
+    local_mock.assert_awaited_once()
+    assert local_mock.await_args.kwargs["center_latitude"] == 37.5796
+    assert local_mock.await_args.kwargs["center_longitude"] == 126.9770
+
+
+@pytest.mark.asyncio
+async def test_chat_reverse_geocode_failure_falls_back_to_generic_amenity(client):
+    """Local discovery failure does not break chat or remove the generic amenity fallback."""
+    with patch("server.routers.chat.classify_intent", new=AsyncMock(return_value={
+            "intent": "MAP_GEOCODE",
+            "naver_search_query": None,
+            "display_query": "cafes nearby",
+            "category_query": "카페",
+            "target_area": None,
+            "local_category_search": True,
+         })), \
+         patch("server.routers.chat.geocode_search", new=AsyncMock()) as mock_geocode, \
+         patch("server.routers.chat.reverse_geocode_area", new=AsyncMock(return_value=None)) as mock_reverse, \
+         patch("server.routers.chat.search_naver_local", new=AsyncMock()) as mock_local, \
+         patch("server.routers.chat.search_rag", return_value="PALACE_KNOWLEDGE: context"), \
+         patch("server.routers.chat.get_map_snapshot", new=AsyncMock(return_value=None)), \
+         patch("server.routers.chat._get_live_environment", new=AsyncMock(return_value="Current Time: test")), \
+         patch("server.routers.chat._call_llm", new=AsyncMock(return_value="I can search Naver for cafes nearby.")):
+        resp = await client.post("/chat", json={
+            "message": "Find a cafe",
+            "latitude": 37.57865,
+            "longitude": 126.97711,
+        })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["action_payload"]["handoff_type"] == "search"
+    assert data["action_payload"]["naver_query"] == "카페"
+    mock_geocode.assert_not_awaited()
+    mock_reverse.assert_awaited_once()
+    mock_local.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------

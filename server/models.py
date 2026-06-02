@@ -139,6 +139,53 @@ class ChatResponse(BaseModel):
     debug_trace: dict | None = None
 
 
+class QuickRepliesRequest(BaseModel):
+    """Request body for POST /chat/quick-replies"""
+    assistant_message: str = Field(
+        ...,
+        min_length=1,
+        max_length=2400,
+        description="The assistant's latest final message. No chat history is included.",
+    )
+    session_id: str | None = Field(
+        None,
+        description="Optional session ID for trace logging.",
+    )
+    model_override: str | None = Field(
+        None,
+        description="Optional model override for debugging quick-reply generation.",
+    )
+
+
+class QuickReplyOption(BaseModel):
+    """A single quick reply button."""
+    label: str = Field(
+        ...,
+        min_length=1,
+        max_length=36,
+        description="Button label and exact text sent when tapped.",
+    )
+
+    @field_validator("label")
+    @classmethod
+    def validate_label(cls, value: str) -> str:
+        cleaned = re.sub(r"\s+", " ", (value or "").strip())
+        if not cleaned:
+            raise ValueError("label must not be empty")
+        if len(cleaned) > 36:
+            raise ValueError("label must be 36 characters or fewer")
+        return cleaned
+
+
+class QuickRepliesResponse(BaseModel):
+    """Response from POST /chat/quick-replies"""
+    options: list[QuickReplyOption] = Field(
+        ...,
+        max_length=3,
+        description="0-3 quick-reply choices. Empty means no buttons should be shown.",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Vision Chat
 # ---------------------------------------------------------------------------
@@ -275,6 +322,28 @@ class VoiceStreamTicketResponse(BaseModel):
         description="Absolute URL to GET /voice/stream/{ticket_id} — valid for one use within 30 s.",
     )
     expires_in_seconds: int = 30
+
+
+class VoiceDeepgramTokenRequest(BaseModel):
+    """Request body for POST /voice/deepgram-token"""
+    session_id: str | None = Field(
+        None,
+        description="Existing session ID to attach token trace events to.",
+    )
+    model: str | None = Field(
+        None,
+        description="Optional Deepgram Aura model override the client plans to use.",
+    )
+
+
+class VoiceDeepgramTokenResponse(BaseModel):
+    """Response from POST /voice/deepgram-token"""
+    provider: str = "deepgram"
+    model: str
+    session_id: str
+    access_token: str
+    expires_in_seconds: int = 30
+    speak_url: str = "https://api.deepgram.com/v1/speak"
 
 
 # ---------------------------------------------------------------------------

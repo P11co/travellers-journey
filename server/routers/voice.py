@@ -12,11 +12,13 @@ import uuid
 
 import httpx
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from server.config import ASSEMBLYAI_API_KEY, DEEPGRAM_API_KEY, DEEPGRAM_TTS_MODEL_ID
 from server.database import create_session, get_session, save_trace_event
 from server.models import (
+    VoiceDeepgramTokenRequest,
+    VoiceDeepgramTokenResponse,
     VoiceSynthesizeRequest,
     VoiceSynthesizeResponse,
     VoiceStreamTicketRequest,
@@ -120,7 +122,7 @@ async def _transcribe_with_assemblyai(audio: bytes) -> str:
             headers={**headers, "Content-Type": "application/json"},
             json={
                 "audio_url": audio_url,
-                "speech_model": "universal",
+                "speech_models": ["universal-3-pro", "universal-2"],
             },
         )
         if transcript_resp.status_code >= 300:
@@ -175,6 +177,33 @@ async def _synthesize_with_deepgram(text: str, model: str) -> bytes:
     if not resp.content:
         raise RuntimeError("Deepgram TTS returned empty audio")
     return resp.content
+
+
+async def _create_deepgram_access_token() -> dict:
+    if not DEEPGRAM_API_KEY:
+        raise RuntimeError("Missing DEEPGRAM_API_KEY")
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.post(
+            "https://api.deepgram.com/v1/auth/grant",
+            headers={
+                "Authorization": f"Token {DEEPGRAM_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={},
+        )
+
+    if resp.status_code != 200:
+        raise RuntimeError(f"Deepgram token grant returned {resp.status_code}: {resp.text[:200]}")
+
+    data = resp.json()
+    access_token = data.get("access_token")
+    if not access_token:
+        raise RuntimeError("Deepgram token grant returned no access token")
+    return {
+        "access_token": access_token,
+        "expires_in": int(data.get("expires_in") or 30),
+    }
 
 
 async def _stream_deepgram_audio(text: str, model: str):
@@ -353,6 +382,65 @@ async def synthesize_voice(req: VoiceSynthesizeRequest):
 
 
 # ---------------------------------------------------------------------------
+# POST /voice/deepgram-token — issue a temporary client token
+# ---------------------------------------------------------------------------
+
+@router.post("/deepgram-token", response_model=VoiceDeepgramTokenResponse)
+async def create_deepgram_token(req: VoiceDeepgramTokenRequest):
+    """Return a short-lived Deepgram token for direct client-side TTS."""
+    started_at = time.perf_counter()
+    next_session_id = req.session_id or str(uuid.uuid4())
+    if not await get_session(next_session_id):
+        await create_session(next_session_id, location="Gwanghwamun")
+
+    model = req.model or DEEPGRAM_TTS_MODEL_ID
+    await _trace_voice_event(
+        next_session_id,
+        "voice_deepgram_token_started",
+        {
+            "provider": "deepgram",
+            "model": model,
+        },
+    )
+
+    try:
+        token_payload = await _create_deepgram_access_token()
+        duration_ms = round((time.perf_counter() - started_at) * 1000)
+        await _trace_voice_event(
+            next_session_id,
+            "voice_deepgram_token_created",
+            {
+                "provider": "deepgram",
+                "model": model,
+                "duration_ms": duration_ms,
+                "expires_in_seconds": token_payload["expires_in"],
+            },
+        )
+        return VoiceDeepgramTokenResponse(
+            model=model,
+            session_id=next_session_id,
+            access_token=token_payload["access_token"],
+            expires_in_seconds=token_payload["expires_in"],
+        )
+    except Exception as exc:
+        duration_ms = round((time.perf_counter() - started_at) * 1000)
+        await _trace_voice_event(
+            next_session_id,
+            "voice_deepgram_token_failed",
+            {
+                "provider": "deepgram",
+                "model": model,
+                "duration_ms": duration_ms,
+                "error": str(exc),
+            },
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=f"Deepgram token grant failed. {exc}",
+        ) from exc
+
+
+# ---------------------------------------------------------------------------
 # POST /voice/stream-ticket — issue a one-time stream URL
 # ---------------------------------------------------------------------------
 
@@ -390,7 +478,7 @@ async def create_stream_ticket(req: VoiceStreamTicketRequest):
         provider="deepgram",
         model=model,
         session_id=next_session_id,
-        stream_url=f"/voice/stream/{ticket_id}",
+        stream_url=f"/voice/stream/{ticket_id}.mp3",
         expires_in_seconds=int(_TICKET_TTL_S),
     )
 
@@ -399,19 +487,40 @@ async def create_stream_ticket(req: VoiceStreamTicketRequest):
 # GET /voice/stream/{ticket_id} — stream audio bytes directly from Deepgram
 # ---------------------------------------------------------------------------
 
-@router.get("/stream/{ticket_id}")
-async def stream_voice_audio(ticket_id: str):
-    """Consume a stream ticket and proxy Deepgram TTS audio bytes to the client."""
+def _lookup_stream_ticket(ticket_id: str) -> dict:
+    normalized_ticket_id = ticket_id[:-4] if ticket_id.endswith(".mp3") else ticket_id
     _purge_expired_tickets()
-    ticket = _STREAM_TICKETS.pop(ticket_id, None)
+    ticket = _STREAM_TICKETS.get(normalized_ticket_id)
     if ticket is None:
         raise HTTPException(status_code=404, detail="Stream ticket not found or expired")
     if ticket["expires_at"] < time.monotonic():
         raise HTTPException(status_code=410, detail="Stream ticket expired")
+    return {**ticket, "ticket_id": normalized_ticket_id}
+
+
+@router.head("/stream/{ticket_id}")
+async def stream_voice_audio_head(ticket_id: str):
+    """Allow native audio players to probe a stream URL before playback."""
+    _lookup_stream_ticket(ticket_id)
+    return Response(
+        media_type="audio/mpeg",
+        headers={
+            "Cache-Control": "no-cache, no-store",
+            "X-Accel-Buffering": "no",
+            "Content-Disposition": "inline",
+        },
+    )
+
+
+@router.get("/stream/{ticket_id}")
+async def stream_voice_audio(ticket_id: str):
+    """Proxy Deepgram TTS audio bytes to the client."""
+    ticket = _lookup_stream_ticket(ticket_id)
 
     text = ticket["text"]
     model = ticket["model"]
     session_id = ticket["session_id"]
+    normalized_ticket_id = ticket["ticket_id"]
     started_at = time.perf_counter()
 
     await _trace_voice_event(
@@ -421,7 +530,7 @@ async def stream_voice_audio(ticket_id: str):
             "provider": "deepgram",
             "model": model,
             "text_length": len(text),
-            "ticket_id": ticket_id,
+            "ticket_id": normalized_ticket_id,
         },
     )
 

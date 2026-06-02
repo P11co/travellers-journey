@@ -19,13 +19,17 @@ import {
   sendChatMessage,
   sendChatMessageStream,
   sendVisionChat,
+  generateQuickReplies,
   synthesizeSpeech,
+  synthesizeSpeechDirectDeepgram,
   transcribeAudio,
 } from './services/apiService';
 import hotspotsData from './data/hotspots.json';
 
 let activeTtsPlayer = null;
 let activeTtsSubscription = null;
+let preferredSystemVoice = undefined;
+let availableSystemVoicesCache = null;
 
 const releaseActiveTtsPlayer = () => {
   if (activeTtsSubscription) {
@@ -41,6 +45,55 @@ const releaseActiveTtsPlayer = () => {
     }
     activeTtsPlayer = null;
   }
+};
+
+const describeAudioSource = (uri) => {
+  if (String(uri || '').startsWith('data:')) {
+    return 'data:audio/mpeg;base64,<inline>';
+  }
+  return uri;
+};
+
+const cleanSpeechText = (text) => String(text || '')
+  .replace(/[*_`~#]/g, '')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const loadSystemVoices = async () => {
+  if (availableSystemVoicesCache) return availableSystemVoicesCache;
+  try {
+    availableSystemVoicesCache = await Speech.getAvailableVoicesAsync();
+  } catch {
+    availableSystemVoicesCache = [];
+  }
+  return availableSystemVoicesCache;
+};
+
+const getPreferredSystemVoice = async (voiceIdentifier) => {
+  const voices = await loadSystemVoices();
+  if (voiceIdentifier) {
+    const selectedVoice = voices.find((voice) => voice.identifier === voiceIdentifier);
+    if (selectedVoice) return selectedVoice;
+  }
+
+  if (preferredSystemVoice !== undefined) return preferredSystemVoice;
+
+  try {
+    const englishVoices = voices.filter((voice) => (
+      String(voice.language || '').toLowerCase().startsWith('en')
+    ));
+    const preferredVoice = englishVoices.find((voice) => (
+      voice.quality === Speech.VoiceQuality.Enhanced
+    )) || englishVoices.find((voice) => (
+      /siri|premium|enhanced|natural/i.test(`${voice.name} ${voice.identifier}`)
+    )) || englishVoices[0] || null;
+
+    preferredSystemVoice = preferredVoice;
+  } catch {
+    preferredSystemVoice = null;
+  }
+
+  return preferredSystemVoice;
 };
 
 const LEGACY_ACTIVITY_HOTSPOTS = {
@@ -179,6 +232,24 @@ const createLocalSessionId = () =>
 
 const createClientId = (prefix) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+const clearQuickRepliesFromMessages = (messages) => (
+  messages.map((message) => (
+    message.quickReplies?.length ? { ...message, quickReplies: [] } : message
+  ))
+);
+
+const normalizeQuickReplyOptions = (options) => {
+  if (!Array.isArray(options)) return [];
+  const labels = [];
+  options.forEach((option) => {
+    const label = String(option?.label || '').replace(/\s+/g, ' ').trim();
+    if (!label || label.length > 36) return;
+    if (labels.includes(label)) return;
+    labels.push(label);
+  });
+  return labels.slice(0, 3).map((label) => ({ label }));
+};
 
 const USD_TO_KRW_BUDGET_RATE = 1350;
 
@@ -431,6 +502,7 @@ const useAppStore = create((set, get) => ({
   hotspotSuggestionsEnabled: false,
   voiceModeEnabled: false,
   voiceOutputProvider: 'deepgram',
+  systemVoiceIdentifier: null,
   isRecording: false,
   isTranscribing: false,
   isSpeaking: false,
@@ -450,10 +522,16 @@ const useAppStore = create((set, get) => ({
       get().stopSpeaking();
     }
   },
-  setVoiceOutputProvider: (voiceOutputProvider) => {
+  setVoiceOutputProvider: (voiceOutputProvider, systemVoiceIdentifier = null) => {
     const normalized = voiceOutputProvider === 'system' ? 'system' : 'deepgram';
-    set({ voiceOutputProvider: normalized });
-    get().logTraceEvent('voice_output_provider_selected', { provider: normalized });
+    set({
+      voiceOutputProvider: normalized,
+      systemVoiceIdentifier: normalized === 'system' ? systemVoiceIdentifier : null,
+    });
+    get().logTraceEvent('voice_output_provider_selected', {
+      provider: normalized,
+      system_voice_identifier: normalized === 'system' ? systemVoiceIdentifier : null,
+    });
   },
   testVoiceOutput: async () => {
     await get().speakAssistantReply('Voice mode is ready.');
@@ -825,6 +903,8 @@ const useAppStore = create((set, get) => ({
     if (!content) return;
 
     try {
+      const cleanText = cleanSpeechText(content);
+      const systemVoice = await getPreferredSystemVoice(get().systemVoiceIdentifier);
       await Speech.stop();
       releaseActiveTtsPlayer();
       await setIsAudioActiveAsync(true);
@@ -838,14 +918,21 @@ const useAppStore = create((set, get) => ({
         provider: 'system',
         fallback_from: fallbackFrom || null,
         text_length: content.length,
+        voice_identifier: systemVoice?.identifier || null,
+        voice_name: systemVoice?.name || null,
+        voice_quality: systemVoice?.quality || null,
       });
-      Speech.speak(content.replace(/[*_`~]/g, ''), {
+      Speech.speak(cleanText, {
         language: 'en-US',
-        rate: 0.95,
+        ...(systemVoice?.identifier ? { voice: systemVoice.identifier } : {}),
+        rate: 0.98,
         pitch: 1,
         volume: 1,
         onStart: () => {
-          get().logTraceEvent('voice_tts_native_started', { provider: 'system' });
+          get().logTraceEvent('voice_tts_native_started', {
+            provider: 'system',
+            voice_identifier: systemVoice?.identifier || null,
+          });
         },
         onDone: () => {
           set({ isSpeaking: false });
@@ -872,6 +959,7 @@ const useAppStore = create((set, get) => ({
     if (!content) return;
 
     try {
+      const cleanText = content.replace(/[*_`~]/g, '');
       await Speech.stop();
       releaseActiveTtsPlayer();
       await setIsAudioActiveAsync(true);
@@ -887,14 +975,34 @@ const useAppStore = create((set, get) => ({
         text_length: content.length,
       });
 
-      const artifactResponse = await synthesizeSpeech({
-        text: content.replace(/[*_`~]/g, ''),
-        sessionId: get().sessionId,
-      });
+      let artifactResponse = null;
+      try {
+        artifactResponse = await synthesizeSpeechDirectDeepgram({
+          text: cleanText,
+          sessionId: get().sessionId,
+        });
+        get().logTraceEvent('voice_tts_direct_synthesis_completed', {
+          provider: artifactResponse.provider,
+          model: artifactResponse.model,
+          duration_ms: artifactResponse.duration_ms,
+          text_length: cleanText.length,
+          size_bytes: artifactResponse.size_bytes ?? null,
+        });
+      } catch (directError) {
+        get().logTraceEvent('voice_tts_direct_synthesis_failed', {
+          provider: 'deepgram_direct',
+          error: directError.message || 'Direct Deepgram TTS failed',
+          fallback_to: 'backend_artifact',
+        });
+        artifactResponse = await synthesizeSpeech({
+          text: cleanText,
+          sessionId: get().sessionId,
+        });
+      }
 
       const finalSource = { uri: artifactResponse.audio_url };
       const resolvedModel = artifactResponse.model;
-      const resolvedProvider = 'deepgram';
+      const resolvedProvider = artifactResponse.provider || 'deepgram';
 
       activeTtsPlayer = createAudioPlayer(
         finalSource,
@@ -913,7 +1021,7 @@ const useAppStore = create((set, get) => ({
           get().logTraceEvent('voice_tts_playback_failed', {
             provider: resolvedProvider,
             model: resolvedModel,
-            audio_source: finalSource.uri,
+            audio_source: describeAudioSource(finalSource.uri),
             error: playbackError,
           });
           releaseActiveTtsPlayer();
@@ -954,7 +1062,7 @@ const useAppStore = create((set, get) => ({
       get().logTraceEvent('voice_tts_native_started', {
         provider: resolvedProvider,
         model: resolvedModel,
-        audio_source: finalSource.uri,
+        audio_source: describeAudioSource(finalSource.uri),
       });
     } catch (error) {
       get().logTraceEvent('voice_tts_failed', {
@@ -1061,16 +1169,89 @@ const useAppStore = create((set, get) => ({
       });
       return await get().sendMessage(transcript);
     } catch (error) {
+      const rawError = error.message || 'Voice transcription failed.';
+      const displayError = rawError.includes('Voice transcription failed')
+        ? 'Voice transcription failed. Try recording again for at least one second.'
+        : rawError;
       set({
         voiceRecording: null,
         isTranscribing: false,
-        voiceError: error.message || 'Voice transcription failed.',
+        voiceError: displayError,
       });
       get().logTraceEvent('voice_transcription_failed', {
-        error: error.message || 'Voice transcription failed.',
+        error: rawError,
       });
       return null;
     }
+  },
+
+  generateQuickRepliesForMessage: async (messageId, assistantMessage, context = {}) => {
+    const text = String(assistantMessage || '').trim();
+    if (!messageId || !text) return [];
+
+    try {
+      const response = await generateQuickReplies({
+        assistantMessage: text,
+        sessionId: context.sessionId || get().sessionId,
+      });
+      const quickReplies = normalizeQuickReplyOptions(response?.options);
+      if (!quickReplies.length) {
+        get().logTraceEvent('quick_replies_skipped', {
+          source_message_id: messageId,
+          reason: 'empty_options',
+        });
+        return [];
+      }
+
+      let applied = false;
+      set((current) => {
+        const messageIndex = current.chatMessages.findIndex((message) => message.id === messageId);
+        if (messageIndex < 0) return {};
+        const hasNewerUserMessage = current.chatMessages
+          .slice(messageIndex + 1)
+          .some((message) => message.role === 'user');
+        if (hasNewerUserMessage) return {};
+
+        applied = true;
+        return {
+          chatMessages: current.chatMessages.map((message) => (
+            message.id === messageId ? { ...message, quickReplies } : message
+          )),
+        };
+      });
+
+      if (!applied) {
+        get().logTraceEvent('quick_replies_skipped', {
+          source_message_id: messageId,
+          reason: 'stale_message',
+          option_count: quickReplies.length,
+        });
+        return [];
+      }
+
+      return quickReplies;
+    } catch (error) {
+      get().logTraceEvent('quick_replies_skipped', {
+        source_message_id: messageId,
+        reason: 'api_error',
+        error: error.message,
+      });
+      return [];
+    }
+  },
+
+  sendQuickReply: async (label, sourceMessageId) => {
+    const text = String(label || '').trim();
+    if (!text || get().isChatLoading) return null;
+
+    set((current) => ({
+      chatMessages: clearQuickRepliesFromMessages(current.chatMessages),
+    }));
+    get().logTraceEvent('quick_reply_pressed', {
+      label: text,
+      source_message_id: sourceMessageId || null,
+    });
+    return get().sendMessage(text, { quickReplySourceMessageId: sourceMessageId || null });
   },
 
   sendMessage: async (text, context = {}) => {
@@ -1109,7 +1290,7 @@ const useAppStore = create((set, get) => ({
 
     set((current) => ({
       chatMessages: [
-        ...current.chatMessages,
+        ...clearQuickRepliesFromMessages(current.chatMessages),
         userMessage,
         {
           id: assistantId,
@@ -1131,6 +1312,7 @@ const useAppStore = create((set, get) => ({
       waypoint_id: waypointContext?.id || location.waypointId || null,
       waypoint_name: waypointContext?.name || null,
       has_coordinates: Boolean((waypointLat ?? location.lat) && (waypointLng ?? location.lng)),
+      quick_reply_source_message_id: context.quickReplySourceMessageId || null,
     });
 
     try {
@@ -1206,6 +1388,9 @@ const useAppStore = create((set, get) => ({
           chatMessage.id === assistantId ? assistantMessage : chatMessage
         )),
       }));
+      get().generateQuickRepliesForMessage(assistantMessage.id, response.reply, {
+        sessionId: response.session_id,
+      });
 
       if (get().voiceModeEnabled && !context.suppressSpeech) {
         get().speakAssistantReply(response.reply);
@@ -1276,6 +1461,9 @@ const useAppStore = create((set, get) => ({
             chatMessage.id === assistantId ? assistantMessage : chatMessage
           )),
         }));
+        get().generateQuickRepliesForMessage(assistantMessage.id, response.reply, {
+          sessionId: response.session_id,
+        });
 
         if (get().voiceModeEnabled && !context.suppressSpeech) {
           get().speakAssistantReply(response.reply);
@@ -1343,7 +1531,7 @@ const useAppStore = create((set, get) => ({
     };
 
     set((current) => ({
-      chatMessages: [...current.chatMessages, userMessage],
+      chatMessages: [...clearQuickRepliesFromMessages(current.chatMessages), userMessage],
       isChatLoading: true,
       chatError: null,
     }));
@@ -1398,6 +1586,9 @@ const useAppStore = create((set, get) => ({
         sessionId: response.session_id,
         chatMessages: [...current.chatMessages, assistantMessage],
       }));
+      get().generateQuickRepliesForMessage(assistantMessage.id, response.reply, {
+        sessionId: response.session_id,
+      });
 
       if (get().voiceModeEnabled && !context.suppressSpeech) {
         get().speakAssistantReply(response.reply);

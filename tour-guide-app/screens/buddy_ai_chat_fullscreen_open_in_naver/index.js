@@ -51,6 +51,7 @@ export default function AIChatInterface({
   const isSpeaking = useAppStore((s) => s.isSpeaking);
   const voiceModeEnabled = useAppStore((s) => s.voiceModeEnabled);
   const sendMessage = useAppStore((s) => s.sendMessage);
+  const sendQuickReply = useAppStore((s) => s.sendQuickReply);
   const sendVisionMessage = useAppStore((s) => s.sendVisionMessage);
   const startVoiceRecording = useAppStore((s) => s.startVoiceRecording);
   const stopVoiceRecordingAndSend = useAppStore((s) => s.stopVoiceRecordingAndSend);
@@ -135,6 +136,17 @@ export default function AIChatInterface({
       }
     } catch {
       // Store renders a friendly failure message.
+    }
+  };
+
+  const handleQuickReplyPress = async (label, sourceMessageId) => {
+    if (isChatLoading) return;
+    isNearBottomRef.current = true;
+    Keyboard.dismiss();
+    try {
+      await sendQuickReply(label, sourceMessageId);
+    } catch {
+      // Store renders a friendly failure message if the chat request fails.
     }
   };
 
@@ -310,6 +322,28 @@ export default function AIChatInterface({
               </>
             )}
           </View>
+          {Array.isArray(message.quickReplies) && message.quickReplies.length > 0 && !message.isStreaming && (
+            <View style={styles.quickReplyContainer}>
+              {message.quickReplies.map((option) => (
+                <TouchableOpacity
+                  key={`${message.id}-${option.label}`}
+                  style={[
+                    styles.quickReplyButton,
+                    {
+                      backgroundColor: theme.accentSoft,
+                      borderColor: theme.accent,
+                    },
+                    isChatLoading && styles.quickReplyButtonDisabled,
+                  ]}
+                  onPress={() => handleQuickReplyPress(option.label, message.id)}
+                  disabled={isChatLoading}
+                  activeOpacity={0.78}
+                >
+                  <Text style={[styles.quickReplyText, { color: theme.accent }]}>{option.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
           <Text style={styles.timestampSubtextLeft}>BUDDY • {formatTimestamp(message.timestamp)}</Text>
         </View>
       </View>
@@ -734,6 +768,29 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 15,
     marginTop: 8,
+  },
+  quickReplyContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 10,
+    marginLeft: 2,
+  },
+  quickReplyButton: {
+    borderWidth: 1,
+    borderRadius: 9999,
+    paddingVertical: 9,
+    paddingHorizontal: 13,
+    marginRight: 8,
+    marginBottom: 8,
+    maxWidth: '100%',
+  },
+  quickReplyButtonDisabled: {
+    opacity: 0.45,
+  },
+  quickReplyText: {
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 17,
   },
   timestampSubtextLeft: {
     fontSize: 10,
