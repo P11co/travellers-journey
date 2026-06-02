@@ -404,7 +404,6 @@ export default function SettingsConfigurationView({ navigation }) {
         navigation={navigation} 
         activeKey="settings" 
         bottomOffset={24} 
-        onItineraryPress={() => navigation.reset({ index: 0, routes: [{ name: 'Home' }] })}
         onChatPress={handleChatPress}
       />
 
