@@ -101,6 +101,52 @@ async def test_call_llm_falls_back_to_nvidia(monkeypatch):
     ]
 
 
+@pytest.mark.asyncio
+async def test_get_live_environment_fetches_fresh_data_each_call():
+    """Live environment context is rebuilt per request instead of using stale cache."""
+    from server.routers.chat import _get_live_environment
+
+    weather_first = httpx.Response(
+        status_code=200,
+        json={
+            "current": {"temperature_2m": 21, "weather_code": 0},
+            "daily": {"uv_index_max": [5]},
+        },
+    )
+    aqi_first = httpx.Response(status_code=200, json={"current": {"us_aqi": 42}})
+    weather_second = httpx.Response(
+        status_code=200,
+        json={
+            "current": {"temperature_2m": 22, "weather_code": 61},
+            "daily": {"uv_index_max": [6]},
+        },
+    )
+    aqi_second = httpx.Response(status_code=200, json={"current": {"us_aqi": 43}})
+
+    with patch("server.routers.chat.httpx.AsyncClient") as MockClient:
+        mock_instance = AsyncMock()
+        mock_instance.get.side_effect = [
+            weather_first,
+            aqi_first,
+            weather_second,
+            aqi_second,
+        ]
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_instance
+
+        first = await _get_live_environment()
+        second = await _get_live_environment()
+
+    assert mock_instance.get.call_count == 4
+    assert "- Weather: 21°C, Clear" in first
+    assert "- UV Index: 5" in first
+    assert "- Air Quality (AQI): 42" in first
+    assert "- Weather: 22°C, Rain" in second
+    assert "- UV Index: 6" in second
+    assert "- Air Quality (AQI): 43" in second
+
+
 # ---------------------------------------------------------------------------
 # POST /chat — basic message
 # ---------------------------------------------------------------------------

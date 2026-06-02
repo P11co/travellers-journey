@@ -176,15 +176,8 @@ Return compact JSON only with these keys:
 # Shared helpers
 # ---------------------------------------------------------------------------
 
-_env_cache = {"data": "", "timestamp": 0}
-
 async def _get_live_environment() -> str:
     """Fetch current time in Seoul and weather from Open-Meteo."""
-    global _env_cache
-    now = time.time()
-    if now - _env_cache["timestamp"] < 900:  # 15 minute cache
-        return _env_cache["data"]
-
     # Current Time in Seoul
     seoul_time = datetime.now(ZoneInfo("Asia/Seoul"))
     time_str = seoul_time.strftime("%A, %B %d, %Y, %H:%M KST")
@@ -223,11 +216,7 @@ async def _get_live_environment() -> str:
     except Exception:
         pass # Silently fail and use fallbacks
 
-    context = f"- Current Time: {time_str}\n- Weather: {temp}°C, {weather_desc}\n- UV Index: {uv}\n- Air Quality (AQI): {aqi}"
-    _env_cache["data"] = context
-    _env_cache["timestamp"] = now
-    
-    return context
+    return f"- Current Time: {time_str}\n- Weather: {temp}°C, {weather_desc}\n- UV Index: {uv}\n- Air Quality (AQI): {aqi}"
 
 
 def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
