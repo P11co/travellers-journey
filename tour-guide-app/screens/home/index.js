@@ -12,11 +12,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import useAppStore from '../../src/store';
+import { getTheme } from '../../src/theme';
 
 export default function HomeScreen({ navigation }) {
   const itineraries = useAppStore((s) => s.itineraries);
   const startTour = useAppStore((s) => s.startTour);
   const removeItinerary = useAppStore((s) => s.removeItinerary);
+  const themeMode = useAppStore((s) => s.themeMode);
+  const theme = getTheme(themeMode);
 
   const handleStartTour = (itinerary) => {
     startTour(itinerary.id);
@@ -39,22 +42,22 @@ export default function HomeScreen({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+      <StatusBar barStyle={themeMode === 'light' ? 'dark-content' : 'light-content'} />
 
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { borderBottomColor: theme.border }]}>
         <View style={styles.headerLeftRow}>
-          <Svg width="24" height="24" fill="#5c77ff" viewBox="0 0 24 24">
+          <Svg width="24" height="24" fill={theme.accent} viewBox="0 0 24 24">
             <Path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z" />
           </Svg>
-          <Text style={styles.headerBrandText}>Buddy</Text>
+          <Text style={[styles.headerBrandText, { color: theme.text }]}>Buddy</Text>
         </View>
         <TouchableOpacity
           style={styles.settingsButton}
           onPress={() => navigation.navigate('Settings')}
         >
-          <Svg width="22" height="22" fill="none" stroke="#a1a1aa" strokeWidth="2" viewBox="0 0 24 24">
+          <Svg width="22" height="22" fill="none" stroke={theme.mutedText} strokeWidth="2" viewBox="0 0 24 24">
             <Path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             <Path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </Svg>
@@ -67,52 +70,52 @@ export default function HomeScreen({ navigation }) {
       >
         {/* Welcome Section */}
         <View style={styles.welcomeSection}>
-          <Text style={styles.welcomeTitle}>Your Journeys</Text>
-          <Text style={styles.welcomeSubtitle}>
+          <Text style={[styles.welcomeTitle, { color: theme.text }]}>Your Journeys</Text>
+          <Text style={[styles.welcomeSubtitle, { color: theme.mutedText }]}>
             Plan a new trip or continue an existing tour.
           </Text>
         </View>
 
         {/* Create New Journey CTA */}
         <TouchableOpacity
-          style={styles.createNewCard}
+          style={[styles.createNewCard, { backgroundColor: theme.surface, borderColor: theme.accent }]}
           onPress={() => navigation.navigate('PlanJourney')}
         >
-          <View style={styles.createNewIconContainer}>
-            <Svg width="28" height="28" fill="none" stroke="#5c77ff" strokeWidth="2" viewBox="0 0 24 24">
+          <View style={[styles.createNewIconContainer, { backgroundColor: theme.accentSoft, borderColor: theme.border }]}>
+            <Svg width="28" height="28" fill="none" stroke={theme.accent} strokeWidth="2" viewBox="0 0 24 24">
               <Path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </Svg>
           </View>
           <View style={styles.createNewTextContainer}>
-            <Text style={styles.createNewTitle}>Create New Journey</Text>
-            <Text style={styles.createNewDesc}>
+            <Text style={[styles.createNewTitle, { color: theme.text }]}>Create New Journey</Text>
+            <Text style={[styles.createNewDesc, { color: theme.mutedText }]}>
               Plan your next adventure with AI-optimized routes
             </Text>
           </View>
-          <Text style={styles.arrow}>❯</Text>
+          <Text style={[styles.arrow, { color: theme.accent }]}>❯</Text>
         </TouchableOpacity>
 
         {/* Itinerary List */}
         {itineraries.length > 0 && (
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Saved Itineraries</Text>
-            <Text style={styles.sectionCount}>{itineraries.length}</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Saved Itineraries</Text>
+            <Text style={[styles.sectionCount, { color: theme.accent, backgroundColor: theme.accentSoft }]}>{itineraries.length}</Text>
           </View>
         )}
 
         {itineraries.map((itinerary) => (
-          <View key={itinerary.id} style={styles.itineraryCard}>
+          <View key={itinerary.id} style={[styles.itineraryCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             {/* Card Header */}
             <View style={styles.cardHeader}>
-              <View style={styles.cardIconWrap}>
-                <Svg width="20" height="20" fill="none" stroke="#5c77ff" strokeWidth="2" viewBox="0 0 24 24">
+              <View style={[styles.cardIconWrap, { backgroundColor: theme.accentSoft, borderColor: theme.border }]}>
+                <Svg width="20" height="20" fill="none" stroke={theme.accent} strokeWidth="2" viewBox="0 0 24 24">
                   <Path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                   <Path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                 </Svg>
               </View>
               <View style={styles.cardHeaderText}>
-                <Text style={styles.itineraryName}>{itinerary.name}</Text>
-                <Text style={styles.itineraryLocation}>{itinerary.location}</Text>
+                <Text style={[styles.itineraryName, { color: theme.text }]}>{itinerary.name}</Text>
+                <Text style={[styles.itineraryLocation, { color: theme.mutedText }]}>{itinerary.location}</Text>
               </View>
               <TouchableOpacity
                 style={styles.deleteButton}
@@ -127,23 +130,23 @@ export default function HomeScreen({ navigation }) {
 
             {/* Meta Tags */}
             <View style={styles.metaRow}>
-              <View style={styles.metaTag}>
-                <Svg width="12" height="12" fill="none" stroke="#4ade80" strokeWidth="2" viewBox="0 0 24 24">
+              <View style={[styles.metaTag, { backgroundColor: theme.elevated }]}>
+                <Svg width="12" height="12" fill="none" stroke={theme.success} strokeWidth="2" viewBox="0 0 24 24">
                   <Path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </Svg>
-                <Text style={styles.metaTagText}>{itinerary.duration}</Text>
+                <Text style={[styles.metaTagText, { color: theme.mutedText }]}>{itinerary.duration}</Text>
               </View>
-              <View style={styles.metaTag}>
-                <Svg width="12" height="12" fill="none" stroke="#a1a1aa" strokeWidth="2" viewBox="0 0 24 24">
+              <View style={[styles.metaTag, { backgroundColor: theme.elevated }]}>
+                <Svg width="12" height="12" fill="none" stroke={theme.mutedText} strokeWidth="2" viewBox="0 0 24 24">
                   <Path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                 </Svg>
-                <Text style={styles.metaTagText}>{itinerary.stopCount} stops</Text>
+                <Text style={[styles.metaTagText, { color: theme.mutedText }]}>{itinerary.stopCount} stops</Text>
               </View>
             </View>
 
             {/* Start Tour Button */}
             <TouchableOpacity
-              style={styles.startTourButton}
+              style={[styles.startTourButton, { backgroundColor: theme.accent, shadowColor: theme.accent }]}
               onPress={() => handleStartTour(itinerary)}
             >
               <Svg width="20" height="20" fill="none" stroke="#ffffff" strokeWidth="2" viewBox="0 0 24 24" style={{ marginRight: 8 }}>
@@ -158,13 +161,13 @@ export default function HomeScreen({ navigation }) {
         {/* Empty State */}
         {itineraries.length === 0 && (
           <View style={styles.emptyState}>
-            <View style={styles.emptyIconContainer}>
-              <Svg width="48" height="48" fill="none" stroke="#3f3f46" strokeWidth="1.5" viewBox="0 0 24 24">
+            <View style={[styles.emptyIconContainer, { backgroundColor: theme.iconSurface }]}>
+              <Svg width="48" height="48" fill="none" stroke={theme.subtleText} strokeWidth="1.5" viewBox="0 0 24 24">
                 <Path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
               </Svg>
             </View>
-            <Text style={styles.emptyTitle}>No journeys yet</Text>
-            <Text style={styles.emptyDesc}>
+            <Text style={[styles.emptyTitle, { color: theme.subtleText }]}>No journeys yet</Text>
+            <Text style={[styles.emptyDesc, { color: theme.mutedText }]}>
               Create your first journey above to get started!
             </Text>
           </View>
