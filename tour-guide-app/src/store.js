@@ -20,6 +20,7 @@ import {
   sendChatMessageStream,
   sendVisionChat,
   synthesizeSpeech,
+  requestTtsStreamTicket,
   transcribeAudio,
 } from './services/apiService';
 import hotspotsData from './data/hotspots.json';
@@ -887,13 +888,45 @@ const useAppStore = create((set, get) => ({
         text_length: content.length,
       });
 
-      const response = await synthesizeSpeech({
-        text: content.replace(/[*_`~]/g, ''),
-        sessionId: get().sessionId,
-      });
+      // --- Attempt 1: ticketed streaming path ---
+      let streamTicket = null;
+      try {
+        streamTicket = await requestTtsStreamTicket({
+          text: content.replace(/[*_`~]/g, ''),
+          sessionId: get().sessionId,
+        });
+        get().logTraceEvent('voice_tts_stream_ticket_created', {
+          provider: 'deepgram',
+          model: streamTicket.model,
+          stream_url: streamTicket.stream_url,
+        });
+      } catch (ticketError) {
+        get().logTraceEvent('voice_tts_stream_ticket_failed', {
+          provider: 'deepgram',
+          error: ticketError.message || 'Stream ticket request failed',
+          fallback_to: 'artifact',
+        });
+      }
+
+      const audioSource = streamTicket
+        ? { uri: streamTicket.stream_url }
+        : null;
+
+      // --- Attempt 2: saved-MP3 artifact fallback ---
+      let artifactResponse = null;
+      if (!audioSource) {
+        artifactResponse = await synthesizeSpeech({
+          text: content.replace(/[*_`~]/g, ''),
+          sessionId: get().sessionId,
+        });
+      }
+
+      const finalSource = audioSource || { uri: artifactResponse.audio_url };
+      const resolvedModel = streamTicket?.model || artifactResponse?.model;
+      const resolvedProvider = streamTicket ? 'deepgram_stream' : 'deepgram';
 
       activeTtsPlayer = createAudioPlayer(
-        { uri: response.audio_url },
+        finalSource,
         { updateInterval: 250, keepAudioSessionActive: true },
       );
       activeTtsPlayer.volume = 1;
@@ -907,9 +940,9 @@ const useAppStore = create((set, get) => ({
             ? status.error
             : 'Deepgram audio playback failed.';
           get().logTraceEvent('voice_tts_playback_failed', {
-            provider: 'deepgram',
-            model: response.model,
-            audio_url: response.audio_url,
+            provider: resolvedProvider,
+            model: resolvedModel,
+            audio_source: finalSource.uri,
             error: playbackError,
           });
           releaseActiveTtsPlayer();
@@ -923,16 +956,16 @@ const useAppStore = create((set, get) => ({
         if (status?.isLoaded && !didLogLoaded) {
           didLogLoaded = true;
           get().logTraceEvent('voice_tts_playback_loaded', {
-            provider: 'deepgram',
-            model: response.model,
+            provider: resolvedProvider,
+            model: resolvedModel,
             duration: status.duration ?? null,
           });
         }
         if (status?.playing && !didLogPlaying) {
           didLogPlaying = true;
           get().logTraceEvent('voice_tts_playback_started', {
-            provider: 'deepgram',
-            model: response.model,
+            provider: resolvedProvider,
+            model: resolvedModel,
             current_time: status.currentTime ?? null,
           });
         }
@@ -940,17 +973,17 @@ const useAppStore = create((set, get) => ({
           releaseActiveTtsPlayer();
           set({ isSpeaking: false });
           get().logTraceEvent('voice_tts_completed', {
-            provider: 'deepgram',
-            model: response.model,
+            provider: resolvedProvider,
+            model: resolvedModel,
             text_length: content.length,
           });
         }
       });
       activeTtsPlayer.play();
       get().logTraceEvent('voice_tts_native_started', {
-        provider: 'deepgram',
-        model: response.model,
-        audio_url: response.audio_url,
+        provider: resolvedProvider,
+        model: resolvedModel,
+        audio_source: finalSource.uri,
       });
     } catch (error) {
       get().logTraceEvent('voice_tts_failed', {

@@ -223,6 +223,36 @@ class VoiceSynthesizeResponse(BaseModel):
     duration_ms: int
 
 
+class VoiceStreamTicketRequest(BaseModel):
+    """Request body for POST /voice/stream-ticket — validates text and returns a one-time stream URL."""
+    text: str = Field(
+        ...,
+        min_length=1,
+        max_length=2400,
+        description="Assistant text to synthesize into speech.",
+    )
+    session_id: str | None = Field(
+        None,
+        description="Existing session ID to attach synthesis trace events to.",
+    )
+    model: str | None = Field(
+        None,
+        description="Optional Deepgram Aura model override.",
+    )
+
+
+class VoiceStreamTicketResponse(BaseModel):
+    """Response from POST /voice/stream-ticket"""
+    provider: str
+    model: str
+    session_id: str
+    stream_url: str = Field(
+        ...,
+        description="Absolute URL to GET /voice/stream/{ticket_id} — valid for one use within 30 s.",
+    )
+    expires_in_seconds: int = 30
+
+
 # ---------------------------------------------------------------------------
 # Handoff (Naver Maps)
 # ---------------------------------------------------------------------------

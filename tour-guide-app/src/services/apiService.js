@@ -298,6 +298,27 @@ export async function synthesizeSpeech({
   };
 }
 
+export async function requestTtsStreamTicket({
+  text,
+  sessionId,
+  model,
+}) {
+  const payload = await request('/voice/stream-ticket', {
+    method: 'POST',
+    timeoutMs: 15000,
+    body: {
+      text,
+      session_id: sessionId || undefined,
+      model: model || undefined,
+    },
+  });
+
+  return {
+    ...payload,
+    stream_url: buildApiUrl(payload?.stream_url),
+  };
+}
+
 export function generateItinerary({
   location,
   hotspots,
@@ -387,6 +408,8 @@ export default {
   sendChatMessageStream,
   sendVisionChat,
   transcribeAudio,
+  synthesizeSpeech,
+  requestTtsStreamTicket,
   generateItinerary,
   getItinerary,
   reorderItinerary,

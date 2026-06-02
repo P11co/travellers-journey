@@ -12,11 +12,17 @@ import uuid
 
 import httpx
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from server.config import ASSEMBLYAI_API_KEY, DEEPGRAM_API_KEY, DEEPGRAM_TTS_MODEL_ID
 from server.database import create_session, get_session, save_trace_event
-from server.models import VoiceSynthesizeRequest, VoiceSynthesizeResponse, VoiceTranscribeResponse
+from server.models import (
+    VoiceSynthesizeRequest,
+    VoiceSynthesizeResponse,
+    VoiceStreamTicketRequest,
+    VoiceStreamTicketResponse,
+    VoiceTranscribeResponse,
+)
 from server.services.langsmith_tracing import traceable
 
 router = APIRouter(prefix="/voice", tags=["Voice"])
@@ -24,6 +30,21 @@ router = APIRouter(prefix="/voice", tags=["Voice"])
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _VOICE_ARTIFACT_DIR = os.path.join(_PROJECT_ROOT, "data", "voice_artifacts")
 _SAFE_PATH_RE = re.compile(r"[^A-Za-z0-9_.-]+")
+
+# ---------------------------------------------------------------------------
+# Stream-ticket store — in-process, keyed by ticket UUID
+# Each entry: {"text": str, "model": str, "session_id": str, "expires_at": float}
+# ---------------------------------------------------------------------------
+_STREAM_TICKETS: dict[str, dict] = {}
+_TICKET_TTL_S: float = 30.0
+
+
+def _purge_expired_tickets() -> None:
+    """Remove tickets that have passed their expiry time."""
+    now = time.monotonic()
+    expired = [k for k, v in _STREAM_TICKETS.items() if v["expires_at"] < now]
+    for k in expired:
+        del _STREAM_TICKETS[k]
 
 
 def _safe_path_part(value: str) -> str:
@@ -154,6 +175,44 @@ async def _synthesize_with_deepgram(text: str, model: str) -> bytes:
     if not resp.content:
         raise RuntimeError("Deepgram TTS returned empty audio")
     return resp.content
+
+
+async def _stream_deepgram_audio(text: str, model: str):
+    """Async generator that yields audio bytes from Deepgram as they arrive."""
+    if not DEEPGRAM_API_KEY:
+        raise RuntimeError("Missing DEEPGRAM_API_KEY")
+
+    started_at = time.perf_counter()
+    first_byte_logged = False
+    total_bytes = 0
+
+    async with httpx.AsyncClient(timeout=45.0) as client:
+        async with client.stream(
+            "POST",
+            "https://api.deepgram.com/v1/speak",
+            params={"model": model, "encoding": "mp3"},
+            headers={
+                "Authorization": f"Token {DEEPGRAM_API_KEY}",
+                "Content-Type": "application/json",
+                "Accept": "audio/mpeg",
+            },
+            json={"text": text},
+        ) as resp:
+            if resp.status_code != 200:
+                body = await resp.aread()
+                raise RuntimeError(f"Deepgram TTS stream returned {resp.status_code}: {body[:200]}")
+
+            async for chunk in resp.aiter_bytes(chunk_size=4096):
+                if chunk:
+                    if not first_byte_logged:
+                        first_byte_ms = round((time.perf_counter() - started_at) * 1000)
+                        print(f"🔊 Deepgram TTS first byte in {first_byte_ms} ms")
+                        first_byte_logged = True
+                    total_bytes += len(chunk)
+                    yield chunk
+
+    total_ms = round((time.perf_counter() - started_at) * 1000)
+    print(f"🔊 Deepgram TTS stream complete: {total_bytes} bytes in {total_ms} ms")
 
 
 def _write_voice_artifact(session_id: str, audio: bytes) -> tuple[str, str]:
@@ -291,6 +350,131 @@ async def synthesize_voice(req: VoiceSynthesizeRequest):
             status_code=502,
             detail=f"Voice synthesis failed. {exc}",
         ) from exc
+
+
+# ---------------------------------------------------------------------------
+# POST /voice/stream-ticket — issue a one-time stream URL
+# ---------------------------------------------------------------------------
+
+@router.post("/stream-ticket", response_model=VoiceStreamTicketResponse)
+async def create_stream_ticket(req: VoiceStreamTicketRequest):
+    """Validate text and return a short-lived URL for streaming TTS audio."""
+    next_session_id = req.session_id or str(uuid.uuid4())
+    if not await get_session(next_session_id):
+        await create_session(next_session_id, location="Gwanghwamun")
+
+    text = req.text.strip()
+    model = req.model or DEEPGRAM_TTS_MODEL_ID
+
+    _purge_expired_tickets()
+    ticket_id = uuid.uuid4().hex
+    _STREAM_TICKETS[ticket_id] = {
+        "text": text,
+        "model": model,
+        "session_id": next_session_id,
+        "expires_at": time.monotonic() + _TICKET_TTL_S,
+    }
+
+    await _trace_voice_event(
+        next_session_id,
+        "voice_stream_ticket_created",
+        {
+            "provider": "deepgram",
+            "model": model,
+            "text_length": len(text),
+            "ticket_id": ticket_id,
+        },
+    )
+
+    return VoiceStreamTicketResponse(
+        provider="deepgram",
+        model=model,
+        session_id=next_session_id,
+        stream_url=f"/voice/stream/{ticket_id}",
+        expires_in_seconds=int(_TICKET_TTL_S),
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /voice/stream/{ticket_id} — stream audio bytes directly from Deepgram
+# ---------------------------------------------------------------------------
+
+@router.get("/stream/{ticket_id}")
+async def stream_voice_audio(ticket_id: str):
+    """Consume a stream ticket and proxy Deepgram TTS audio bytes to the client."""
+    _purge_expired_tickets()
+    ticket = _STREAM_TICKETS.pop(ticket_id, None)
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="Stream ticket not found or expired")
+    if ticket["expires_at"] < time.monotonic():
+        raise HTTPException(status_code=410, detail="Stream ticket expired")
+
+    text = ticket["text"]
+    model = ticket["model"]
+    session_id = ticket["session_id"]
+    started_at = time.perf_counter()
+
+    await _trace_voice_event(
+        session_id,
+        "voice_stream_started",
+        {
+            "provider": "deepgram",
+            "model": model,
+            "text_length": len(text),
+            "ticket_id": ticket_id,
+        },
+    )
+
+    async def audio_generator():
+        total_bytes = 0
+        first_byte = True
+        try:
+            async for chunk in _stream_deepgram_audio(text, model):
+                if first_byte:
+                    first_ms = round((time.perf_counter() - started_at) * 1000)
+                    await _trace_voice_event(
+                        session_id,
+                        "voice_stream_first_byte",
+                        {"provider": "deepgram", "model": model, "first_byte_ms": first_ms},
+                    )
+                    first_byte = False
+                total_bytes += len(chunk)
+                yield chunk
+        except Exception as exc:
+            duration_ms = round((time.perf_counter() - started_at) * 1000)
+            await _trace_voice_event(
+                session_id,
+                "voice_stream_failed",
+                {
+                    "provider": "deepgram",
+                    "model": model,
+                    "duration_ms": duration_ms,
+                    "error": str(exc),
+                },
+            )
+            return
+
+        duration_ms = round((time.perf_counter() - started_at) * 1000)
+        await _trace_voice_event(
+            session_id,
+            "voice_stream_completed",
+            {
+                "provider": "deepgram",
+                "model": model,
+                "duration_ms": duration_ms,
+                "size_bytes": total_bytes,
+            },
+        )
+
+    return StreamingResponse(
+        audio_generator(),
+        media_type="audio/mpeg",
+        headers={
+            "Cache-Control": "no-cache, no-store",
+            "X-Accel-Buffering": "no",
+            "Content-Disposition": "inline",
+        },
+    )
 
 
 @router.get("/audio/{session_id}/{filename}")
