@@ -25,6 +25,11 @@ const START_TIME_HOURS = Array.from({ length: 12 }, (_, idx) => String(idx + 1))
 const START_TIME_MINUTES = ['00', '15', '30', '45'];
 const START_TIME_PERIODS = ['AM', 'PM'];
 
+const getSelectedActivityIds = (activityMap = {}) =>
+  Object.entries(activityMap)
+    .filter(([, enabled]) => enabled)
+    .map(([id]) => id);
+
 const parseStartTimeParts = (value) => {
   const match = String(value || '09:00')
     .trim()
@@ -452,6 +457,8 @@ export default function PlanYourJourneyView({ navigation }) {
   const routeStops = hasGeneratedRoute ? generatedItinerary.stops || [] : [];
   const routeHasTravelLegs = routeStops.some((stop) => stop.isTravelLeg);
   const bottomError = reviewError || itineraryError;
+  const selectedActivityIds = getSelectedActivityIds(activities);
+  const hasSelectedActivities = selectedActivityIds.length > 0;
 
   const handleGoBack = () => {
     if (navigation.canGoBack()) {
@@ -494,6 +501,11 @@ export default function PlanYourJourneyView({ navigation }) {
 
   const handleGenerateItinerary = async () => {
     setReviewError(null);
+    if (!hasSelectedActivities) {
+      setReviewError('Select at least one nearby activity before generating an itinerary.');
+      return;
+    }
+
     try {
       await generateItinerary();
       setTimeout(() => {
