@@ -147,6 +147,15 @@ async def test_get_live_environment_fetches_fresh_data_each_call():
     assert "- Air Quality (AQI): 43" in second
 
 
+def test_system_prompt_requires_plain_natural_language():
+    """The assistant contract stays compatible with chat display and TTS."""
+    from server.routers.chat import _SYSTEM_PROMPT
+
+    assert "plain natural language" in _SYSTEM_PROMPT
+    assert "Do not use markdown formatting of any kind" in _SYSTEM_PROMPT
+    assert "no bullets" in _SYSTEM_PROMPT
+
+
 # ---------------------------------------------------------------------------
 # POST /chat — basic message
 # ---------------------------------------------------------------------------
