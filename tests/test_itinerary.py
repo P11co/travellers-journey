@@ -11,6 +11,8 @@ Tests:
 
 import pytest
 import pytest_asyncio
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from unittest.mock import AsyncMock, patch
 
 # ---------------------------------------------------------------------------
@@ -79,6 +81,14 @@ async def mock_travel_leg():
         yield mock
 
 
+@pytest.fixture(autouse=True)
+def fixed_service_datetime():
+    """Keep opening-hours tests independent of the actual current weekday."""
+    service_dt = datetime(2026, 6, 3, 10, 0, tzinfo=ZoneInfo("Asia/Seoul"))
+    with patch("server.routers.itinerary._current_service_datetime", return_value=service_dt):
+        yield
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -126,6 +136,67 @@ async def test_generate_itinerary_invalid_start_time(client, start_time):
         "start_time": start_time,
     })
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_generate_itinerary_rejects_start_without_public_transport(client):
+    resp = await client.post("/itinerary/generate", json={
+        "location": "Gwanghwamun",
+        "hotspots": ["Gwanghwamun Square"],
+        "available_hours": 2.0,
+        "start_time": "01:00",
+    })
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "itinerary_public_transport_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_generate_itinerary_rejects_start_with_no_open_selected_hotspots(client):
+    resp = await client.post("/itinerary/generate", json={
+        "location": "Gwanghwamun",
+        "hotspots": ["Gyeongbokgung Palace", "National Palace Museum of Korea"],
+        "available_hours": 4.0,
+        "start_time": "08:30",
+    })
+
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert detail["code"] == "itinerary_no_open_hotspots_at_start"
+    assert {item["name"] for item in detail["closed_hotspots"]} == {
+        "Gyeongbokgung Palace",
+        "National Palace Museum of Korea",
+    }
+
+
+@pytest.mark.asyncio
+async def test_generate_itinerary_rejects_unavailable_hotspot(client):
+    resp = await client.post("/itinerary/generate", json={
+        "location": "Gwanghwamun",
+        "hotspots": ["Cheong Wa Dae (The Blue House)"],
+        "available_hours": 2.0,
+        "start_time": "10:00",
+    })
+
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert detail["code"] == "itinerary_hotspot_unavailable"
+    assert detail["closed_hotspots"][0]["name"] == "Cheong Wa Dae (The Blue House)"
+
+
+@pytest.mark.asyncio
+async def test_generate_itinerary_rejects_closed_scheduled_stop(client):
+    resp = await client.post("/itinerary/generate", json={
+        "location": "Gwanghwamun",
+        "hotspots": ["Gwangjang Market", "Insadong Hanjeongsik"],
+        "available_hours": 4.5,
+        "start_time": "19:30",
+    })
+
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert detail["code"] == "itinerary_hotspots_closed"
+    assert detail["closed_hotspots"]
 
 
 @pytest.mark.asyncio
@@ -530,6 +601,4 @@ async def test_generate_itinerary_permutation_cap(client):
     detail = resp.json()["detail"]
     assert detail["code"] == "too_many_hotspots"
     assert "Too many selected stops" in detail["message"]
-
-
 

@@ -241,8 +241,8 @@ async def test_chat_with_coordinates(client):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_chat_action_detection(client):
-    """Chat that mentions 'Naver Map' triggers the OPEN_NAVER_MAP action."""
+async def test_chat_naver_mention_without_payload_does_not_trigger_action(client):
+    """A prose-only Naver mention must not create an app-opening action."""
     mock_reply = "I can show you the way on Naver Map if you'd like."
 
     with patch("server.routers.chat.httpx.AsyncClient") as MockClient:
@@ -258,7 +258,8 @@ async def test_chat_action_detection(client):
 
     assert resp.status_code == 200
     data = resp.json()
-    assert data["action"] == "OPEN_NAVER_MAP"
+    assert data["action"] is None
+    assert data["action_payload"] is None
 
 
 @pytest.mark.asyncio
@@ -595,6 +596,7 @@ async def test_chat_with_map_snapshot(client):
     
     # Verify map snapshot was fetched and flagged as included
     assert trace["map_snapshot_included"] is True
+    assert "The center marker is not a destination" in trace["full_prompt"]
     
     # Verify the message structure sent to the LLM has multimodal content array
     messages_sent = trace["messages_sent"]

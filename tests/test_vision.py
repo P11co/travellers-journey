@@ -201,6 +201,29 @@ async def test_vision_amenity_request_returns_naver_search_payload(client):
 
 
 @pytest.mark.asyncio
+async def test_vision_naver_mention_without_payload_does_not_trigger_action(client):
+    """Vision replies must not create map actions without a deterministic payload."""
+    mock_llm = AsyncMock(side_effect=[
+        _analysis_json(subject=None, confidence="low", draft="The image is not enough to identify a destination."),
+        "I do not have an exact destination, but Naver Map may help with navigation.",
+    ])
+
+    common = _patch_common(final_intent="MAP_STATIC")
+    with common[0], common[1], common[2], common[3], patch("server.routers.chat._call_llm", new=mock_llm):
+        resp = await client.post("/chat/vision", json={
+            "message": "Can you help me get there?",
+            "image_base64": _TINY_JPEG_B64,
+            "latitude": 37.57865,
+            "longitude": 126.97711,
+        })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["action"] is None
+    assert data["action_payload"] is None
+
+
+@pytest.mark.asyncio
 async def test_vision_missing_image_returns_422(client):
     """Missing image_base64 field returns 422 Unprocessable Entity."""
     resp = await client.post("/chat/vision", json={"message": "What is this?"})

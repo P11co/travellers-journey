@@ -174,6 +174,14 @@ Return compact JSON only with these keys:
 - uncertainties: short list of uncertainty notes
 """
 
+_MAP_SNAPSHOT_NOTE = """\
+MAP SNAPSHOT NOTE:
+Any attached Naver static map is centered on the user's current location for
+orientation only. The center marker is not a destination and does not mean the
+user asked to navigate there. Navigation handoffs must use deterministic
+geocoding/search payloads, not the map image alone.
+"""
+
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -1097,6 +1105,7 @@ async def _prepare_chat_completion(
     user_content = user_prompt_text
     if map_snapshot_b64:
         model = VISION_MODEL_ID
+        full_system += f"\n\n{_MAP_SNAPSHOT_NOTE}"
         user_content = [
             {"type": "text", "text": user_prompt_text},
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{map_snapshot_b64}"}},
@@ -1177,7 +1186,7 @@ async def _complete_prepared_chat(
     await save_chat_message(session_id, "assistant", reply)
 
     naver_action_payload = prepared["naver_action_payload"]
-    action = "OPEN_NAVER_MAP" if naver_action_payload or "naver map" in reply.lower() else None
+    action = "OPEN_NAVER_MAP" if naver_action_payload else None
     await _trace_chat_event(
         session_id,
         f"{trace_event_base}_completed",
@@ -1315,7 +1324,7 @@ async def chat_stream(req: ChatRequest):
             await save_chat_message(session_id, "user", req.message)
             await save_chat_message(session_id, "assistant", reply)
             naver_action_payload = prepared["naver_action_payload"]
-            action = "OPEN_NAVER_MAP" if naver_action_payload or "naver map" in reply.lower() else None
+            action = "OPEN_NAVER_MAP" if naver_action_payload else None
             await _trace_chat_event(
                 session_id,
                 "chat_llm_stream_completed",
