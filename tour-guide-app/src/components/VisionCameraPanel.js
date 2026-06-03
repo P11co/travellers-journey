@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -19,6 +19,8 @@ const ZOOM_PRESETS = [
   { label: '5×', value: 0.25 },
 ];
 
+const formatLayout = ({ width, height }) => `${Math.round(width)}x${Math.round(height)}`;
+
 export default function VisionCameraPanel({
   style,
   onCapture,
@@ -32,19 +34,64 @@ export default function VisionCameraPanel({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [facing, setFacing] = useState('back');
   const [zoomIndex, setZoomIndex] = useState(0); // index into ZOOM_PRESETS
+  const [cameraReady, setCameraReady] = useState(false);
+  const [cameraMountError, setCameraMountError] = useState(null);
+  const [cameraLayout, setCameraLayout] = useState({ width: 0, height: 0 });
+  const [captureStatus, setCaptureStatus] = useState('idle');
 
   const zoom = ZOOM_PRESETS[zoomIndex].value;
+  const cameraMode = isFullscreen ? 'fullscreen' : 'compact';
+
+  useEffect(() => {
+    setCameraReady(false);
+    setCameraMountError(null);
+  }, [cameraMode, facing]);
+
+  const handleCameraLayout = ({ nativeEvent }) => {
+    const { width, height } = nativeEvent.layout;
+    setCameraLayout({ width, height });
+  };
+
+  const handleCameraReady = () => {
+    setCameraReady(true);
+    setCameraMountError(null);
+    console.log('[VisionCameraPanel] camera ready', {
+      mode: cameraMode,
+      facing,
+      zoom,
+      layout: formatLayout(cameraLayout),
+      permissionStatus: permission?.status,
+      permissionGranted: permission?.granted,
+    });
+  };
+
+  const handleCameraMountError = (error) => {
+    const message = error?.message || error?.nativeEvent?.message || 'Unknown camera mount error';
+    setCameraMountError(message);
+    setCameraReady(false);
+    console.warn('[VisionCameraPanel] camera mount error', {
+      message,
+      mode: cameraMode,
+      facing,
+      zoom,
+      layout: formatLayout(cameraLayout),
+      permissionStatus: permission?.status,
+      permissionGranted: permission?.granted,
+    });
+  };
 
   // --- Capture -----------------------------------------------------------
   const handleCapture = async () => {
     if (!cameraRef.current || isCapturing || disabled) return;
     setIsCapturing(true);
+    setCaptureStatus('capturing');
     try {
       const photo = await cameraRef.current.takePictureAsync({
         base64: true,
         quality: 0.55,
         skipProcessing: true,
       });
+      setCaptureStatus(photo?.base64 ? `ok ${photo.width || '?'}x${photo.height || '?'}` : 'no base64');
       if (photo?.base64) {
         // Reset camera UI state before calling back so the next open starts clean.
         setIsFullscreen(false);
@@ -52,6 +99,8 @@ export default function VisionCameraPanel({
         setZoomIndex(0);
         await onCapture?.(photo.base64, photo.uri);
       }
+    } catch (error) {
+      setCaptureStatus(`error: ${error?.message || 'unknown'}`);
     } finally {
       setIsCapturing(false);
     }
@@ -62,8 +111,22 @@ export default function VisionCameraPanel({
     setIsFullscreen(false);
     setFacing('back');
     setZoomIndex(0);
+    setCameraReady(false);
+    setCameraMountError(null);
+    setCaptureStatus('idle');
     onClose?.();
   };
+
+  const diagnosticLines = [
+    `mode=${cameraMode}`,
+    `perm=${permission?.status || 'unknown'}:${permission?.granted ? 'yes' : 'no'}`,
+    `ready=${cameraReady ? 'yes' : 'no'}`,
+    `layout=${formatLayout(cameraLayout)}`,
+    `facing=${facing}`,
+    `zoom=${zoom}`,
+    `capture=${captureStatus}`,
+    cameraMountError ? `error=${cameraMountError}` : null,
+  ].filter(Boolean);
 
   // --- Permission screen (shared by both modes) --------------------------
   if (!permission?.granted) {
@@ -97,11 +160,17 @@ export default function VisionCameraPanel({
         <CameraView
           ref={cameraRef}
           style={StyleSheet.absoluteFill}
+          onLayout={handleCameraLayout}
+          onCameraReady={handleCameraReady}
+          onMountError={handleCameraMountError}
           facing={facing}
           zoom={zoom}
           mirror={facing === 'front'}
           mode="picture"
         />
+        <View style={[styles.debugBadge, styles.fsDebugBadge]}>
+          <Text style={styles.debugText}>{diagnosticLines.join('\n')}</Text>
+        </View>
 
         {/* Top bar: close + zoom presets */}
         <View style={[styles.fsTopBar, { paddingTop: insets.top + 12 }]}>
@@ -167,7 +236,7 @@ export default function VisionCameraPanel({
   return (
     <>
       {isFullscreen && fullscreenCamera}
-      <View style={[styles.panel, style]}>
+      <View style={[styles.panel, style]} onLayout={handleCameraLayout}>
         {/* Unmount the compact camera entirely when fullscreen is open.
             This ensures only one camera session is live and cameraRef
             points exclusively to the active CameraView. */}
@@ -175,12 +244,19 @@ export default function VisionCameraPanel({
           <CameraView
             ref={cameraRef}
             style={styles.camera}
+            onLayout={handleCameraLayout}
+            onCameraReady={handleCameraReady}
+            onMountError={handleCameraMountError}
             facing={facing}
             zoom={zoom}
             mirror={facing === 'front'}
             mode="picture"
           />
         )}
+
+        <View style={styles.debugBadge}>
+          <Text style={styles.debugText}>{diagnosticLines.join('\n')}</Text>
+        </View>
 
         {/* LIVE badge */}
         <View style={styles.liveBadge}>
@@ -261,6 +337,28 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 9,
     fontWeight: '800',
+  },
+  debugBadge: {
+    position: 'absolute',
+    top: 38,
+    left: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.74)',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 7,
+    zIndex: 12,
+  },
+  fsDebugBadge: {
+    top: 96,
+    left: 20,
+    right: 20,
+  },
+  debugText: {
+    color: '#ffffff',
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: '700',
   },
   expandBtn: {
     position: 'absolute',
