@@ -4,6 +4,7 @@ import * as Location from 'expo-location';
 import ARMapNavigationView from '../ar_map_navigation_animated';
 import AIChatInterface from '../buddy_ai_chat_fullscreen_open_in_naver';
 import useAppStore from '../../src/store';
+import { getTheme } from '../../src/theme';
 
 /**
  * TourMapScreen renders the AR map and sends chat actions to the shared
@@ -15,6 +16,8 @@ export default function TourMapScreen({ navigation }) {
   const logActivity = useAppStore((s) => s.logActivity);
   const setCurrentLocation = useAppStore((s) => s.setCurrentLocation);
   const activeTourId = useAppStore((s) => s.activeTourId);
+  const themeMode = useAppStore((s) => s.themeMode);
+  const theme = getTheme(themeMode);
   const lastLoggedAtRef = useRef(0);
 
   useEffect(() => {
@@ -79,7 +82,7 @@ export default function TourMapScreen({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.mapLayer}>
         <ARMapNavigationView
           navigation={navigation}

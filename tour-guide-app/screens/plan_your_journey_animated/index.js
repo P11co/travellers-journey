@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   View,
@@ -12,6 +12,7 @@ import {
 import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useAppStore from '../../src/store';
+import { getTheme } from '../../src/theme';
 import hotspotsData from '../../src/data/hotspots.json';
 import AppleBackButton from '../../src/components/AppleBackButton';
 import RemoteImage from '../../src/components/RemoteImage';
@@ -23,6 +24,28 @@ const TIME_OPTIONS = ['Half Day (4 hrs)', 'Full Day (8 hrs)', 'Two Days (16 hrs)
 const START_TIME_HOURS = Array.from({ length: 12 }, (_, idx) => String(idx + 1));
 const START_TIME_MINUTES = ['00', '15', '30', '45'];
 const START_TIME_PERIODS = ['AM', 'PM'];
+
+const getPlanColors = (theme, themeMode) => ({
+  background: theme.background,
+  headerBg: themeMode === 'light' ? 'rgba(248, 250, 252, 0.94)' : 'rgba(19, 19, 19, 0.9)',
+  surface: theme.surface,
+  elevated: theme.elevated,
+  panel: theme.panel,
+  border: theme.border,
+  text: theme.text,
+  muted: theme.mutedText,
+  subtle: theme.subtleText,
+  accent: theme.accent,
+  accentSoft: theme.accentSoft,
+  iconSurface: theme.iconSurface,
+  input: theme.input,
+  shadow: theme.shadow,
+  danger: theme.danger,
+  success: theme.success,
+  overlay: themeMode === 'light' ? 'rgba(15, 23, 42, 0.42)' : 'rgba(0, 0, 0, 0.75)',
+  heroOverlay: themeMode === 'light' ? 'rgba(15, 23, 42, 0.25)' : 'rgba(19, 19, 19, 0.4)',
+  onAccent: '#ffffff',
+});
 
 const getSelectedActivityIds = (activityMap = {}) =>
   Object.entries(activityMap)
@@ -76,6 +99,8 @@ function PreferenceDropdown({
   type,
   disabled,
 }) {
+  const themeMode = useAppStore((s) => s.themeMode);
+  const colors = getPlanColors(getTheme(themeMode), themeMode);
   const [modalVisible, setModalVisible] = useState(false);
   const [isCustomMode, setIsCustomMode] = useState(false);
   const [customValue, setCustomValue] = useState('');
@@ -135,14 +160,18 @@ function PreferenceDropdown({
 
   return (
     <View>
-      <Text style={styles.fieldLabel}>{label}</Text>
+      <Text style={[styles.fieldLabel, { color: colors.muted }]}>{label}</Text>
       <TouchableOpacity
-        style={[styles.customSelectTrigger, disabled && styles.lockedControl]}
+        style={[
+          styles.customSelectTrigger,
+          { backgroundColor: colors.input, borderColor: colors.border },
+          disabled && styles.lockedControl,
+        ]}
         onPress={handleOpen}
         disabled={disabled}
       >
-        <Text style={styles.selectText}>{value}</Text>
-        <Text style={styles.dropdownCarat}>▼</Text>
+        <Text style={[styles.selectText, { color: colors.text }]}>{value}</Text>
+        <Text style={[styles.dropdownCarat, { color: colors.muted }]}>▼</Text>
       </TouchableOpacity>
 
       <Modal
@@ -151,9 +180,9 @@ function PreferenceDropdown({
         animationType="fade"
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Select {label}</Text>
+        <View style={[styles.modalBackdrop, { backgroundColor: colors.overlay }]}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Select {label}</Text>
 
             {!isCustomMode ? (
               <View style={styles.optionsList}>
@@ -162,14 +191,18 @@ function PreferenceDropdown({
                     key={opt}
                     style={[
                       styles.optionItem,
+                      { backgroundColor: colors.background, borderColor: colors.border },
                       value === opt && styles.optionItemActive,
+                      value === opt && { backgroundColor: colors.accentSoft, borderColor: colors.accent },
                     ]}
                     onPress={() => handleSelectPreset(opt)}
                   >
                     <Text
                       style={[
                         styles.optionText,
+                        { color: colors.muted },
                         value === opt && styles.optionTextActive,
+                        value === opt && { color: colors.accent },
                       ]}
                     >
                       {opt}
@@ -180,14 +213,18 @@ function PreferenceDropdown({
                 <TouchableOpacity
                   style={[
                     styles.optionItem,
+                    { backgroundColor: colors.background, borderColor: colors.border },
                     !isPreset && styles.optionItemActive,
+                    !isPreset && { backgroundColor: colors.accentSoft, borderColor: colors.accent },
                   ]}
                   onPress={handleSelectCustomTrigger}
                 >
                   <Text
                     style={[
                       styles.optionText,
+                      { color: colors.muted },
                       !isPreset && styles.optionTextActive,
+                      !isPreset && { color: colors.accent },
                     ]}
                   >
                     Custom... {!isPreset && `(${value})`}
@@ -196,11 +233,14 @@ function PreferenceDropdown({
               </View>
             ) : (
               <View style={styles.customInputContainer}>
-                <Text style={styles.customInputLabel}>
+                <Text style={[styles.customInputLabel, { color: colors.muted }]}>
                   {type === 'budget' ? 'Enter budget in USD:' : 'Enter duration in hours (1-48):'}
                 </Text>
                 <TextInput
-                  style={styles.modalTextInput}
+                  style={[
+                    styles.modalTextInput,
+                    { backgroundColor: colors.input, borderColor: colors.border, color: colors.text },
+                  ]}
                   keyboardType="numeric"
                   value={customValue}
                   onChangeText={(txt) => {
@@ -208,12 +248,12 @@ function PreferenceDropdown({
                     setErrorMsg('');
                   }}
                   placeholder={type === 'budget' ? 'e.g. 75' : 'e.g. 6'}
-                  placeholderTextColor="#666"
+                  placeholderTextColor={colors.subtle}
                   autoFocus={true}
                 />
 
                 {Boolean(errorMsg) && (
-                  <Text style={styles.modalErrorText}>{errorMsg}</Text>
+                  <Text style={[styles.modalErrorText, { color: colors.danger }]}>{errorMsg}</Text>
                 )}
 
                 <View style={styles.modalButtonsRow}>
@@ -221,14 +261,19 @@ function PreferenceDropdown({
                     style={[styles.modalButton, styles.modalButtonRowItem, styles.modalButtonCancel]}
                     onPress={() => setIsCustomMode(false)}
                   >
-                    <Text style={styles.modalButtonTextCancel}>Back</Text>
+                    <Text style={[styles.modalButtonTextCancel, { color: colors.muted }]}>Back</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    style={[styles.modalButton, styles.modalButtonRowItem, styles.modalButtonSave]}
+                    style={[
+                      styles.modalButton,
+                      styles.modalButtonRowItem,
+                      styles.modalButtonSave,
+                      { backgroundColor: colors.accent },
+                    ]}
                     onPress={handleSaveCustom}
                   >
-                    <Text style={styles.modalButtonTextSave}>Save</Text>
+                    <Text style={[styles.modalButtonTextSave, { color: colors.onAccent }]}>Save</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -239,7 +284,7 @@ function PreferenceDropdown({
                 style={styles.closeButton}
                 onPress={() => setModalVisible(false)}
               >
-                <Text style={styles.closeButtonText}>Cancel</Text>
+                <Text style={[styles.closeButtonText, { color: colors.muted }]}>Cancel</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -255,6 +300,8 @@ function StartTimePicker({
   onChange,
   disabled,
 }) {
+  const themeMode = useAppStore((s) => s.themeMode);
+  const colors = getPlanColors(getTheme(themeMode), themeMode);
   const [modalVisible, setModalVisible] = useState(false);
   const [draftParts, setDraftParts] = useState(() => parseStartTimeParts(value));
 
@@ -276,11 +323,17 @@ function StartTimePicker({
   const renderChip = (text, active, onPress, extraStyle) => (
     <TouchableOpacity
       key={text}
-      style={[styles.timePickerChip, extraStyle, active && styles.timePickerChipActive]}
+      style={[
+        styles.timePickerChip,
+        { backgroundColor: colors.background, borderColor: colors.border },
+        extraStyle,
+        active && styles.timePickerChipActive,
+        active && { backgroundColor: colors.accentSoft, borderColor: colors.accent },
+      ]}
       onPress={onPress}
       activeOpacity={0.85}
     >
-      <Text style={[styles.timePickerChipText, active && styles.timePickerChipTextActive]}>
+      <Text style={[styles.timePickerChipText, { color: colors.muted }, active && styles.timePickerChipTextActive, active && { color: colors.accent }]}>
         {text}
       </Text>
     </TouchableOpacity>
@@ -288,14 +341,18 @@ function StartTimePicker({
 
   return (
     <View>
-      <Text style={styles.fieldLabel}>{label}</Text>
+      <Text style={[styles.fieldLabel, { color: colors.muted }]}>{label}</Text>
       <TouchableOpacity
-        style={[styles.customSelectTrigger, disabled && styles.lockedControl]}
+        style={[
+          styles.customSelectTrigger,
+          { backgroundColor: colors.input, borderColor: colors.border },
+          disabled && styles.lockedControl,
+        ]}
         onPress={openPicker}
         disabled={disabled}
       >
-        <Text style={styles.selectText}>{formatStartTimeLabel(value)}</Text>
-        <Text style={styles.dropdownCarat}>▼</Text>
+        <Text style={[styles.selectText, { color: colors.text }]}>{formatStartTimeLabel(value)}</Text>
+        <Text style={[styles.dropdownCarat, { color: colors.muted }]}>▼</Text>
       </TouchableOpacity>
 
       <Modal
@@ -304,25 +361,25 @@ function StartTimePicker({
         animationType="fade"
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.modalContent, styles.startTimeModalContent]}>
+        <View style={[styles.modalBackdrop, { backgroundColor: colors.overlay }]}>
+          <View style={[styles.modalContent, styles.startTimeModalContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.timePickerHeaderRow}>
               <TouchableOpacity onPress={() => setModalVisible(false)} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-                <Text style={styles.timePickerActionText}>Cancel</Text>
+                <Text style={[styles.timePickerActionText, { color: colors.muted }]}>Cancel</Text>
               </TouchableOpacity>
-              <Text style={styles.timePickerHeaderTitle}>Start Time</Text>
+              <Text style={[styles.timePickerHeaderTitle, { color: colors.text }]}>Start Time</Text>
               <TouchableOpacity onPress={handleDone} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-                <Text style={[styles.timePickerActionText, styles.timePickerDoneText]}>Done</Text>
+                <Text style={[styles.timePickerActionText, styles.timePickerDoneText, { color: colors.accent }]}>Done</Text>
               </TouchableOpacity>
             </View>
 
-            <View style={styles.timePreviewPill}>
-              <Text style={styles.timePreviewText}>
+            <View style={[styles.timePreviewPill, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}>
+              <Text style={[styles.timePreviewText, { color: colors.accent }]}>
                 {`${draftParts.hour}:${draftParts.minute} ${draftParts.period}`}
               </Text>
             </View>
 
-            <Text style={styles.timePickerSectionLabel}>Hour</Text>
+            <Text style={[styles.timePickerSectionLabel, { color: colors.muted }]}>Hour</Text>
             <View style={styles.timePickerHourGrid}>
               {START_TIME_HOURS.map((hour) => renderChip(
                 hour,
@@ -334,7 +391,7 @@ function StartTimePicker({
 
             <View style={styles.timePickerSplitRow}>
               <View style={styles.timePickerSplitColumn}>
-                <Text style={styles.timePickerSectionLabel}>Minute</Text>
+                <Text style={[styles.timePickerSectionLabel, { color: colors.muted }]}>Minute</Text>
                 <View style={styles.timePickerOptionRow}>
                   {START_TIME_MINUTES.map((minute) => renderChip(
                     minute,
@@ -346,7 +403,7 @@ function StartTimePicker({
               </View>
 
               <View style={styles.timePickerSplitColumn}>
-                <Text style={styles.timePickerSectionLabel}>Period</Text>
+                <Text style={[styles.timePickerSectionLabel, { color: colors.muted }]}>Period</Text>
                 <View style={styles.timePickerOptionRow}>
                   {START_TIME_PERIODS.map((period) => renderChip(
                     period,
@@ -365,6 +422,9 @@ function StartTimePicker({
 }
 
 function TimeBudgetWarningModal({ visible, detail, onClose }) {
+  const themeMode = useAppStore((s) => s.themeMode);
+  const colors = getPlanColors(getTheme(themeMode), themeMode);
+
   if (!detail) return null;
 
   const formatMins = (mins) => {
@@ -386,48 +446,48 @@ function TimeBudgetWarningModal({ visible, detail, onClose }) {
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={styles.modalBackdrop}>
-        <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Not Enough Time</Text>
+      <View style={[styles.modalBackdrop, { backgroundColor: colors.overlay }]}>
+        <View style={[styles.modalContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.modalTitle, { color: colors.text }]}>Not Enough Time</Text>
           
-          <Text style={styles.modalWarningText}>
+          <Text style={[styles.modalWarningText, { color: colors.text }]}>
             Your {budgetStr} budget is too short.
           </Text>
 
-          <View style={styles.stopsListContainer}>
+          <View style={[styles.stopsListContainer, { backgroundColor: colors.background, borderColor: colors.border }]}>
             {detail.stops?.map((stop, idx) => (
               <View key={idx} style={styles.stopDurationRow}>
-                <Text style={styles.stopNameText}>{stop.name}</Text>
-                <Text style={styles.stopDurationText}>{formatMins(stop.duration_minutes)}</Text>
+                <Text style={[styles.stopNameText, { color: colors.text }]}>{stop.name}</Text>
+                <Text style={[styles.stopDurationText, { color: colors.muted }]}>{formatMins(stop.duration_minutes)}</Text>
               </View>
             ))}
             <View style={styles.stopDurationRow}>
-              <Text style={styles.stopNameTextSubtle}>Travel time</Text>
-              <Text style={styles.stopDurationTextSubtle}>{travelStr}</Text>
+              <Text style={[styles.stopNameTextSubtle, { color: colors.subtle }]}>Travel time</Text>
+              <Text style={[styles.stopDurationTextSubtle, { color: colors.subtle }]}>{travelStr}</Text>
             </View>
           </View>
 
-          <View style={styles.budgetSummaryContainer}>
+          <View style={[styles.budgetSummaryContainer, { backgroundColor: colors.background, borderColor: colors.border }]}>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabelText}>Estimated total:</Text>
-              <Text style={styles.summaryValueText}>{totalStr}</Text>
+              <Text style={[styles.summaryLabelText, { color: colors.muted }]}>Estimated total:</Text>
+              <Text style={[styles.summaryValueText, { color: colors.text }]}>{totalStr}</Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabelTextAlert}>Over budget by:</Text>
-              <Text style={styles.summaryValueTextAlert}>{overStr}</Text>
+              <Text style={[styles.summaryLabelTextAlert, { color: colors.danger }]}>Over budget by:</Text>
+              <Text style={[styles.summaryValueTextAlert, { color: colors.danger }]}>{overStr}</Text>
             </View>
           </View>
 
-          <Text style={styles.modalWarningSubText}>
+          <Text style={[styles.modalWarningSubText, { color: colors.muted }]}>
             Please increase your time budget or remove a stop.
           </Text>
 
           <TouchableOpacity
-            style={styles.timeWarningButton}
+            style={[styles.timeWarningButton, { backgroundColor: colors.accent }]}
             onPress={onClose}
             activeOpacity={0.85}
           >
-            <Text style={styles.timeWarningButtonText}>OK</Text>
+            <Text style={[styles.timeWarningButtonText, { color: colors.onAccent }]}>OK</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -438,6 +498,9 @@ function TimeBudgetWarningModal({ visible, detail, onClose }) {
 export default function PlanYourJourneyView({ navigation }) {
   const insets = useSafeAreaInsets();
   const scrollViewRef = useRef(null);
+  const themeMode = useAppStore((s) => s.themeMode);
+  const theme = getTheme(themeMode);
+  const colors = useMemo(() => getPlanColors(theme, themeMode), [theme, themeMode]);
   const draft = useAppStore((s) => s.draft);
   const updateDraft = useAppStore((s) => s.updateDraft);
   const toggleDraftActivity = useAppStore((s) => s.toggleDraftActivity);
@@ -546,22 +609,30 @@ export default function PlanYourJourneyView({ navigation }) {
     return (
       <View style={styles.reorderControls}>
         <TouchableOpacity
-          style={[styles.reorderMoveButton, destIdx === 0 && styles.reorderMoveButtonDisabled]}
+          style={[
+            styles.reorderMoveButton,
+            { backgroundColor: colors.elevated, borderColor: colors.border },
+            destIdx === 0 && styles.reorderMoveButtonDisabled,
+          ]}
           onPress={() => reorderGeneratedStop(destIdx, destIdx - 1)}
           disabled={destIdx === 0}
           activeOpacity={0.75}
           accessibilityLabel="Move stop up"
         >
-          <Text style={[styles.reorderMoveText, destIdx === 0 && styles.reorderMoveTextDisabled]}>↑</Text>
+          <Text style={[styles.reorderMoveText, { color: colors.accent }, destIdx === 0 && styles.reorderMoveTextDisabled]}>↑</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.reorderMoveButton, destIdx === destCount - 1 && styles.reorderMoveButtonDisabled]}
+          style={[
+            styles.reorderMoveButton,
+            { backgroundColor: colors.elevated, borderColor: colors.border },
+            destIdx === destCount - 1 && styles.reorderMoveButtonDisabled,
+          ]}
           onPress={() => reorderGeneratedStop(destIdx, destIdx + 1)}
           disabled={destIdx === destCount - 1}
           activeOpacity={0.75}
           accessibilityLabel="Move stop down"
         >
-          <Text style={[styles.reorderMoveText, destIdx === destCount - 1 && styles.reorderMoveTextDisabled]}>↓</Text>
+          <Text style={[styles.reorderMoveText, { color: colors.accent }, destIdx === destCount - 1 && styles.reorderMoveTextDisabled]}>↓</Text>
         </TouchableOpacity>
       </View>
     );
@@ -573,24 +644,24 @@ export default function PlanYourJourneyView({ navigation }) {
 
       return (
         <View key={stop.id || `${stop.name}-${flatIndex}`} style={styles.stopsTimelineRow}>
-          <View style={styles.travelNodeCircle}>
-            <Text style={styles.travelNodeText}>{isTaxi ? 'T' : 'W'}</Text>
+          <View style={[styles.travelNodeCircle, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
+            <Text style={[styles.travelNodeText, { color: colors.muted }]}>{isTaxi ? 'T' : 'W'}</Text>
           </View>
-          <View style={[styles.stopInfoDataCard, styles.travelInfoDataCard]}>
+          <View style={[styles.stopInfoDataCard, styles.travelInfoDataCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.stopInfoCardCoreBody}>
               <View style={styles.stopCardHeaderSplitRow}>
-                <Text style={styles.travelNodeTitle}>{stop.name}</Text>
-                <Text style={styles.stopNodeTimeLabel}>{stop.time}</Text>
+                <Text style={[styles.travelNodeTitle, { color: colors.muted }]}>{stop.name}</Text>
+                <Text style={[styles.stopNodeTimeLabel, { color: colors.subtle }]}>{stop.time}</Text>
               </View>
-              <Text style={styles.stopCardTextExcerpt} numberOfLines={2}>
+              <Text style={[styles.stopCardTextExcerpt, { color: colors.muted }]} numberOfLines={2}>
                 {stop.description || stop.activity || (isTaxi ? 'Taxi to the next stop.' : 'Walk to the next stop.')}
               </Text>
               <View style={styles.tagPillsContainerCluster}>
-                <View style={styles.travelCardTagPill}>
-                  <Text style={styles.interiorPillText}>{stop.duration}</Text>
+                <View style={[styles.travelCardTagPill, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
+                  <Text style={[styles.interiorPillText, { color: colors.muted }]}>{stop.duration}</Text>
                 </View>
-                <View style={styles.travelCardTagPill}>
-                  <Text style={styles.interiorPillText}>{isTaxi ? 'TAXI' : 'WALK'}</Text>
+                <View style={[styles.travelCardTagPill, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
+                  <Text style={[styles.interiorPillText, { color: colors.muted }]}>{isTaxi ? 'TAXI' : 'WALK'}</Text>
                 </View>
               </View>
             </View>
@@ -605,14 +676,14 @@ export default function PlanYourJourneyView({ navigation }) {
     if (isLunch) {
       return (
         <View key={stop.id || `${stop.name}-${flatIndex}`} style={styles.stopsTimelineRow}>
-          <View style={styles.lunchIconCircleNodeElement}>
+          <View style={[styles.lunchIconCircleNodeElement, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}>
             <Text style={styles.lunchIconChar}>🍴</Text>
           </View>
-          <View style={styles.lunchSegmentBannerBox}>
+          <View style={[styles.lunchSegmentBannerBox, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}>
             {renderMoveControls(flatIndex, destIdx)}
             <View style={styles.lunchBannerTextWrap}>
-              <Text style={styles.lunchBannerMainText}>{stop.name}</Text>
-              <Text style={styles.lunchBannerTimeText}>{stop.time}</Text>
+              <Text style={[styles.lunchBannerMainText, { color: colors.text }]}>{stop.name}</Text>
+              <Text style={[styles.lunchBannerTimeText, { color: colors.accent }]}>{stop.time}</Text>
             </View>
           </View>
         </View>
@@ -621,28 +692,33 @@ export default function PlanYourJourneyView({ navigation }) {
 
     return (
       <View key={stop.id || `${stop.name}-${flatIndex}`} style={styles.stopsTimelineRow}>
-        <View style={[styles.circleNodeCountElement, destIdx === 0 && styles.activeBorderHighlightCircle]}>
-          <Text style={destIdx === 0 ? styles.nodeCountActiveText : styles.nodeCountMutedText}>
+        <View style={[
+          styles.circleNodeCountElement,
+          { backgroundColor: colors.surface, borderColor: colors.border },
+          destIdx === 0 && styles.activeBorderHighlightCircle,
+          destIdx === 0 && { borderColor: colors.accent },
+        ]}>
+          <Text style={[destIdx === 0 ? styles.nodeCountActiveText : styles.nodeCountMutedText, { color: destIdx === 0 ? colors.accent : colors.muted }]}>
             {String(destIdx + 1).padStart(2, '0')}
           </Text>
         </View>
-        <View style={styles.stopInfoDataCard}>
+        <View style={[styles.stopInfoDataCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           {renderMoveControls(flatIndex, destIdx)}
           <View style={styles.stopInfoCardCoreBody}>
             <View style={styles.stopCardHeaderSplitRow}>
-              <Text style={styles.stopNodeTitle}>{stop.name}</Text>
-              <Text style={styles.stopNodeTimeLabel}>{stop.time}</Text>
+              <Text style={[styles.stopNodeTitle, { color: colors.text }]}>{stop.name}</Text>
+              <Text style={[styles.stopNodeTimeLabel, { color: colors.subtle }]}>{stop.time}</Text>
             </View>
-            <Text style={styles.stopCardTextExcerpt} numberOfLines={2}>
+            <Text style={[styles.stopCardTextExcerpt, { color: colors.muted }]} numberOfLines={2}>
               {stop.description}
             </Text>
             <View style={styles.tagPillsContainerCluster}>
-              <View style={styles.interiorCardTagPill}>
-                <Text style={styles.interiorPillText}>{stop.duration}</Text>
+              <View style={[styles.interiorCardTagPill, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
+                <Text style={[styles.interiorPillText, { color: colors.muted }]}>{stop.duration}</Text>
               </View>
               {(stop.tags || []).slice(0, 1).map((tag) => (
-                <View key={tag} style={styles.interiorCardTagPill}>
-                  <Text style={styles.interiorPillText}>{tag}</Text>
+                <View key={tag} style={[styles.interiorCardTagPill, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
+                  <Text style={[styles.interiorPillText, { color: colors.muted }]}>{tag}</Text>
                 </View>
               ))}
             </View>
@@ -661,7 +737,9 @@ export default function PlanYourJourneyView({ navigation }) {
         key={hotspot.id}
         style={[
           styles.activityRowCard,
+          { backgroundColor: colors.surface, borderColor: colors.border },
           selected && styles.activityRowCardActive,
+          selected && { backgroundColor: colors.accentSoft, borderColor: colors.accent },
           (isPlanLocked || isUnavailable) && styles.lockedSelectionCard,
         ]}
       >
@@ -672,23 +750,23 @@ export default function PlanYourJourneyView({ navigation }) {
           activeOpacity={0.85}
         >
           <View style={styles.activityCardLeftInfo}>
-            <View style={styles.activityIconBox}>
+            <View style={[styles.activityIconBox, { backgroundColor: colors.iconSurface }]}>
               {hotspot.image_url && (
                 <RemoteImage sourcePath={hotspot.image_url} style={styles.activityImage} />
               )}
             </View>
             <View style={styles.activityTextWrap}>
-              <Text style={styles.activityMainTitleText} numberOfLines={2}>
+              <Text style={[styles.activityMainTitleText, { color: colors.text }]} numberOfLines={2}>
                 {hotspot.name}
               </Text>
-              <Text style={styles.activityCategoryText} numberOfLines={2}>
+              <Text style={[styles.activityCategoryText, { color: colors.subtle }]} numberOfLines={2}>
                 {hotspot.category} • {hotspot.est_duration_mins} min
               </Text>
-              <Text style={styles.activityDescriptionText} numberOfLines={3}>
+              <Text style={[styles.activityDescriptionText, { color: colors.muted }]} numberOfLines={3}>
                 {hotspot.short_desc}
               </Text>
               {isUnavailable && (
-                <Text style={styles.activityAvailabilityText}>
+                <Text style={[styles.activityAvailabilityText, { color: colors.danger }]}>
                   Closed to public visits
                 </Text>
               )}
@@ -697,19 +775,21 @@ export default function PlanYourJourneyView({ navigation }) {
         </TouchableOpacity>
         <View style={styles.activityActionColumn}>
           <TouchableOpacity
-            style={styles.activityMoreButton}
+            style={[styles.activityMoreButton, { backgroundColor: colors.elevated, borderColor: colors.border }]}
             onPress={() => navigation.navigate('HotspotDetail', { hotspotId: hotspot.id })}
             activeOpacity={0.8}
             hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
           >
-            <Text style={styles.activityMoreText}>...</Text>
+            <Text style={[styles.activityMoreText, { color: colors.muted }]}>...</Text>
           </TouchableOpacity>
           <View style={[
             styles.nativeCheckboxOutline,
+            { backgroundColor: colors.input, borderColor: colors.border },
             selected && styles.checkboxActiveState,
+            selected && { borderColor: colors.accent },
             isPlanLocked && styles.lockedCheckbox,
           ]}>
-            {selected && <Text style={styles.checkboxCheckSymbol}>✓</Text>}
+            {selected && <Text style={[styles.checkboxCheckSymbol, { color: colors.accent }]}>✓</Text>}
           </View>
         </View>
       </View>
@@ -717,16 +797,16 @@ export default function PlanYourJourneyView({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={{ height: insets.top }} />
 
       {/* 1. STICKY TOP APP HEADER */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: colors.headerBg, borderColor: colors.border }]}>
         <View style={styles.headerLeftRow}>
           <AppleBackButton onPress={handleGoBack} />
         </View>
         <TouchableOpacity style={styles.menuButton} onPress={() => navigation.navigate('Settings')}>
-          <Svg width="20" height="20" fill="none" stroke="#9ca3af" strokeWidth="2" viewBox="0 0 24 24">
+          <Svg width="20" height="20" fill="none" stroke={colors.muted} strokeWidth="2" viewBox="0 0 24 24">
             <Path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             <Path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </Svg>
@@ -742,19 +822,19 @@ export default function PlanYourJourneyView({ navigation }) {
       >
         {/* Title Hero Block */}
         <View style={styles.heroBlock}>
-          <Text style={styles.mainHeadline}>Plan Your Journey</Text>
-          <Text style={styles.heroSubtitle}>
+          <Text style={[styles.mainHeadline, { color: colors.text }]}>Plan Your Journey</Text>
+          <Text style={[styles.heroSubtitle, { color: colors.muted }]}>
             Select your preferred destinations and customize your itinerary settings to generate a personalized route.
           </Text>
         </View>
 
         {/* PREFERENCES CONFIGURATION SELECT PANEL */}
-        <View style={styles.sectionCard}>
+        <View style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={styles.sectionHeaderRow}>
-            <Svg width="16" height="16" fill="none" stroke="#5c77ff" strokeWidth="2" viewBox="0 0 24 24" style={styles.inlineIconMargin}>
+            <Svg width="16" height="16" fill="none" stroke={colors.accent} strokeWidth="2" viewBox="0 0 24 24" style={styles.inlineIconMargin}>
               <Path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
             </Svg>
-            <Text style={styles.sectionTitle}>Preferences</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Preferences</Text>
           </View>
 
           <View style={styles.formGroupSpacing}>
@@ -788,28 +868,28 @@ export default function PlanYourJourneyView({ navigation }) {
         {/* PRIMARY LOCATION SELECT HIGHLIGHT */}
         <View style={styles.sectionContainerMargin}>
           <View style={styles.sectionHeaderRow}>
-            <Svg width="16" height="16" fill="none" stroke="#5c77ff" strokeWidth="2" viewBox="0 0 24 24" style={styles.inlineIconMargin}>
+            <Svg width="16" height="16" fill="none" stroke={colors.accent} strokeWidth="2" viewBox="0 0 24 24" style={styles.inlineIconMargin}>
               <Path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
               <Path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
             </Svg>
-            <Text style={styles.sectionTitle}>Primary Location</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Primary Location</Text>
           </View>
 
-          <View style={styles.parallaxCardWrapper}>
+          <View style={[styles.parallaxCardWrapper, { borderColor: colors.accent, shadowColor: colors.accent }]}>
             <RemoteImage
               sourcePath={primaryLocationImage}
               style={styles.parallaxHeroImage}
               resizeMode="cover"
             />
-            <View style={styles.imageDimOverlay} />
+            <View style={[styles.imageDimOverlay, { backgroundColor: colors.heroOverlay }]} />
             <View style={styles.parallaxCardTextOverlay}>
               <View style={styles.flexSplitRow}>
                 <View>
                   <Text style={styles.parallaxCardHeadline}>Gyeongbokgung Palace</Text>
-                  <Text style={styles.parallaxAccentSubtext}>The Heart of Old Seoul</Text>
+                  <Text style={[styles.parallaxAccentSubtext, { color: colors.accent }]}>The Heart of Old Seoul</Text>
                 </View>
-                <View style={styles.whiteCheckCircle}>
-                  <Text style={styles.blueCheckChar}>✓</Text>
+                <View style={[styles.whiteCheckCircle, { backgroundColor: colors.surface }]}>
+                  <Text style={[styles.blueCheckChar, { color: colors.accent }]}>✓</Text>
                 </View>
               </View>
             </View>
@@ -819,17 +899,17 @@ export default function PlanYourJourneyView({ navigation }) {
         {/* NEARBY ACTIVITIES SELECTION STACK */}
         <View style={styles.sectionContainerMargin}>
           <View style={styles.sectionHeaderRow}>
-            <Svg width="16" height="16" fill="none" stroke="#5c77ff" strokeWidth="2" viewBox="0 0 24 24" style={styles.inlineIconMargin}>
+            <Svg width="16" height="16" fill="none" stroke={colors.accent} strokeWidth="2" viewBox="0 0 24 24" style={styles.inlineIconMargin}>
               <Path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
             </Svg>
-            <Text style={styles.sectionTitle}>Nearby Activities</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Nearby Activities</Text>
           </View>
 
           <View style={styles.activityListContainer}>
             {hotspotsData.map(renderHotspotActivity)}
           </View>
           {isPlanLocked && (
-            <Text style={styles.lockedSelectionText}>
+            <Text style={[styles.lockedSelectionText, { color: colors.subtle }]}>
               Route inputs are locked after generation. Open locations to learn more, or save this route and create a new journey.
             </Text>
           )}
@@ -838,37 +918,37 @@ export default function PlanYourJourneyView({ navigation }) {
 
         {hasGeneratedRoute && (
           <>
-            <View style={styles.dividerLine} />
+            <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
 
             {/* GENERATED ROUTE REAL-TIME PREVIEW TILES */}
             <View style={styles.sectionContainerMargin}>
               <View style={styles.routeSplitHeaderRow}>
                 <View style={styles.routeHeaderMain}>
                   <View style={styles.badgeLabelContainerAlign}>
-                    <Text style={styles.routeHeadlineText}>Generated Route</Text>
-                    <View style={styles.aiBadgeTag}>
-                      <Text style={styles.aiBadgeText}>AI OPTIMIZED</Text>
+                  <Text style={[styles.routeHeadlineText, { color: colors.text }]}>Generated Route</Text>
+                  <View style={[styles.aiBadgeTag, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}>
+                    <Text style={[styles.aiBadgeText, { color: colors.accent }]}>AI OPTIMIZED</Text>
                     </View>
                   </View>
-                  <Text style={styles.dragSubtextHelper}>
+                  <Text style={[styles.dragSubtextHelper, { color: colors.subtle }]}>
                     {routeHasTravelLegs ? 'Travel time is included between stops.' : 'Use the move controls to reorder your schedule.'}
                   </Text>
                 </View>
                 <View style={styles.rightAlignSummaryBlock}>
-                  <Text style={styles.durationSummaryText}>
+                  <Text style={[styles.durationSummaryText, { color: colors.text }]}>
                     {generatedItinerary?.duration || draft.availableTime.replace(/[()]/g, '')}
                   </Text>
-                  <Text style={styles.dragSubtextHelper}>Estimated Duration</Text>
+                  <Text style={[styles.dragSubtextHelper, { color: colors.subtle }]}>Estimated Duration</Text>
                 </View>
               </View>
 
               <View style={styles.timelineStructuralTrack}>
-                <View style={styles.timelineLine} pointerEvents="none" />
+                <View style={[styles.timelineLine, { backgroundColor: colors.border }]} pointerEvents="none" />
                 {routeStops.length ? (
                   routeStops.map(renderRouteStop)
                 ) : (
                   <View style={styles.emptyRoutePreview}>
-                    <Text style={styles.dragSubtextHelper}>
+                    <Text style={[styles.dragSubtextHelper, { color: colors.subtle }]}>
                       The itinerary was created, but no stops were returned.
                     </Text>
                   </View>
@@ -881,50 +961,59 @@ export default function PlanYourJourneyView({ navigation }) {
       </ScrollView>
 
       {/* 3. PERSISTENT LOWER HORIZONTAL FOOTER INTERACTION UTILITY DOCK */}
-      <View style={styles.bottomStickyActionTray}>
+      <View style={[styles.bottomStickyActionTray, { backgroundColor: colors.panel, borderColor: colors.border }]}>
         {!hasGeneratedRoute && (
           <TouchableOpacity
             style={styles.aiFillToggleRow}
             onPress={toggleAiFill}
             activeOpacity={0.8}
           >
-            <View style={[styles.aiFillCheckbox, draft.allowAiFill && styles.aiFillCheckboxActive]}>
-              {draft.allowAiFill && <Text style={styles.aiFillCheckText}>✓</Text>}
+            <View style={[
+              styles.aiFillCheckbox,
+              { backgroundColor: colors.input, borderColor: colors.border },
+              draft.allowAiFill && styles.aiFillCheckboxActive,
+              draft.allowAiFill && { backgroundColor: colors.accentSoft, borderColor: colors.accent },
+            ]}>
+              {draft.allowAiFill && <Text style={[styles.aiFillCheckText, { color: colors.accent }]}>✓</Text>}
             </View>
-            <Text style={styles.aiFillToggleText}>
+            <Text style={[styles.aiFillToggleText, { color: colors.muted }]}>
               AI can fill if timeslots are too free
             </Text>
           </TouchableOpacity>
         )}
         <View style={styles.bottomHorizontalDockAlignRow}>
           <TouchableOpacity
-            style={[styles.finalizePrimaryActionButton, isLoadingItinerary && styles.disabledButton]}
+            style={[
+              styles.finalizePrimaryActionButton,
+              { backgroundColor: colors.accent, shadowColor: colors.accent },
+              isLoadingItinerary && styles.disabledButton,
+            ]}
             onPress={handlePrimaryAction}
             disabled={isLoadingItinerary}
           >
             {isLoadingItinerary ? (
-              <ActivityIndicator color="#131313" />
+              <ActivityIndicator color={colors.onAccent} />
             ) : (
-              <Text style={styles.finalizeButtonText}>
+              <Text style={[styles.finalizeButtonText, { color: colors.onAccent }]}>
                 {hasGeneratedRoute ? 'Save & View Itineraries' : '✨ Generate Itinerary'}
               </Text>
             )}
           </TouchableOpacity>
         </View>
         {bottomError && !timeBudgetWarning && (
-          <Text style={[styles.errorText, styles.finalizeErrorText]}>{bottomError}</Text>
+          <Text style={[styles.errorText, styles.finalizeErrorText, { color: colors.danger }]}>{bottomError}</Text>
         )}
       </View>
 
       {isLoadingItinerary && (
         <View style={[styles.generationNoticeOverlay, { top: insets.top + 68 }]} pointerEvents="none">
-          <View style={styles.generationNoticePanel}>
-            <View style={styles.generationNoticeIcon}>
-              <ActivityIndicator size="small" color="#8ca1ff" />
+          <View style={[styles.generationNoticePanel, { backgroundColor: colors.panel, borderColor: colors.border, shadowColor: colors.shadow }]}>
+            <View style={[styles.generationNoticeIcon, { backgroundColor: colors.accentSoft }]}>
+              <ActivityIndicator size="small" color={colors.accent} />
             </View>
             <View style={styles.generationNoticeTextWrap}>
-              <Text style={styles.generationNoticeTitle}>Generating itinerary</Text>
-              <Text style={styles.generationNoticeSubtitle}>
+              <Text style={[styles.generationNoticeTitle, { color: colors.text }]}>Generating itinerary</Text>
+              <Text style={[styles.generationNoticeSubtitle, { color: colors.muted }]}>
                 This may take a while. Click into (...) to learn more
               </Text>
             </View>

@@ -9,11 +9,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import hotspotsData from '../../src/data/hotspots.json';
 import useAppStore from '../../src/store';
+import { getTheme } from '../../src/theme';
 import AppleBackButton from '../../src/components/AppleBackButton';
 import RemoteImage from '../../src/components/RemoteImage';
 
 export default function HotspotDetailScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
+  const themeMode = useAppStore((s) => s.themeMode);
+  const theme = getTheme(themeMode);
   const hotspotId = route?.params?.hotspotId;
   const hotspot = hotspotsData.find((item) => item.id === hotspotId);
   const activities = useAppStore((s) => s.draft.activities);
@@ -32,13 +35,13 @@ export default function HotspotDetailScreen({ navigation, route }) {
 
   if (!hotspot) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 20 }]}>
+      <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top + 12, paddingBottom: insets.bottom + 20 }]}>
         <View style={styles.header}>
           <AppleBackButton onPress={goBack} />
         </View>
         <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>Activity not found</Text>
-          <Text style={styles.emptyBody}>Go back and choose another nearby activity.</Text>
+          <Text style={[styles.emptyTitle, { color: theme.text }]}>Activity not found</Text>
+          <Text style={[styles.emptyBody, { color: theme.mutedText }]}>Go back and choose another nearby activity.</Text>
         </View>
       </View>
     );
@@ -50,10 +53,10 @@ export default function HotspotDetailScreen({ navigation, route }) {
   const openingHoursLabel = openingHours?.display || 'Hours vary by location';
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 20 }]}>
+    <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top + 12, paddingBottom: insets.bottom + 20 }]}>
       <View style={styles.header}>
         <AppleBackButton onPress={goBack} />
-        <Text style={styles.headerHint}>Swipe from left edge</Text>
+        <Text style={[styles.headerHint, { color: theme.subtleText }]}>Swipe from left edge</Text>
       </View>
 
       <ScrollView
@@ -62,21 +65,30 @@ export default function HotspotDetailScreen({ navigation, route }) {
         showsVerticalScrollIndicator={false}
       >
         {hotspot.image_url && (
-          <View style={styles.imageFrame}>
+          <View style={[styles.imageFrame, { backgroundColor: theme.iconSurface }]}>
             <RemoteImage sourcePath={hotspot.image_url} style={styles.image} resizeMode="cover" />
           </View>
         )}
 
-        <View style={styles.card}>
-          <Text style={styles.category}>
+        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Text style={[styles.category, { color: theme.accent }]}>
             {hotspot.category} • {hotspot.est_duration_mins} min
           </Text>
-          <Text style={styles.title}>{hotspot.name}</Text>
-          <Text style={styles.description}>{hotspot.short_desc}</Text>
+          <Text style={[styles.title, { color: theme.text }]}>{hotspot.name}</Text>
+          <Text style={[styles.description, { color: theme.mutedText }]}>{hotspot.short_desc}</Text>
 
           <View style={styles.metaRow}>
-            <View style={[styles.hoursPill, isUnavailable && styles.hoursPillUnavailable]}>
-              <Text style={[styles.hoursPillText, isUnavailable && styles.hoursPillTextUnavailable]}>
+            <View style={[
+              styles.hoursPill,
+              { backgroundColor: themeMode === 'light' ? 'rgba(5, 150, 105, 0.12)' : 'rgba(34, 197, 94, 0.14)' },
+              isUnavailable && styles.hoursPillUnavailable,
+            ]}>
+              <Text style={[
+                styles.hoursPillText,
+                { color: theme.success },
+                isUnavailable && styles.hoursPillTextUnavailable,
+                isUnavailable && { color: theme.danger },
+              ]}>
                 {openingHoursLabel}
               </Text>
             </View>
@@ -85,14 +97,17 @@ export default function HotspotDetailScreen({ navigation, route }) {
           <TouchableOpacity
             style={[
               styles.selectButton,
+              { backgroundColor: theme.accent },
               selected && styles.selectButtonActive,
+              selected && { backgroundColor: themeMode === 'light' ? theme.accentSoft : '#334155', borderColor: theme.accent },
               (isPlanLocked || isUnavailable) && styles.selectButtonLocked,
+              (isPlanLocked || isUnavailable) && { backgroundColor: theme.elevated },
             ]}
             onPress={() => toggleDraftActivity(hotspot.id)}
             disabled={isPlanLocked || isUnavailable}
             activeOpacity={0.86}
           >
-            <Text style={styles.selectButtonText}>
+            <Text style={[styles.selectButtonText, { color: selected && themeMode === 'light' ? theme.accent : '#ffffff' }]}>
               {isPlanLocked ? 'Route Locked' : isUnavailable ? 'Closed to Public Visits' : selected ? 'Included in Route' : 'Add to Route'}
             </Text>
           </TouchableOpacity>
