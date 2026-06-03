@@ -78,7 +78,7 @@ For provider-level vision fallback:
 
 - Split vision model configuration by provider.
 - Keep OpenRouter primary vision model configurable and defaulting to the current MiMo model.
-- Add an explicit NVIDIA vision fallback model configuration. The practical default should be `google/gemma-4-31b-it` because NVIDIA lists it as a vision-language model with image input support. `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` is also multimodal and can be tested as an override, but its reasoning behavior should be handled deliberately before using it as the default.
+- Add an explicit NVIDIA vision fallback model configuration. The practical default should be `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` because project testing found it stronger for this use case. Its reasoning behavior should be handled deliberately by preserving the existing thinking-strip behavior and configuring provider-specific request options where needed. `google/gemma-4-31b-it` remains a useful override because NVIDIA documents it as a vision-language model with image input support.
 - Ensure the NVIDIA request receives the NVIDIA model ID, not the OpenRouter model ID.
 - Record both attempted and successful provider/model values in developer trace.
 
@@ -155,4 +155,4 @@ Out of scope:
 
 ## NVIDIA Model Selection
 
-Use a configurable NVIDIA fallback model value. Default it to `google/gemma-4-31b-it` for the first implementation because NVIDIA documents it as supporting text and image inputs. Keep the value overrideable so `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` or another enabled NIM model can be selected after smoke testing without touching application logic.
+Use a configurable NVIDIA fallback model value. Default it to `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` because project testing found it better for the image-analysis fallback path. Keep the value overrideable so `google/gemma-4-31b-it` or another enabled NIM model can be selected without touching application logic.
