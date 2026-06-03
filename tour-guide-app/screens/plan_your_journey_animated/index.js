@@ -745,8 +745,7 @@ export default function PlanYourJourneyView({ navigation }) {
       >
         <TouchableOpacity
           style={styles.activityPressArea}
-          onPress={() => toggleActivity(hotspot)}
-          disabled={isPlanLocked}
+          onPress={() => navigation.navigate('HotspotDetail', { hotspotId: hotspot.id })}
           activeOpacity={0.85}
         >
           <View style={styles.activityCardLeftInfo}>
@@ -775,22 +774,25 @@ export default function PlanYourJourneyView({ navigation }) {
         </TouchableOpacity>
         <View style={styles.activityActionColumn}>
           <TouchableOpacity
-            style={[styles.activityMoreButton, { backgroundColor: colors.elevated, borderColor: colors.border }]}
-            onPress={() => navigation.navigate('HotspotDetail', { hotspotId: hotspot.id })}
+            style={styles.checkboxTapTarget}
+            onPress={() => toggleActivity(hotspot)}
+            disabled={isPlanLocked}
             activeOpacity={0.8}
             hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: selected, disabled: isPlanLocked }}
+            accessibilityLabel={`${selected ? 'Remove' : 'Add'} ${hotspot.name} from itinerary`}
           >
-            <Text style={[styles.activityMoreText, { color: colors.muted }]}>...</Text>
+            <View style={[
+              styles.nativeCheckboxOutline,
+              { backgroundColor: colors.input, borderColor: colors.border },
+              selected && styles.checkboxActiveState,
+              selected && { borderColor: colors.accent },
+              isPlanLocked && styles.lockedCheckbox,
+            ]}>
+              {selected && <Text style={[styles.checkboxCheckSymbol, { color: colors.accent }]}>✓</Text>}
+            </View>
           </TouchableOpacity>
-          <View style={[
-            styles.nativeCheckboxOutline,
-            { backgroundColor: colors.input, borderColor: colors.border },
-            selected && styles.checkboxActiveState,
-            selected && { borderColor: colors.accent },
-            isPlanLocked && styles.lockedCheckbox,
-          ]}>
-            {selected && <Text style={[styles.checkboxCheckSymbol, { color: colors.accent }]}>✓</Text>}
-          </View>
         </View>
       </View>
     );
@@ -1271,25 +1273,14 @@ const styles = StyleSheet.create({
   activityActionColumn: {
     width: 34,
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignSelf: 'stretch',
   },
-  activityMoreButton: {
-    width: 30,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+  checkboxTapTarget: {
+    width: 34,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  activityMoreText: {
-    color: '#d4d4d8',
-    fontSize: 16,
-    fontWeight: '700',
-    lineHeight: 16,
-    marginTop: -4,
   },
   nativeCheckboxOutline: {
     width: 20,
