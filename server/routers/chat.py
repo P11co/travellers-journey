@@ -38,6 +38,7 @@ from server.config import (
     NVIDIA_API_KEY,
     LLM_MODEL_ID,
     VISION_MODEL_ID,
+    NVIDIA_VISION_MODEL_ID,
     OPENROUTER_BASE_URL,
     NVIDIA_BASE_URL,
     WAYPOINTS,
@@ -391,6 +392,118 @@ async def _trace_chat_event(session_id: str, event_type: str, payload: dict | No
         print(f"⚠️ Failed to save trace event {event_type}: {exc}")
 
 
+def _safe_error_summary(exc_or_text) -> str:
+    text = str(exc_or_text or "").replace("\n", " ").strip()
+    return text[:220] + ("..." if len(text) > 220 else "")
+
+
+def _usage_from_response_payload(payload: dict) -> dict:
+    usage = payload.get("usage") if isinstance(payload, dict) else None
+    if not isinstance(usage, dict):
+        return {}
+    return {
+        key: usage[key]
+        for key in ("prompt_tokens", "completion_tokens", "total_tokens")
+        if usage.get(key) is not None
+    }
+
+
+def _model_trace_from_llm_meta(meta: dict, label: str, role: str = "text") -> dict:
+    usage = meta.get("usage") or {}
+    duration_ms = meta.get("duration_ms")
+    completion_tokens = usage.get("completion_tokens")
+    tokens_per_second = None
+    if completion_tokens and duration_ms:
+        tokens_per_second = round(completion_tokens / max(duration_ms / 1000, 0.001), 1)
+
+    trace = {
+        "label": label,
+        "role": role,
+        "provider": meta.get("provider"),
+        "model": meta.get("model"),
+        "latency_ms": duration_ms,
+        "fallback_used": bool(meta.get("fallback_used")),
+    }
+    if usage:
+        trace["usage"] = usage
+    if tokens_per_second is not None:
+        trace["tokens_per_second"] = tokens_per_second
+    return trace
+
+
+def _developer_timeline_step(kind: str, title: str, payload: dict | None = None) -> dict:
+    return {
+        "kind": kind,
+        "title": title,
+        "payload": sanitize_trace_payload(payload or {}),
+    }
+
+
+def _build_developer_trace(
+    *,
+    route_type: str,
+    prepared: dict,
+    reply: str,
+    llm_meta: dict,
+    action: str | None,
+    started_at: float,
+    extra: dict | None = None,
+) -> dict:
+    extra = extra or {}
+    model_traces = list(extra.get("models") or [])
+    model_traces.append(_model_trace_from_llm_meta(llm_meta, "Final text response", "text"))
+
+    timeline = list(extra.get("timeline") or [])
+    timeline.extend([
+        _developer_timeline_step("input", "User prompt", {"message": prepared.get("history_user_message")}),
+        _developer_timeline_step("context", "User context", {
+            "gps_context": prepared.get("gps_context"),
+            "activity_context": prepared.get("activity_context"),
+            "itinerary_context": prepared.get("itinerary_context"),
+            "search_block": (prepared.get("search_block", "") + prepared.get("geocode_block", "")).strip(),
+        }),
+    ])
+    if prepared.get("map_snapshot_artifact"):
+        timeline.append(_developer_timeline_step("artifact", "Map snapshot", prepared["map_snapshot_artifact"]))
+    timeline.extend([
+        _developer_timeline_step("model", "Final text model call", {
+            "provider": llm_meta.get("provider"),
+            "model": llm_meta.get("model"),
+            "attempts": llm_meta.get("attempts"),
+        }),
+        _developer_timeline_step("output", "Assistant response", {"reply": reply}),
+    ])
+
+    artifacts = list(extra.get("artifacts") or [])
+    if prepared.get("map_snapshot_artifact"):
+        artifacts.append(prepared["map_snapshot_artifact"])
+
+    errors = list(extra.get("errors") or [])
+    errors.extend([
+        {
+            "provider": attempt.get("provider"),
+            "model": attempt.get("model"),
+            "error": attempt.get("error"),
+        }
+        for attempt in llm_meta.get("attempts", [])
+        if attempt.get("error")
+    ])
+
+    return {
+        "summary": {
+            "route_type": route_type,
+            "intent": prepared.get("intent"),
+            "total_latency_ms": round((time.perf_counter() - started_at) * 1000),
+            "fallback_used": bool(llm_meta.get("fallback_used") or extra.get("fallback_used")),
+            "action": action,
+        },
+        "models": model_traces,
+        "timeline": timeline,
+        "artifacts": sanitize_trace_payload(artifacts),
+        "errors": sanitize_trace_payload(errors),
+    }
+
+
 @traceable(name="Resolve Waypoint Context", run_type="tool")
 async def _resolve_waypoint_context(
     waypoint_id: str | None,
@@ -574,25 +687,31 @@ def _build_vision_routing_message(original_message: str, analysis: VisionImageAn
     process_inputs=sanitize_trace_payload,
     process_outputs=sanitize_trace_payload,
 )
-async def _call_llm(
+async def _call_llm_with_metadata(
     messages: list[dict],
     model: str,
     temperature: float = 0.7,
     provider: str = "openrouter",
-) -> str:
+    provider_plan: list[dict] | None = None,
+) -> dict:
     """
     Call the LLM via OpenRouter first, then NVIDIA NIM as fallback.
     Reasoning traces (<think>...</think>) are always stripped before returning.
     """
-    providers = [provider]
-    if provider == "openrouter":
-        providers.append("nvidia")
+    provider_plan = provider_plan or [{"provider": provider, "model": model}]
+    if provider_plan[0].get("provider") == "openrouter" and len(provider_plan) == 1:
+        provider_plan.append({"provider": "nvidia", "model": provider_plan[0].get("model") or model})
 
     last_error: HTTPException | None = None
-    for active_provider in providers:
+    attempts: list[dict] = []
+    for plan_item in provider_plan:
+        active_provider = plan_item.get("provider") or provider
+        active_model = plan_item.get("model") or model
+        attempt_started = time.perf_counter()
         if active_provider == "openrouter":
             if not OPENROUTER_API_KEY:
                 last_error = HTTPException(status_code=500, detail="Missing OpenRouter API key")
+                attempts.append({"provider": active_provider, "model": active_model, "error": last_error.detail})
                 continue
             url = OPENROUTER_BASE_URL
             api_key = OPENROUTER_API_KEY
@@ -600,11 +719,12 @@ async def _call_llm(
         elif active_provider == "nvidia":
             if not NVIDIA_API_KEY:
                 last_error = HTTPException(status_code=500, detail="Missing NVIDIA_API_KEY")
+                attempts.append({"provider": active_provider, "model": active_model, "error": last_error.detail})
                 continue
             url = NVIDIA_BASE_URL
             api_key = NVIDIA_API_KEY
             extra = {}
-            if "reasoning" in model:
+            if "reasoning" in active_model:
                 extra["extra_body"] = {
                     "chat_template_kwargs": {"enable_thinking": True},
                     "reasoning_budget": 8192,
@@ -613,18 +733,18 @@ async def _call_llm(
             raise HTTPException(status_code=500, detail=f"Unknown LLM provider: {active_provider}")
 
         payload = {
-            "model": model,
+            "model": active_model,
             "messages": messages,
             "temperature": temperature,
             **extra,
         }
         if active_provider == "openrouter":
-            if model == "deepseek/deepseek-v4-flash":
+            if active_model == "deepseek/deepseek-v4-flash":
                 payload["provider"] = {
                     "only": ["alibaba"],
                     "allow_fallbacks": False
                 }
-            elif model == "xiaomi/mimo-v2.5":
+            elif active_model == "xiaomi/mimo-v2.5":
                 payload["provider"] = {
                     "only": ["xiaomi"],
                     "allow_fallbacks": False
@@ -645,12 +765,24 @@ async def _call_llm(
                 status_code=504,
                 detail=f"Request to {active_provider} LLM API timed out.",
             )
+            attempts.append({
+                "provider": active_provider,
+                "model": active_model,
+                "duration_ms": round((time.perf_counter() - attempt_started) * 1000),
+                "error": last_error.detail,
+            })
             continue
         except httpx.RequestError as exc:
             last_error = HTTPException(
                 status_code=502,
                 detail=f"Failed to communicate with {active_provider} LLM API: {exc}",
             )
+            attempts.append({
+                "provider": active_provider,
+                "model": active_model,
+                "duration_ms": round((time.perf_counter() - attempt_started) * 1000),
+                "error": _safe_error_summary(last_error.detail),
+            })
             continue
 
         if resp.status_code != 200:
@@ -658,12 +790,51 @@ async def _call_llm(
                 status_code=502,
                 detail=f"{active_provider} API returned {resp.status_code}: {resp.text[:300]}",
             )
+            attempts.append({
+                "provider": active_provider,
+                "model": active_model,
+                "duration_ms": round((time.perf_counter() - attempt_started) * 1000),
+                "status_code": resp.status_code,
+                "error": _safe_error_summary(last_error.detail),
+            })
             continue
 
-        raw = resp.json().get("choices", [{}])[0].get("message", {}).get("content") or ""
-        return _strip_thinking(raw)
+        payload_json = resp.json()
+        raw = payload_json.get("choices", [{}])[0].get("message", {}).get("content") or ""
+        duration_ms = round((time.perf_counter() - attempt_started) * 1000)
+        attempts.append({
+            "provider": active_provider,
+            "model": active_model,
+            "duration_ms": duration_ms,
+            "status_code": resp.status_code,
+            "ok": True,
+        })
+        return {
+            "text": _strip_thinking(raw),
+            "provider": active_provider,
+            "model": active_model,
+            "duration_ms": duration_ms,
+            "usage": _usage_from_response_payload(payload_json),
+            "attempts": attempts,
+            "fallback_used": len(attempts) > 1,
+        }
 
     raise last_error or HTTPException(status_code=500, detail="No LLM provider is configured")
+
+
+async def _call_llm(
+    messages: list[dict],
+    model: str,
+    temperature: float = 0.7,
+    provider: str = "openrouter",
+) -> str:
+    result = await _call_llm_with_metadata(
+        messages=messages,
+        model=model,
+        temperature=temperature,
+        provider=provider,
+    )
+    return result["text"]
 
 
 async def _stream_llm(
@@ -1268,6 +1439,7 @@ async def _prepare_chat_completion(
     prompt_user_message: str | None = None,
 ) -> dict:
     """Build all context needed for either normal or streaming chat completion."""
+    request_started_at = time.perf_counter()
     provider = "openrouter"
     model = req.model_override or LLM_MODEL_ID
     if not OPENROUTER_API_KEY and not NVIDIA_API_KEY:
@@ -1592,6 +1764,12 @@ async def _prepare_chat_completion(
             {"type": "text", "text": user_prompt_text},
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{map_snapshot_b64}"}},
         ]
+        llm_provider_plan = [
+            {"provider": "openrouter", "model": VISION_MODEL_ID},
+            {"provider": "nvidia", "model": NVIDIA_VISION_MODEL_ID},
+        ]
+    else:
+        llm_provider_plan = None
 
     messages = [{"role": "system", "content": full_system}]
     messages.extend(history)
@@ -1600,7 +1778,10 @@ async def _prepare_chat_completion(
     return {
         "provider": provider,
         "model": model,
+        "llm_provider_plan": llm_provider_plan,
         "session_id": session_id,
+        "developer_mode": bool(req.developer_mode),
+        "request_started_at": request_started_at,
         "waypoint": waypoint,
         "gps_context": gps_context,
         "activity_context": activity_context,
@@ -1624,6 +1805,7 @@ async def _complete_prepared_chat(
     history_user_message: str,
     trace_event_base: str = "chat_llm_response",
     debug_extra: dict | None = None,
+    developer_extra: dict | None = None,
 ) -> ChatResponse:
     """Run the policy-bearing text LLM pass and build a ChatResponse."""
     session_id = prepared["session_id"]
@@ -1633,6 +1815,8 @@ async def _complete_prepared_chat(
     intent = prepared["intent"]
     messages = prepared["messages"]
     started_at = time.perf_counter()
+    trace_started_at = prepared.get("request_started_at", started_at)
+    prepared["history_user_message"] = history_user_message
 
     await _trace_chat_event(
         session_id,
@@ -1645,12 +1829,14 @@ async def _complete_prepared_chat(
         },
     )
     try:
-        reply = await _call_llm(
+        llm_meta = await _call_llm_with_metadata(
             messages=messages,
             model=model,
             temperature=0.7,
             provider=provider,
+            provider_plan=prepared.get("llm_provider_plan"),
         )
+        reply = llm_meta["text"]
     except Exception as exc:
         await _trace_chat_event(
             session_id,
@@ -1722,6 +1908,18 @@ async def _complete_prepared_chat(
     if debug_extra:
         debug_trace.update(debug_extra)
 
+    developer_trace = None
+    if prepared.get("developer_mode"):
+        developer_trace = _build_developer_trace(
+            route_type=debug_extra.get("vision_pipeline", "chat") if debug_extra else "chat",
+            prepared=prepared,
+            reply=reply,
+            llm_meta=llm_meta,
+            action=action,
+            started_at=trace_started_at,
+            extra=developer_extra,
+        )
+
     return ChatResponse(
         reply=reply,
         session_id=session_id,
@@ -1730,6 +1928,7 @@ async def _complete_prepared_chat(
         action_payload=naver_action_payload,
         web_search_used=prepared["search_used"],
         debug_trace=debug_trace,
+        developer_trace=developer_trace,
     )
 
 
@@ -2041,7 +2240,7 @@ async def chat_vision(req: VisionChatRequest):
             "image_artifact": image_artifact,
         },
     )
-    vision_raw = await _call_llm(
+    vision_meta = await _call_llm_with_metadata(
         messages=[
             {"role": "system", "content": vision_system},
             {"role": "user", "content": user_content},
@@ -2049,7 +2248,12 @@ async def chat_vision(req: VisionChatRequest):
         model=VISION_MODEL_ID,
         temperature=0.4,
         provider="openrouter",
+        provider_plan=[
+            {"provider": "openrouter", "model": VISION_MODEL_ID},
+            {"provider": "nvidia", "model": NVIDIA_VISION_MODEL_ID},
+        ],
     )
+    vision_raw = vision_meta["text"]
     analysis = _parse_vision_analysis(vision_raw)
     await _trace_chat_event(
         session_id,
@@ -2074,6 +2278,7 @@ async def chat_vision(req: VisionChatRequest):
         latitude=req.latitude,
         longitude=req.longitude,
         waypoint_id=req.waypoint_id,
+        developer_mode=req.developer_mode,
     )
 
     prepared = await _prepare_chat_completion(
@@ -2092,6 +2297,30 @@ async def chat_vision(req: VisionChatRequest):
             "vision_prompt": vision_system,
             "image_artifact": image_artifact,
         },
+        developer_extra={
+            "fallback_used": vision_meta.get("fallback_used"),
+            "models": [_model_trace_from_llm_meta(vision_meta, "Image analysis", "vision")],
+            "timeline": [
+                _developer_timeline_step("input", "User image prompt", {"message": req.message}),
+                _developer_timeline_step("artifact", "User image", image_artifact or {}),
+                _developer_timeline_step("model", "Image analysis model call", {
+                    "provider": vision_meta.get("provider"),
+                    "model": vision_meta.get("model"),
+                    "attempts": vision_meta.get("attempts"),
+                }),
+                _developer_timeline_step("output", "Image analysis", analysis.model_dump()),
+            ],
+            "artifacts": [image_artifact] if image_artifact else [],
+            "errors": [
+                {
+                    "provider": attempt.get("provider"),
+                    "model": attempt.get("model"),
+                    "error": attempt.get("error"),
+                }
+                for attempt in vision_meta.get("attempts", [])
+                if attempt.get("error")
+            ],
+        },
     )
 
     debug_trace = final_response.debug_trace or {}
@@ -2105,4 +2334,5 @@ async def chat_vision(req: VisionChatRequest):
         web_search_used=final_response.web_search_used,
         identified_subject=analysis.identified_subject,
         debug_trace=debug_trace,
+        developer_trace=final_response.developer_trace,
     )

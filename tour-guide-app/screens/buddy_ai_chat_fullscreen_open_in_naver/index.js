@@ -36,6 +36,7 @@ export default function AIChatInterface({
   const [inputText, setInputText] = useState('');
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [isMicPressed, setIsMicPressed] = useState(false);
+  const [expandedDeveloperTraces, setExpandedDeveloperTraces] = useState({});
   const scrollViewRef = useRef(null);
   const inputRef = useRef(null);
   const isNearBottomRef = useRef(true);
@@ -62,6 +63,7 @@ export default function AIChatInterface({
   const setChatPhotoContext = useAppStore((s) => s.setChatPhotoContext);
   const clearChatPhotoContext = useAppStore((s) => s.clearChatPhotoContext);
   const themeMode = useAppStore((s) => s.themeMode);
+  const developerModeEnabled = useAppStore((s) => s.developerModeEnabled);
   const theme = getTheme(themeMode);
   const hasStreamingMessage = chatMessages.some((message) => message.isStreaming);
   const isEmbedded = presentation === 'embedded';
@@ -258,6 +260,66 @@ export default function AIChatInterface({
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const formatModelPill = (modelTrace) => {
+    const parts = [
+      modelTrace.model || modelTrace.label || 'Model',
+      modelTrace.latency_ms ? `${modelTrace.latency_ms}ms` : null,
+      modelTrace.tokens_per_second ? `${modelTrace.tokens_per_second} tok/s` : null,
+      modelTrace.usage?.prompt_tokens ? `input ${modelTrace.usage.prompt_tokens}` : null,
+      modelTrace.usage?.completion_tokens ? `output ${modelTrace.usage.completion_tokens}` : null,
+      modelTrace.provider ? `provider ${modelTrace.provider}` : null,
+      modelTrace.fallback_used ? 'fallback' : null,
+    ].filter(Boolean);
+    return parts.join(' • ');
+  };
+
+  const renderDeveloperTrace = (message) => {
+    if (!developerModeEnabled || !message.developerTrace) return null;
+    const isExpanded = Boolean(expandedDeveloperTraces[message.id]);
+    const models = Array.isArray(message.developerTrace.models) ? message.developerTrace.models : [];
+    const timeline = Array.isArray(message.developerTrace.timeline) ? message.developerTrace.timeline : [];
+
+    return (
+      <View style={styles.developerTraceBlock}>
+        {models.length > 0 && (
+          <View style={styles.developerPillRow}>
+            {models.map((modelTrace, index) => (
+              <View
+                key={`${message.id}-model-${index}`}
+                style={[styles.developerPill, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}
+              >
+                <Text style={[styles.developerPillText, { color: theme.accent }]}>{formatModelPill(modelTrace)}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+        <TouchableOpacity
+          style={[styles.developerToggleRow, { borderColor: theme.border }]}
+          onPress={() => setExpandedDeveloperTraces((current) => ({
+            ...current,
+            [message.id]: !current[message.id],
+          }))}
+        >
+          <Text style={[styles.developerToggleText, { color: theme.mutedText }]}>
+            {isExpanded ? 'v' : '>'} Developer trace
+          </Text>
+        </TouchableOpacity>
+        {isExpanded && (
+          <View style={[styles.developerTimeline, { borderColor: theme.border, backgroundColor: themeMode === 'light' ? '#f8fafc' : '#111114' }]}>
+            {timeline.map((step, index) => (
+              <View key={`${message.id}-trace-${index}`} style={styles.developerTimelineStep}>
+                <Text style={[styles.developerTimelineTitle, { color: theme.text }]}>{step.title || step.kind || `Step ${index + 1}`}</Text>
+                <Text style={[styles.developerTimelinePayload, { color: theme.mutedText }]}>
+                  {JSON.stringify(step.payload || {}, null, 2)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  };
+
   const renderMessage = (message) => {
     if (message.role === 'user') {
       return (
@@ -312,6 +374,7 @@ export default function AIChatInterface({
               </>
             )}
           </View>
+          {renderDeveloperTrace(message)}
           {Array.isArray(message.quickReplies) && message.quickReplies.length > 0 && !message.isStreaming && (
             <View style={styles.quickReplyContainer}>
               {message.quickReplies.map((option) => (
@@ -694,6 +757,57 @@ const styles = StyleSheet.create({
     color: '#e5e5e5',
     fontSize: 14,
     lineHeight: 20,
+  },
+  developerTraceBlock: {
+    marginTop: 8,
+    maxWidth: '100%',
+  },
+  developerPillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 6,
+  },
+  developerPill: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    maxWidth: '100%',
+  },
+  developerPillText: {
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '700',
+  },
+  developerToggleRow: {
+    borderTopWidth: 1,
+    paddingTop: 6,
+  },
+  developerToggleText: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '700',
+  },
+  developerTimeline: {
+    borderWidth: 1,
+    borderRadius: 8,
+    marginTop: 6,
+    padding: 8,
+    gap: 8,
+  },
+  developerTimelineStep: {
+    gap: 3,
+  },
+  developerTimelineTitle: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '800',
+  },
+  developerTimelinePayload: {
+    fontSize: 10,
+    lineHeight: 13,
+    fontFamily: 'Courier',
   },
   userMessageRow: {
     alignItems: 'flex-end',

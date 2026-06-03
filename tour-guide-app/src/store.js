@@ -555,6 +555,7 @@ const useAppStore = create((set, get) => ({
 
   // Voice + appearance
   themeMode: 'light',
+  developerModeEnabled: false,
   hotspotSuggestionsEnabled: true,
   voiceModeEnabled: true,
   voiceOutputProvider: 'system',
@@ -567,6 +568,7 @@ const useAppStore = create((set, get) => ({
   voiceRecording: null,
 
   setThemeMode: (themeMode) => set({ themeMode }),
+  setDeveloperModeEnabled: (developerModeEnabled) => set({ developerModeEnabled }),
   setHotspotSuggestionsEnabled: (hotspotSuggestionsEnabled) => {
     set({ hotspotSuggestionsEnabled });
     get().logTraceEvent('hotspot_suggestions_toggled', { enabled: hotspotSuggestionsEnabled });
@@ -626,6 +628,7 @@ const useAppStore = create((set, get) => ({
       currentLocation: null,
       activityError: null,
       themeMode: 'light',
+      developerModeEnabled: false,
       hotspotSuggestionsEnabled: true,
       voiceModeEnabled: true,
       voiceOutputProvider: 'system',
@@ -1396,6 +1399,71 @@ const useAppStore = create((set, get) => ({
     });
 
     try {
+      if (state.developerModeEnabled) {
+        const response = await sendChatMessage({
+          message,
+          sessionId,
+          lat: context.lat ?? waypointLat ?? location.lat,
+          lng: context.lng ?? waypointLng ?? location.lng,
+          waypointId: context.waypointId || waypointContext?.id || location.waypointId,
+          developerMode: true,
+        });
+
+        const actionLat = context.lat ?? waypointLat ?? location.lat;
+        const actionLng = context.lng ?? waypointLng ?? location.lng;
+        let actionPayload = response.action_payload || null;
+        if (response.action === 'OPEN_NAVER_MAP' && !actionPayload) {
+          actionPayload = buildAmenityNaverPayload({
+            message,
+            lat: actionLat,
+            lng: actionLng,
+          }) || buildWaypointNaverPayload({
+            waypoint: waypointContext,
+            lat: actionLat,
+            lng: actionLng,
+          });
+        }
+        const action = actionPayload ? 'OPEN_NAVER_MAP' : null;
+
+        const assistantMessage = {
+          id: assistantId,
+          role: 'assistant',
+          content: response.reply,
+          timestamp: new Date().toISOString(),
+          action,
+          actionPayload,
+          waypointId: response.waypoint_id,
+          webSearchUsed: response.web_search_used,
+          developerTrace: response.developer_trace || null,
+        };
+
+        set(() => ({
+          sessionId: response.session_id,
+          chatStreamStatus: null,
+          chatMessages: get().chatMessages.map((chatMessage) => (
+            chatMessage.id === assistantId ? assistantMessage : chatMessage
+          )),
+        }));
+        get().generateQuickRepliesForMessage(assistantMessage.id, response.reply, {
+          sessionId: response.session_id,
+        });
+
+        if (get().voiceModeEnabled && !context.suppressSpeech) {
+          get().speakAssistantReply(response.reply);
+        }
+
+        get().logTraceEvent('chat_message_response_received', {
+          response_waypoint_id: response.waypoint_id,
+          action,
+          web_search_used: response.web_search_used,
+          reply_length: response.reply?.length || 0,
+          backend_intent: response.debug_trace?.intent,
+          developer_trace_included: Boolean(response.developer_trace),
+        });
+
+        return assistantMessage;
+      }
+
       let streamedReply = '';
       const response = await sendChatMessageStream({
         message,
@@ -1459,6 +1527,7 @@ const useAppStore = create((set, get) => ({
         actionPayload,
         waypointId: response.waypoint_id,
         webSearchUsed: response.web_search_used,
+        developerTrace: response.developer_trace || null,
       };
 
       set(() => ({
@@ -1505,6 +1574,7 @@ const useAppStore = create((set, get) => ({
           lat: context.lat ?? waypointLat ?? location.lat,
           lng: context.lng ?? waypointLng ?? location.lng,
           waypointId: context.waypointId || waypointContext?.id || location.waypointId,
+          developerMode: state.developerModeEnabled,
         });
 
         const actionLat = context.lat ?? waypointLat ?? location.lat;
@@ -1532,6 +1602,7 @@ const useAppStore = create((set, get) => ({
           actionPayload,
           waypointId: response.waypoint_id,
           webSearchUsed: response.web_search_used,
+          developerTrace: response.developer_trace || null,
         };
 
         set(() => ({
@@ -1633,6 +1704,7 @@ const useAppStore = create((set, get) => ({
         lng: context.lng ?? waypointLng ?? location.lng,
         waypointId: context.waypointId || waypointContext?.id || location.waypointId,
         imageMimeType,
+        developerMode: state.developerModeEnabled,
       });
 
       const actionLat = context.lat ?? waypointLat ?? location.lat;
@@ -1660,6 +1732,7 @@ const useAppStore = create((set, get) => ({
         actionPayload,
         waypointId: response.waypoint_id,
         identifiedSubject: response.identified_subject,
+        developerTrace: response.developer_trace || null,
       };
 
       set((current) => ({
@@ -1680,6 +1753,7 @@ const useAppStore = create((set, get) => ({
         action,
         has_action_payload: Boolean(actionPayload),
         reply_length: response.reply?.length || 0,
+        developer_trace_included: Boolean(response.developer_trace),
       });
 
       return assistantMessage;

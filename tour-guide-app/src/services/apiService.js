@@ -145,6 +145,7 @@ export function sendChatMessage({
   waypointId,
   provider,
   modelOverride,
+  developerMode,
 }) {
   return request('/chat', {
     method: 'POST',
@@ -156,6 +157,7 @@ export function sendChatMessage({
       waypoint_id: waypointId || undefined,
       provider: provider || undefined,
       model_override: modelOverride || undefined,
+      developer_mode: developerMode || undefined,
     },
   });
 }
@@ -168,6 +170,7 @@ export function sendChatMessageStream({
   waypointId,
   provider,
   modelOverride,
+  developerMode,
   onEvent,
 }) {
   return new Promise((resolve, reject) => {
@@ -246,6 +249,7 @@ export function sendChatMessageStream({
       waypoint_id: waypointId || undefined,
       provider: provider || undefined,
       model_override: modelOverride || undefined,
+      developer_mode: developerMode || undefined,
     }));
   });
 }
@@ -258,6 +262,7 @@ export function sendVisionChat({
   lng,
   waypointId,
   imageMimeType = 'image/jpeg',
+  developerMode,
 }) {
   return request('/chat/vision', {
     method: 'POST',
@@ -269,6 +274,7 @@ export function sendVisionChat({
       latitude: lat ?? undefined,
       longitude: lng ?? undefined,
       waypoint_id: waypointId || undefined,
+      developer_mode: developerMode || undefined,
     },
   });
 }

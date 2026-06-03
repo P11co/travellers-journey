@@ -47,6 +47,7 @@ export default function BuddyAIChatOverlay({
   const [inputText, setInputText] = useState('');
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [localMode, setLocalMode] = useState(sheetMode);
+  const [expandedDeveloperTraces, setExpandedDeveloperTraces] = useState({});
   const prevPropMode = useRef(sheetMode);
   const scrollViewRef = useRef(null);
   const isNearBottomRef = useRef(true);
@@ -69,6 +70,7 @@ export default function BuddyAIChatOverlay({
   const setChatPhotoContext = useAppStore((s) => s.setChatPhotoContext);
   const clearChatPhotoContext = useAppStore((s) => s.clearChatPhotoContext);
   const themeMode = useAppStore((s) => s.themeMode);
+  const developerModeEnabled = useAppStore((s) => s.developerModeEnabled);
   const theme = getTheme(themeMode);
   const hasStreamingMessage = chatMessages.some((message) => message.isStreaming);
 
@@ -226,6 +228,63 @@ export default function BuddyAIChatOverlay({
     setVoiceModeEnabled(!voiceModeEnabled);
   };
 
+  const formatModelPill = (modelTrace) => [
+    modelTrace.model || modelTrace.label || 'Model',
+    modelTrace.latency_ms ? `${modelTrace.latency_ms}ms` : null,
+    modelTrace.tokens_per_second ? `${modelTrace.tokens_per_second} tok/s` : null,
+    modelTrace.usage?.prompt_tokens ? `input ${modelTrace.usage.prompt_tokens}` : null,
+    modelTrace.usage?.completion_tokens ? `output ${modelTrace.usage.completion_tokens}` : null,
+    modelTrace.provider ? `provider ${modelTrace.provider}` : null,
+    modelTrace.fallback_used ? 'fallback' : null,
+  ].filter(Boolean).join(' • ');
+
+  const renderDeveloperTrace = (message) => {
+    if (!developerModeEnabled || !message.developerTrace) return null;
+    const isExpanded = Boolean(expandedDeveloperTraces[message.id]);
+    const models = Array.isArray(message.developerTrace.models) ? message.developerTrace.models : [];
+    const timeline = Array.isArray(message.developerTrace.timeline) ? message.developerTrace.timeline : [];
+
+    return (
+      <View style={styles.developerTraceBlock}>
+        {models.length > 0 && (
+          <View style={styles.developerPillRow}>
+            {models.map((modelTrace, index) => (
+              <View
+                key={`${message.id}-model-${index}`}
+                style={[styles.developerPill, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}
+              >
+                <Text style={[styles.developerPillText, { color: theme.accent }]}>{formatModelPill(modelTrace)}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+        <TouchableOpacity
+          style={[styles.developerToggleRow, { borderColor: theme.border }]}
+          onPress={() => setExpandedDeveloperTraces((current) => ({
+            ...current,
+            [message.id]: !current[message.id],
+          }))}
+        >
+          <Text style={[styles.developerToggleText, { color: theme.mutedText }]}>
+            {isExpanded ? 'v' : '>'} Developer trace
+          </Text>
+        </TouchableOpacity>
+        {isExpanded && (
+          <View style={[styles.developerTimeline, { borderColor: theme.border, backgroundColor: themeMode === 'light' ? '#f8fafc' : '#111114' }]}>
+            {timeline.map((step, index) => (
+              <View key={`${message.id}-trace-${index}`} style={styles.developerTimelineStep}>
+                <Text style={[styles.developerTimelineTitle, { color: theme.text }]}>{step.title || step.kind || `Step ${index + 1}`}</Text>
+                <Text style={[styles.developerTimelinePayload, { color: theme.mutedText }]}>
+                  {JSON.stringify(step.payload || {}, null, 2)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  };
+
   const renderMessage = (message) => {
     if (message.role === 'user') {
       return (
@@ -256,24 +315,27 @@ export default function BuddyAIChatOverlay({
             <Path fillRule="evenodd" clipRule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" />
           </Svg>
         </View>
-        <View style={[
-          styles.buddyBubble,
-          { backgroundColor: theme.assistantBubble, borderColor: theme.assistantBorder },
-          message.isError && [styles.errorBubble, { backgroundColor: themeMode === 'light' ? '#fef2f2' : '#2a1111' }],
-        ]}>
-          <Text style={[styles.buddyText, { color: theme.text }]}>{message.content}</Text>
-          {message.action === 'OPEN_NAVER_MAP' && message.actionPayload && (
-            <>
-              <TouchableOpacity style={styles.naverButton} onPress={() => handleOpenNaver(message.actionPayload)}>
-                <Text style={styles.naverButtonText}>Open in Naver</Text>
-              </TouchableOpacity>
-              {message.actionPayload.handoff_type === 'search' && (
-                <Text style={[styles.naverLanguageNote, { color: theme.mutedText }]}>
-                  Tip: set Naver Map to English before opening. Search results may still show Korean place names.
-                </Text>
-              )}
-            </>
-          )}
+        <View style={styles.buddyContent}>
+          <View style={[
+            styles.buddyBubble,
+            { backgroundColor: theme.assistantBubble, borderColor: theme.assistantBorder },
+            message.isError && [styles.errorBubble, { backgroundColor: themeMode === 'light' ? '#fef2f2' : '#2a1111' }],
+          ]}>
+            <Text style={[styles.buddyText, { color: theme.text }]}>{message.content}</Text>
+            {message.action === 'OPEN_NAVER_MAP' && message.actionPayload && (
+              <>
+                <TouchableOpacity style={styles.naverButton} onPress={() => handleOpenNaver(message.actionPayload)}>
+                  <Text style={styles.naverButtonText}>Open in Naver</Text>
+                </TouchableOpacity>
+                {message.actionPayload.handoff_type === 'search' && (
+                  <Text style={[styles.naverLanguageNote, { color: theme.mutedText }]}>
+                    Tip: set Naver Map to English before opening. Search results may still show Korean place names.
+                  </Text>
+                )}
+              </>
+            )}
+          </View>
+          {renderDeveloperTrace(message)}
         </View>
       </View>
     );
@@ -582,6 +644,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexShrink: 0,
   },
+  buddyContent: {
+    maxWidth: '78%',
+  },
   buddyBubble: {
     backgroundColor: '#1a1a2e',
     borderWidth: 1,
@@ -589,13 +654,64 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderBottomLeftRadius: 4,
     padding: 12,
-    maxWidth: '78%',
+    maxWidth: '100%',
   },
   errorBubble: {
     borderColor: '#7f1d1d',
     backgroundColor: '#2a1111',
   },
   buddyText: { color: '#e2e8f0', fontSize: 13, lineHeight: 19 },
+  developerTraceBlock: {
+    marginTop: 8,
+    maxWidth: '100%',
+  },
+  developerPillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 6,
+  },
+  developerPill: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    maxWidth: '100%',
+  },
+  developerPillText: {
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '700',
+  },
+  developerToggleRow: {
+    borderTopWidth: 1,
+    paddingTop: 6,
+  },
+  developerToggleText: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '700',
+  },
+  developerTimeline: {
+    borderWidth: 1,
+    borderRadius: 8,
+    marginTop: 6,
+    padding: 8,
+    gap: 8,
+  },
+  developerTimelineStep: {
+    gap: 3,
+  },
+  developerTimelineTitle: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '800',
+  },
+  developerTimelinePayload: {
+    fontSize: 10,
+    lineHeight: 13,
+    fontFamily: 'Courier',
+  },
   naverButton: {
     alignSelf: 'flex-start',
     backgroundColor: '#00c73c',

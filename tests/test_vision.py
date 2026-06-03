@@ -41,6 +41,22 @@ def _analysis_json(
     })
 
 
+def _llm_meta(text: str, provider="openrouter", model="test-model", fallback_used=False) -> dict:
+    return {
+        "text": text,
+        "provider": provider,
+        "model": model,
+        "duration_ms": 12,
+        "usage": {},
+        "attempts": [{"provider": provider, "model": model, "duration_ms": 12, "ok": True}],
+        "fallback_used": fallback_used,
+    }
+
+
+def _mock_llm(*outputs: str) -> AsyncMock:
+    return AsyncMock(side_effect=[_llm_meta(output) for output in outputs])
+
+
 def _patch_common(final_intent="RAG"):
     return (
         patch("server.routers.chat.classify_intent", new=AsyncMock(return_value=final_intent)),
@@ -62,13 +78,13 @@ def _vision_api_key(monkeypatch):
 async def test_vision_basic_two_pass_final_answer(client):
     """Vision endpoint returns the second-pass SeoulWalk answer, not the raw vision draft."""
     final_reply = "This is Gwanghwamun, the main gate of Gyeongbokgung Palace."
-    mock_llm = AsyncMock(side_effect=[
+    mock_llm = _mock_llm(
         _analysis_json(draft="Raw vision draft that should not be final."),
         final_reply,
-    ])
+    )
 
     common = _patch_common()
-    with common[0], common[1], common[2], common[3], patch("server.routers.chat._call_llm", new=mock_llm):
+    with common[0], common[1], common[2], common[3], patch("server.routers.chat._call_llm_with_metadata", new=mock_llm):
         resp = await client.post("/chat/vision", json={
             "message": "What is this gate?",
             "image_base64": _TINY_JPEG_B64,
@@ -81,18 +97,43 @@ async def test_vision_basic_two_pass_final_answer(client):
     assert "session_id" in data
     assert mock_llm.await_count == 2
     assert data["debug_trace"]["vision_pipeline"] == "vision_analysis_then_text_chat"
+    assert data["developer_trace"] is None
+
+
+@pytest.mark.asyncio
+async def test_vision_developer_mode_returns_live_trace(client):
+    """Developer mode attaches a sanitized live trace to the vision response."""
+    mock_llm = AsyncMock(side_effect=[
+        _llm_meta(_analysis_json(subject="Gwanghwamun Gate"), model="xiaomi/mimo-v2.5"),
+        _llm_meta("This is Gwanghwamun Gate.", model="deepseek/deepseek-v4-flash"),
+    ])
+
+    common = _patch_common()
+    with common[0], common[1], common[2], common[3], patch("server.routers.chat._call_llm_with_metadata", new=mock_llm):
+        resp = await client.post("/chat/vision", json={
+            "message": "What is this gate?",
+            "image_base64": _TINY_JPEG_B64,
+            "developer_mode": True,
+        })
+
+    assert resp.status_code == 200
+    trace = resp.json()["developer_trace"]
+    assert trace["summary"]["route_type"] == "vision_analysis_then_text_chat"
+    assert [model["role"] for model in trace["models"]] == ["vision", "text"]
+    assert trace["artifacts"][0]["saved"] is True
+    assert _TINY_JPEG_B64 not in json.dumps(trace)
 
 
 @pytest.mark.asyncio
 async def test_vision_second_pass_uses_main_prompt_and_image_context(client):
     """Final vision response goes through the same main SeoulWalk prompt as text chat."""
-    mock_llm = AsyncMock(side_effect=[
+    mock_llm = _mock_llm(
         _analysis_json(subject="Geunjeongjeon Throne Hall"),
         "This appears to be Geunjeongjeon, the main ceremonial hall.",
-    ])
+    )
 
     common = _patch_common()
-    with common[0], common[1], common[2], common[3], patch("server.routers.chat._call_llm", new=mock_llm):
+    with common[0], common[1], common[2], common[3], patch("server.routers.chat._call_llm_with_metadata", new=mock_llm):
         resp = await client.post("/chat/vision", json={
             "message": "What is this?",
             "image_base64": _TINY_JPEG_B64,
@@ -112,13 +153,13 @@ async def test_vision_second_pass_uses_main_prompt_and_image_context(client):
 @pytest.mark.asyncio
 async def test_vision_with_waypoint_returns_spatial_context(client):
     """Vision with waypoint_id still resolves and returns waypoint context."""
-    mock_llm = AsyncMock(side_effect=[
+    mock_llm = _mock_llm(
         _analysis_json(subject="Geunjeongjeon Throne Hall"),
         "You are looking at Geunjeongjeon, the main throne hall.",
-    ])
+    )
 
     common = _patch_common()
-    with common[0], common[1], common[2], common[3], patch("server.routers.chat._call_llm", new=mock_llm):
+    with common[0], common[1], common[2], common[3], patch("server.routers.chat._call_llm_with_metadata", new=mock_llm):
         resp = await client.post("/chat/vision", json={
             "message": "What is the big hall I'm looking at?",
             "image_base64": _TINY_JPEG_B64,
@@ -134,13 +175,13 @@ async def test_vision_with_waypoint_returns_spatial_context(client):
 @pytest.mark.asyncio
 async def test_vision_with_coordinates_auto_detects_waypoint(client):
     """Vision with lat/lng auto-detects waypoint from coordinates."""
-    mock_llm = AsyncMock(side_effect=[
+    mock_llm = _mock_llm(
         _analysis_json(subject="Gyeonghoeru Pavilion"),
         "This appears to be Gyeonghoeru Pavilion, used for royal banquets.",
-    ])
+    )
 
     common = _patch_common()
-    with common[0], common[1], common[2], common[3], patch("server.routers.chat._call_llm", new=mock_llm):
+    with common[0], common[1], common[2], common[3], patch("server.routers.chat._call_llm_with_metadata", new=mock_llm):
         resp = await client.post("/chat/vision", json={
             "message": "What is this pavilion?",
             "image_base64": _TINY_JPEG_B64,
@@ -156,13 +197,13 @@ async def test_vision_with_coordinates_auto_detects_waypoint(client):
 @pytest.mark.asyncio
 async def test_vision_unstructured_first_pass_is_wrapped(client):
     """Unstructured vision output is tolerated and passed into final text policy."""
-    mock_llm = AsyncMock(side_effect=[
+    mock_llm = _mock_llm(
         "This looks like a palace gate, but I am not fully sure.",
         "It may be a palace gate. Based on your location, I would treat that as uncertain.",
-    ])
+    )
 
     common = _patch_common()
-    with common[0], common[1], common[2], common[3], patch("server.routers.chat._call_llm", new=mock_llm):
+    with common[0], common[1], common[2], common[3], patch("server.routers.chat._call_llm_with_metadata", new=mock_llm):
         resp = await client.post("/chat/vision", json={
             "message": "What is this?",
             "image_base64": _TINY_JPEG_B64,
@@ -177,13 +218,13 @@ async def test_vision_unstructured_first_pass_is_wrapped(client):
 @pytest.mark.asyncio
 async def test_vision_amenity_request_returns_naver_search_payload(client):
     """Image-based amenity requests reuse deterministic Naver handoff behavior."""
-    mock_llm = AsyncMock(side_effect=[
+    mock_llm = _mock_llm(
         _analysis_json(subject=None, confidence="low", draft="The image does not identify a restroom."),
         "There may be restrooms nearby. I can also search Naver for bathrooms nearby.",
-    ])
+    )
 
     common = _patch_common(final_intent="MAP_GEOCODE")
-    with common[0], common[1], common[2], common[3], patch("server.routers.chat._call_llm", new=mock_llm):
+    with common[0], common[1], common[2], common[3], patch("server.routers.chat._call_llm_with_metadata", new=mock_llm):
         resp = await client.post("/chat/vision", json={
             "message": "Where is the closest bathroom in this area?",
             "image_base64": _TINY_JPEG_B64,
@@ -203,13 +244,13 @@ async def test_vision_amenity_request_returns_naver_search_payload(client):
 @pytest.mark.asyncio
 async def test_vision_naver_mention_without_payload_does_not_trigger_action(client):
     """Vision replies must not create map actions without a deterministic payload."""
-    mock_llm = AsyncMock(side_effect=[
+    mock_llm = _mock_llm(
         _analysis_json(subject=None, confidence="low", draft="The image is not enough to identify a destination."),
         "I do not have an exact destination, but Naver Map may help with navigation.",
-    ])
+    )
 
     common = _patch_common(final_intent="MAP_STATIC")
-    with common[0], common[1], common[2], common[3], patch("server.routers.chat._call_llm", new=mock_llm):
+    with common[0], common[1], common[2], common[3], patch("server.routers.chat._call_llm_with_metadata", new=mock_llm):
         resp = await client.post("/chat/vision", json={
             "message": "Can you help me get there?",
             "image_base64": _TINY_JPEG_B64,
@@ -235,7 +276,7 @@ async def test_vision_llm_error_returns_502(client):
     """First-pass LLM API error returns 502 Bad Gateway."""
     mock_llm = AsyncMock(side_effect=HTTPException(status_code=502, detail="Vision failed"))
 
-    with patch("server.routers.chat._call_llm", new=mock_llm):
+    with patch("server.routers.chat._call_llm_with_metadata", new=mock_llm):
         resp = await client.post("/chat/vision", json={"image_base64": _TINY_JPEG_B64})
 
     assert resp.status_code == 502
@@ -244,15 +285,15 @@ async def test_vision_llm_error_returns_502(client):
 @pytest.mark.asyncio
 async def test_vision_reuses_session(client):
     """Vision endpoint reuses an existing session_id across two-pass calls."""
-    mock_llm = AsyncMock(side_effect=[
+    mock_llm = _mock_llm(
         _analysis_json(subject="Ticket booth"),
         "This appears to be the ticket booth area.",
         _analysis_json(subject="Ticket booth"),
         "This still appears to be the ticket booth area.",
-    ])
+    )
 
     common = _patch_common()
-    with common[0], common[1], common[2], common[3], patch("server.routers.chat._call_llm", new=mock_llm):
+    with common[0], common[1], common[2], common[3], patch("server.routers.chat._call_llm_with_metadata", new=mock_llm):
         r1 = await client.post("/chat/vision", json={"image_base64": _TINY_JPEG_B64})
         sid = r1.json()["session_id"]
         r2 = await client.post("/chat/vision", json={

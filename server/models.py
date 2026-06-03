@@ -127,6 +127,10 @@ class ChatRequest(BaseModel):
         None,
         description="Deprecated. LLM requests use OpenRouter first with NVIDIA NIM fallback."
     )
+    developer_mode: bool = Field(
+        False,
+        description="Return a live, frontend-safe developer trace for this response.",
+    )
 
 
 class ChatResponse(BaseModel):
@@ -138,6 +142,7 @@ class ChatResponse(BaseModel):
     action_payload: dict | None = None
     web_search_used: bool = False
     debug_trace: dict | None = None
+    developer_trace: dict | None = None
 
 
 class QuickRepliesRequest(BaseModel):
@@ -209,6 +214,10 @@ class VisionChatRequest(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     waypoint_id: str | None = None
+    developer_mode: bool = Field(
+        False,
+        description="Return a live, frontend-safe developer trace for this response.",
+    )
 
 
 class VisionImageAnalysis(BaseModel):
@@ -253,6 +262,7 @@ class VisionChatResponse(BaseModel):
         description="Best guess at what was identified in the photo (e.g. 'Geunjeongjeon Throne Hall')",
     )
     debug_trace: dict | None = None
+    developer_trace: dict | None = None
 
 
 # ---------------------------------------------------------------------------

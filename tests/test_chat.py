@@ -31,6 +31,18 @@ def _make_mock_openrouter_response(reply_text: str, status_code: int = 200) -> h
     )
 
 
+def _llm_meta(text: str, provider="openrouter", model="test-model", fallback_used=False) -> dict:
+    return {
+        "text": text,
+        "provider": provider,
+        "model": model,
+        "duration_ms": 12,
+        "usage": {},
+        "attempts": [{"provider": provider, "model": model, "duration_ms": 12, "ok": True}],
+        "fallback_used": fallback_used,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Health check
 # ---------------------------------------------------------------------------
@@ -111,6 +123,41 @@ async def test_call_llm_falls_back_to_nvidia(monkeypatch):
         "https://openrouter.ai/api/v1/chat/completions",
         "https://integrate.api.nvidia.com/v1/chat/completions",
     ]
+
+
+@pytest.mark.asyncio
+async def test_call_llm_provider_plan_uses_provider_specific_models(monkeypatch):
+    """Provider plans can send different model IDs to OpenRouter and NVIDIA."""
+    from server.routers.chat import _call_llm_with_metadata
+
+    monkeypatch.setattr("server.routers.chat.OPENROUTER_API_KEY", "test-openrouter-key")
+    monkeypatch.setattr("server.routers.chat.NVIDIA_API_KEY", "test-nvidia-key")
+
+    with patch("server.routers.chat.httpx.AsyncClient") as MockClient:
+        mock_instance = AsyncMock()
+        mock_instance.post.side_effect = [
+            _make_mock_openrouter_response("OpenRouter failure", status_code=502),
+            _make_mock_openrouter_response("NVIDIA fallback reply"),
+        ]
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        MockClient.return_value = mock_instance
+
+        result = await _call_llm_with_metadata(
+            messages=[{"role": "user", "content": "What is in this image?"}],
+            model="xiaomi/mimo-v2.5",
+            provider_plan=[
+                {"provider": "openrouter", "model": "xiaomi/mimo-v2.5"},
+                {"provider": "nvidia", "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"},
+            ],
+        )
+
+    assert result["text"] == "NVIDIA fallback reply"
+    assert result["provider"] == "nvidia"
+    assert result["model"] == "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+    payloads = [call.kwargs["json"] for call in mock_instance.post.call_args_list]
+    assert payloads[0]["model"] == "xiaomi/mimo-v2.5"
+    assert payloads[1]["model"] == "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
 
 
 @pytest.mark.asyncio
@@ -909,7 +956,7 @@ async def test_chat_with_map_snapshot(client):
 
     with patch("server.routers.chat.classify_intent", new=AsyncMock(return_value="MAP_STATIC")), \
          patch("server.routers.chat.get_map_snapshot", new=AsyncMock(return_value="ZmFrZS1wbmc=")), \
-         patch("server.routers.chat._call_llm", new=AsyncMock(return_value=mock_reply)):
+         patch("server.routers.chat._call_llm_with_metadata", new=AsyncMock(return_value=_llm_meta(mock_reply))):
         resp = await client.post("/chat", json={
             "message": "Tell me what is around me.",
             "session_id": session_id,
@@ -948,7 +995,7 @@ async def test_non_map_intents_do_not_attach_snapshot_with_coords(client, monkey
          patch("server.routers.chat.get_map_snapshot", new=AsyncMock()) as mock_snapshot, \
          patch("server.routers.chat.search_rag", return_value="PALACE_KNOWLEDGE: history"), \
          patch("server.routers.chat.search_with_fallback", new=AsyncMock(return_value=[])), \
-         patch("server.routers.chat._call_llm", new=AsyncMock(return_value="Text-only answer.")) as mock_call:
+         patch("server.routers.chat._call_llm_with_metadata", new=AsyncMock(return_value=_llm_meta("Text-only answer."))) as mock_call:
         resp = await client.post("/chat", json={
             "message": "What should I know here?",
             "session_id": f"coords-{intent.lower()}-test",
@@ -980,7 +1027,7 @@ async def test_map_snapshot_uses_vision_model_for_final_answer(client, monkeypat
         }),
     ) as mock_classify, \
          patch("server.routers.chat.get_map_snapshot", new=AsyncMock(return_value="ZmFrZS1wbmc=")), \
-         patch("server.routers.chat._call_llm", new=AsyncMock(return_value="Use the path ahead.")) as mock_call:
+         patch("server.routers.chat._call_llm_with_metadata", new=AsyncMock(return_value=_llm_meta("Use the path ahead."))) as mock_call:
         resp = await client.post("/chat", json={
             "message": "Where should I go from here?",
             "session_id": "map-static-mimo-test",
@@ -991,6 +1038,10 @@ async def test_map_snapshot_uses_vision_model_for_final_answer(client, monkeypat
     assert resp.status_code == 200
     assert mock_classify.await_args.kwargs["model"] == "deepseek/deepseek-v4-flash"
     assert mock_call.await_args.kwargs["model"] == "xiaomi/mimo-v2.5"
+    assert mock_call.await_args.kwargs["provider_plan"] == [
+        {"provider": "openrouter", "model": "xiaomi/mimo-v2.5"},
+        {"provider": "nvidia", "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"},
+    ]
 
     messages = mock_call.await_args.kwargs["messages"]
     user_msg = messages[-1]
@@ -1013,7 +1064,7 @@ async def test_chat_kyobo_bookstore_with_map(client):
     with patch("server.routers.chat.classify_intent", new=AsyncMock(return_value="MAP_GEOCODE")), \
          patch("server.routers.chat.geocode_search", new=AsyncMock(return_value=[])), \
          patch("server.routers.chat.get_map_snapshot", new=AsyncMock(return_value="ZmFrZS1wbmc=")), \
-         patch("server.routers.chat._call_llm", new=AsyncMock(return_value=mock_reply)):
+         patch("server.routers.chat._call_llm_with_metadata", new=AsyncMock(return_value=_llm_meta(mock_reply))):
         resp = await client.post("/chat", json={
             "message": "Does Kyobo Bookstore (교보문고) exist near Gwanghwamun Station Exit 9?",
             "session_id": session_id,
@@ -1035,7 +1086,7 @@ async def test_chat_kyobo_bookstore_with_map(client):
     with patch("server.routers.chat.classify_intent", new=AsyncMock(return_value="MAP_GEOCODE")), \
          patch("server.routers.chat.geocode_search", new=AsyncMock(return_value=[])), \
          patch("server.routers.chat.get_map_snapshot", new=AsyncMock()) as mock_snapshot, \
-         patch("server.routers.chat._call_llm", new=AsyncMock(return_value=(
+         patch("server.routers.chat._call_llm_with_metadata", new=AsyncMock(return_value=_llm_meta(
              "I cannot see a map of your location, so I'm not sure."
          ))):
         resp_no_coords = await client.post("/chat", json={

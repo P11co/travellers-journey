@@ -71,11 +71,17 @@ NAVER_LOCAL_CLIENT_SECRET: str = (
 # ---------------------------------------------------------------------------
 # Default text model used for chat and itinerary generation.
 LLM_MODEL_ID: str = os.getenv("LLM_MODEL_ID") or "deepseek/deepseek-v4-flash"
-# Vision requests default to the Xiaomi MiMo model.
-VISION_MODEL_ID: str = (
+# Vision requests use provider-specific model IDs. Keep VISION_MODEL_ID as the
+# OpenRouter-facing compatibility alias for existing callers/tests.
+OPENROUTER_VISION_MODEL_ID: str = (
     os.getenv("VISION_MODEL_ID")
-    or os.getenv("NVIDIA_VISION_MODEL_ID")
+    or os.getenv("OPENROUTER_VISION_MODEL_ID")
     or "xiaomi/mimo-v2.5"
+)
+VISION_MODEL_ID: str = OPENROUTER_VISION_MODEL_ID
+NVIDIA_VISION_MODEL_ID: str = (
+    os.getenv("NVIDIA_VISION_MODEL_ID")
+    or "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
 )
 OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1/chat/completions"
 NVIDIA_BASE_URL: str = "https://integrate.api.nvidia.com/v1/chat/completions"

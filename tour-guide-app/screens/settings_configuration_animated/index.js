@@ -34,6 +34,8 @@ export default function SettingsConfigurationView({ navigation }) {
   const [systemVoicesStatus, setSystemVoicesStatus] = useState('loading');
   const themeMode = useAppStore((s) => s.themeMode);
   const setThemeMode = useAppStore((s) => s.setThemeMode);
+  const developerModeEnabled = useAppStore((s) => s.developerModeEnabled);
+  const setDeveloperModeEnabled = useAppStore((s) => s.setDeveloperModeEnabled);
   const hotspotSuggestionsEnabled = useAppStore((s) => s.hotspotSuggestionsEnabled);
   const setHotspotSuggestionsEnabled = useAppStore((s) => s.setHotspotSuggestionsEnabled);
   const voiceModeEnabled = useAppStore((s) => s.voiceModeEnabled);
@@ -149,6 +151,18 @@ export default function SettingsConfigurationView({ navigation }) {
           </View>
 
           <View style={styles.toggleClusterContainerList}>
+            <View style={styles.toggleActionRowLine}>
+              <View style={styles.toggleRowTextLeftDesc}>
+                <Text style={[styles.toggleRowTitleHeader, { color: theme.text }]}>Developer Mode</Text>
+                <Text style={[styles.toggleRowSubtitleCaption, { color: theme.mutedText }]}>Show model, latency, and blackbox traces on new responses.</Text>
+              </View>
+              <Switch
+                value={developerModeEnabled}
+                onValueChange={setDeveloperModeEnabled}
+                trackColor={{ false: '#3f3f46', true: '#5c77ff' }}
+                thumbColor="#ffffff"
+              />
+            </View>
             <View style={styles.toggleActionRowLine}>
               <View style={styles.toggleRowTextLeftDesc}>
                 <Text style={[styles.toggleRowTitleHeader, { color: theme.text }]}>Hotspot Suggestions</Text>
