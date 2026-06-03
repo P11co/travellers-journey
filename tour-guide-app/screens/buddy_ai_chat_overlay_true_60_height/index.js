@@ -55,6 +55,7 @@ export default function BuddyAIChatOverlay({
   const chatWaypointContext = useAppStore((s) => s.chatWaypointContext);
   const chatPhotoContext = useAppStore((s) => s.chatPhotoContext);
   const isChatLoading = useAppStore((s) => s.isChatLoading);
+  const chatStreamStatus = useAppStore((s) => s.chatStreamStatus);
   const isRecording = useAppStore((s) => s.isRecording);
   const isTranscribing = useAppStore((s) => s.isTranscribing);
   const isSpeaking = useAppStore((s) => s.isSpeaking);
@@ -403,7 +404,7 @@ export default function BuddyAIChatOverlay({
                     </View>
                     <View style={[styles.buddyBubble, { backgroundColor: theme.assistantBubble, borderColor: theme.assistantBorder }]}>
                       <Text style={[styles.buddyText, { color: theme.text }]}>
-                        {isTranscribing ? 'Transcribing voice...' : 'Thinking...'}
+                        {isTranscribing ? 'Transcribing voice...' : (chatStreamStatus || 'Thinking...')}
                       </Text>
                     </View>
                   </View>

@@ -36,6 +36,8 @@ let activeVoiceRecordingStartedAt = 0;
 const DEFAULT_SYSTEM_VOICE_IDENTIFIER = 'com.apple.speech.synthesis.voice.Kathy';
 const DEFAULT_SYSTEM_VOICE_NAME = 'Kathy';
 const MIN_VOICE_RECORDING_DURATION_MS = 700;
+const VISION_SLOW_STATUS_MS = 60000;
+const VISION_RETRY_STATUS_MS = 120000;
 
 const VOICE_RECORDING_OPTIONS = {
   extension: '.m4a',
@@ -1692,6 +1694,7 @@ const useAppStore = create((set, get) => ({
     set((current) => ({
       chatMessages: [...clearQuickRepliesFromMessages(current.chatMessages), userMessage],
       isChatLoading: true,
+      chatStreamStatus: null,
       chatError: null,
     }));
 
@@ -1702,6 +1705,25 @@ const useAppStore = create((set, get) => ({
       has_coordinates: Boolean((waypointLat ?? location.lat) && (waypointLng ?? location.lng)),
       image_base64_chars: imageBase64?.length || 0,
     });
+
+    const statusTimers = [
+      setTimeout(() => {
+        if (!get().isChatLoading) return;
+        set({ chatStreamStatus: 'hmm, the response is taking longer than usual' });
+        get().logTraceEvent('vision_message_slow_status_shown', {
+          message,
+          elapsed_ms: VISION_SLOW_STATUS_MS,
+        });
+      }, VISION_SLOW_STATUS_MS),
+      setTimeout(() => {
+        if (!get().isChatLoading) return;
+        set({ chatStreamStatus: 'trying this one more time' });
+        get().logTraceEvent('vision_message_retry_status_shown', {
+          message,
+          elapsed_ms: VISION_RETRY_STATUS_MS,
+        });
+      }, VISION_RETRY_STATUS_MS),
+    ];
 
     try {
       const response = await sendVisionChat({
@@ -1784,7 +1806,8 @@ const useAppStore = create((set, get) => ({
       });
       return errorMessage;
     } finally {
-      set({ isChatLoading: false });
+      statusTimers.forEach(clearTimeout);
+      set({ isChatLoading: false, chatStreamStatus: null });
     }
   },
 

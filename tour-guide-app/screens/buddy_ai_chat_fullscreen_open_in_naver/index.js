@@ -47,6 +47,7 @@ export default function AIChatInterface({
   const chatWaypointContext = useAppStore((s) => s.chatWaypointContext);
   const chatPhotoContext = useAppStore((s) => s.chatPhotoContext);
   const isChatLoading = useAppStore((s) => s.isChatLoading);
+  const chatStreamStatus = useAppStore((s) => s.chatStreamStatus);
   const isRecording = useAppStore((s) => s.isRecording);
   const isTranscribing = useAppStore((s) => s.isTranscribing);
   const isSpeaking = useAppStore((s) => s.isSpeaking);
@@ -496,7 +497,7 @@ export default function AIChatInterface({
             </View>
             <View style={[styles.msgBuddyPill, { backgroundColor: theme.assistantBubble, borderColor: theme.assistantBorder }]}>
               <Text style={[styles.msgTextBuddy, { color: theme.text }]}>
-                {isTranscribing ? 'Transcribing voice...' : 'Thinking...'}
+                {isTranscribing ? 'Transcribing voice...' : (chatStreamStatus || 'Thinking...')}
               </Text>
             </View>
           </View>

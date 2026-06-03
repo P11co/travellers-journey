@@ -2,6 +2,7 @@ import * as FileSystem from 'expo-file-system';
 
 const DEFAULT_BASE_URL = 'http://localhost:8000';
 const DEFAULT_TIMEOUT_MS = 120000;
+const VISION_CHAT_TIMEOUT_MS = 300000;
 
 export const API_BASE_URL = (
   process.env.EXPO_PUBLIC_API_URL || DEFAULT_BASE_URL
@@ -266,6 +267,7 @@ export function sendVisionChat({
 }) {
   return request('/chat/vision', {
     method: 'POST',
+    timeoutMs: VISION_CHAT_TIMEOUT_MS,
     body: {
       message,
       image_base64: imageBase64,
