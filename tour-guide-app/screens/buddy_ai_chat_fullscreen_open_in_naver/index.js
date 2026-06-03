@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useAppStore from '../../src/store';
 import TrioDock from '../../src/components/TrioDock';
 import VisionCameraPanel from '../../src/components/VisionCameraPanel';
+import VisionImageDiagnostics from '../../src/components/VisionImageDiagnostics';
 import { getTheme } from '../../src/theme';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -37,6 +38,7 @@ export default function AIChatInterface({
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [isMicPressed, setIsMicPressed] = useState(false);
   const [expandedDeveloperTraces, setExpandedDeveloperTraces] = useState({});
+  const [imageLoadErrors, setImageLoadErrors] = useState({});
   const scrollViewRef = useRef(null);
   const inputRef = useRef(null);
   const isNearBottomRef = useRef(true);
@@ -323,6 +325,8 @@ export default function AIChatInterface({
 
   const renderMessage = (message) => {
     if (message.role === 'user') {
+      const imageLoadError = imageLoadErrors[message.id];
+
       return (
         <View key={message.id} style={styles.userMessageRow}>
           <View style={[styles.msgUserPill, { backgroundColor: theme.accent }]}>
@@ -332,9 +336,29 @@ export default function AIChatInterface({
                 source={{ uri: message.attachmentUri }}
                 style={styles.userImageAttachment}
                 resizeMode="cover"
+                onError={(event) => {
+                  const error = event.nativeEvent?.error || 'Image preview failed to load.';
+                  setImageLoadErrors((current) => ({ ...current, [message.id]: error }));
+                  logTraceEvent('vision_preview_image_load_failed', {
+                    message_id: message.id,
+                    error,
+                    attachment_mime_type: message.attachmentMimeType || null,
+                    attachment_uri_prefix: String(message.attachmentUri || '').slice(0, 80),
+                  });
+                }}
               />
             ) : message.attachmentType === 'image' && (
               <Text style={styles.userAttachmentText}>Photo attached</Text>
+            )}
+            {developerModeEnabled && imageLoadError && (
+              <Text style={styles.userImageDebugText}>Image preview error: {imageLoadError}</Text>
+            )}
+            {developerModeEnabled && message.attachmentType === 'image' && (
+              <VisionImageDiagnostics
+                uri={message.attachmentUri}
+                mimeType={message.attachmentMimeType}
+                messageId={message.id}
+              />
             )}
             {message.contextWaypoint && (
               <Text style={styles.userAttachmentText}>Context: {message.contextWaypoint.name}</Text>
@@ -839,11 +863,18 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   userImageAttachment: {
-    width: '100%',
-    height: 132,
+    width: 260,
+    aspectRatio: 4 / 3,
     borderRadius: 14,
     marginTop: 10,
     backgroundColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  userImageDebugText: {
+    color: 'rgba(255, 255, 255, 0.86)',
+    fontSize: 10,
+    fontFamily: 'Courier',
+    lineHeight: 14,
+    marginTop: 6,
   },
   naverButton: {
     backgroundColor: '#00c73c',

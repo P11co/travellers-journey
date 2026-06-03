@@ -884,13 +884,13 @@ const useAppStore = create((set, get) => ({
   setChatWaypointContext: (waypoint) => {
     const nextContext = waypoint
       ? {
-          id: waypoint.id,
-          name: waypoint.name,
-          summary: waypoint.summary || waypoint.knowledgeSummary || '',
-          lat: waypoint.lat ?? waypoint.latitude ?? waypoint.coordinates?.latitude,
-          lng: waypoint.lng ?? waypoint.longitude ?? waypoint.coordinates?.longitude,
-          attachedAt: new Date().toISOString(),
-        }
+        id: waypoint.id,
+        name: waypoint.name,
+        summary: waypoint.summary || waypoint.knowledgeSummary || '',
+        lat: waypoint.lat ?? waypoint.latitude ?? waypoint.coordinates?.latitude,
+        lng: waypoint.lng ?? waypoint.longitude ?? waypoint.coordinates?.longitude,
+        attachedAt: new Date().toISOString(),
+      }
       : null;
 
     set({
@@ -921,11 +921,11 @@ const useAppStore = create((set, get) => ({
   setChatPhotoContext: (photo) => {
     const nextContext = photo
       ? {
-          imageBase64: photo.imageBase64,
-          imageUri: photo.imageUri,
-          imageMimeType: photo.imageMimeType || 'image/jpeg',
-          attachedAt: photo.attachedAt || new Date().toISOString(),
-        }
+        imageBase64: photo.imageBase64,
+        imageUri: photo.imageUri,
+        imageMimeType: photo.imageMimeType || 'image/jpeg',
+        attachedAt: photo.attachedAt || new Date().toISOString(),
+      }
       : null;
     set({ chatPhotoContext: nextContext });
     if (nextContext) {
@@ -1373,9 +1373,9 @@ const useAppStore = create((set, get) => ({
         chatMessages: current.chatMessages.map((chatMessage) => (
           chatMessage.id === assistantId
             ? {
-                ...chatMessage,
-                ...(typeof patch === 'function' ? patch(chatMessage) : patch),
-              }
+              ...chatMessage,
+              ...(typeof patch === 'function' ? patch(chatMessage) : patch),
+            }
             : chatMessage
         )),
       }));
@@ -1641,26 +1641,26 @@ const useAppStore = create((set, get) => ({
 
         return assistantMessage;
       } catch (fallbackError) {
-      const errorMessage = {
-        id: assistantId,
-        role: 'assistant',
-        content: `I could not reach the SeoulWalk server. ${fallbackError.message}`,
-        timestamp: new Date().toISOString(),
-        isError: true,
-      };
-      set((current) => ({
-        chatError: fallbackError.message,
-        chatStreamStatus: null,
-        chatMessages: current.chatMessages.map((chatMessage) => (
-          chatMessage.id === assistantId ? errorMessage : chatMessage
-        )),
-      }));
-      get().logTraceEvent('chat_message_failed', {
-        message,
-        error: fallbackError.message,
-        waypoint_id: waypointContext?.id || location.waypointId || null,
-      });
-      return errorMessage;
+        const errorMessage = {
+          id: assistantId,
+          role: 'assistant',
+          content: `I could not reach the SeoulWalk server. ${fallbackError.message}`,
+          timestamp: new Date().toISOString(),
+          isError: true,
+        };
+        set((current) => ({
+          chatError: fallbackError.message,
+          chatStreamStatus: null,
+          chatMessages: current.chatMessages.map((chatMessage) => (
+            chatMessage.id === assistantId ? errorMessage : chatMessage
+          )),
+        }));
+        get().logTraceEvent('chat_message_failed', {
+          message,
+          error: fallbackError.message,
+          waypoint_id: waypointContext?.id || location.waypointId || null,
+        });
+        return errorMessage;
       }
     } finally {
       set({ isChatLoading: false, chatStreamStatus: null });
@@ -1675,8 +1675,14 @@ const useAppStore = create((set, get) => ({
     const waypointLat = waypointContext?.lat ?? waypointContext?.latitude ?? waypointContext?.coordinates?.latitude;
     const waypointLng = waypointContext?.lng ?? waypointContext?.longitude ?? waypointContext?.coordinates?.longitude;
     const imageMimeType = context.imageMimeType || 'image/jpeg';
+    // Prefer the camera file URI for the chat preview. React Native <Image>
+    // on iOS silently fails to render large base64 data URIs (281K-776K chars)
+    // — no onError fires, but pixels are blank. The file URI from the camera
+    // is a normal local path that <Image> handles reliably.
     const imagePreviewUri = context.imageUri || (
-      imageBase64 ? `data:${imageMimeType};base64,${imageBase64}` : null
+      imageBase64
+        ? `data:${imageMimeType};base64,${imageBase64}`
+        : null
     );
     const userMessage = {
       id: createClientId('user-vision'),
@@ -1821,10 +1827,10 @@ const useAppStore = create((set, get) => ({
     const stopTarget = nearestStopWithCoords || firstStopWithCoords;
     const target = stopTarget
       ? {
-          placeName: stopTarget.name,
-          lat: stopTarget.latitude,
-          lng: stopTarget.longitude,
-        }
+        placeName: stopTarget.name,
+        lat: stopTarget.latitude,
+        lng: stopTarget.longitude,
+      }
       : DEFAULT_NAVER_TARGET;
 
     try {
