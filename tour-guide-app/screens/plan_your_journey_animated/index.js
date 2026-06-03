@@ -737,7 +737,7 @@ export default function PlanYourJourneyView({ navigation }) {
             {renderMoveControls(flatIndex, destIdx)}
             <View style={styles.lunchBannerTextWrap}>
               <Text style={[styles.lunchBannerMainText, { color: colors.text }]}>{stop.name}</Text>
-              <Text style={[styles.lunchBannerTimeText, { color: colors.accent }]}>{stop.time}</Text>
+              <Text style={[styles.lunchBannerTimeText, { color: colors.subtle }]}>{stop.time}</Text>
             </View>
           </View>
         </View>
@@ -749,10 +749,8 @@ export default function PlanYourJourneyView({ navigation }) {
         <View style={[
           styles.circleNodeCountElement,
           { backgroundColor: colors.surface, borderColor: colors.border },
-          destIdx === 0 && styles.activeBorderHighlightCircle,
-          destIdx === 0 && { borderColor: colors.accent },
         ]}>
-          <Text style={[destIdx === 0 ? styles.nodeCountActiveText : styles.nodeCountMutedText, { color: destIdx === 0 ? colors.accent : colors.muted }]}>
+          <Text style={[styles.nodeCountMutedText, { color: colors.muted }]}>
             {String(destIdx + 1).padStart(2, '0')}
           </Text>
         </View>
@@ -1574,18 +1572,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
-  },
-  activeBorderHighlightCircle: {
-    borderColor: '#5c77ff',
-    shadowColor: '#5c77ff',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
-  nodeCountActiveText: {
-    color: '#5c77ff',
-    fontWeight: '700',
-    fontSize: 14,
   },
   nodeCountMutedText: {
     color: '#9ca3af',

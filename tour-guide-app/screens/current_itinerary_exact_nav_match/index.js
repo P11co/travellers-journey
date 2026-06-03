@@ -70,7 +70,6 @@ export default function CurrentItineraryView({ navigation, route }) {
   };
 
   const renderTimelineStop = (stop, index) => {
-    const isActive = index === 0;
     const hasImage = Boolean(stop.image);
 
     return (
@@ -78,9 +77,8 @@ export default function CurrentItineraryView({ navigation, route }) {
         <View style={[
           styles.timelineIconUnit,
           { backgroundColor: theme.iconSurface, borderColor: theme.border },
-          isActive && [styles.activeNodeIcon, { backgroundColor: theme.accent }],
         ]}>
-          <Svg width="16" height="16" fill="none" stroke={isActive ? '#ffffff' : theme.mutedText} strokeWidth="2" viewBox="0 0 24 24">
+          <Svg width="16" height="16" fill="none" stroke={theme.mutedText} strokeWidth="2" viewBox="0 0 24 24">
             <Path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
             <Path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
           </Svg>
@@ -95,7 +93,7 @@ export default function CurrentItineraryView({ navigation, route }) {
           <View style={hasImage ? styles.cardPaddingArea : null}>
             <View style={styles.cardHeaderRow}>
               <Text style={[styles.cardNodeTitle, { color: theme.text }]}>{stop.name}</Text>
-              <Text style={isActive ? styles.monoTimeActive : [styles.monoTimeMuted, { color: theme.subtleText }]}>{stop.time}</Text>
+              <Text style={[styles.monoTimeMuted, { color: theme.subtleText }]}>{stop.time}</Text>
             </View>
             <Text style={[styles.cardBodyDescription, { color: theme.mutedText }]}>{stop.description}</Text>
             <View style={styles.badgeClusterRow}>
@@ -353,10 +351,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  activeNodeIcon: {
-    backgroundColor: '#5c77ff',
-    borderWidth: 0,
-  },
   cardHeroImage: {
     width: '100%',
     height: 128,
@@ -379,14 +373,6 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     flex: 1,
     minWidth: 0,
-  },
-  monoTimeActive: {
-    fontSize: 12,
-    fontFamily: 'Courier',
-    color: '#4ade80',
-    fontWeight: '600',
-    maxWidth: 76,
-    lineHeight: 16,
   },
   monoTimeMuted: {
     fontSize: 12,
