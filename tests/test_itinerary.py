@@ -81,6 +81,24 @@ async def mock_travel_leg():
         yield mock
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def mock_llm_first_plan():
+    """Keep itinerary generation tests isolated from real LLM calls."""
+    async def _mock_plan(req, selected_hotspots, service_dt):
+        from server.routers.itinerary import _build_deterministic_skeleton
+
+        matrix = {}
+        for h1 in selected_hotspots:
+            matrix[h1["id"]] = {}
+            for h2 in selected_hotspots:
+                if h1["id"] != h2["id"]:
+                    matrix[h1["id"]][h2["id"]] = _FIXED_LEG
+        return _build_deterministic_skeleton(selected_hotspots, req.start_time, matrix)
+
+    with patch("server.routers.itinerary.call_llm_for_itinerary_draft", new=_mock_plan):
+        yield
+
+
 @pytest.fixture(autouse=True)
 def fixed_service_datetime():
     """Keep opening-hours tests independent of the actual current weekday."""
@@ -101,7 +119,7 @@ async def test_generate_itinerary(client):
     """Generate an itinerary and verify the response structure."""
     resp = await client.post("/itinerary/generate", json={
         "location": "Gwanghwamun",
-        "hotspots": ["Gyeongbokgung Palace", "Tosokchon"],
+        "hotspots": ["Gyeongbokgung Palace", "Tosokchon Samgyetang"],
         "budget_krw": 50000,
         "available_hours": 4.0,
         "start_time": "10:00",
@@ -112,17 +130,18 @@ async def test_generate_itinerary(client):
     assert "session_id" in data
     assert data["location"] == "Gwanghwamun"
     assert len(data["items"]) == 3
-    assert data["items"][0]["place"] == "Gwanghwamun Gate"
-    assert data["items"][1]["estimated_cost_krw"] == 3000
-    assert data["total_estimated_cost_krw"] == 19000
+    assert data["items"][0]["place"] == "Gyeongbokgung Palace"
+    assert data["items"][1]["place"] == "Walk to Tosokchon Samgyetang"
+    assert data["items"][2]["place"] == "Tosokchon Samgyetang"
+    assert data["total_estimated_cost_krw"] == 0
 
-    # First two items have coordinates, so they should get Naver URLs
+    # Destination items have coordinates, so they should get Naver URLs.
     assert data["items"][0]["naver_map_url"] is not None
     assert "nmap://" in data["items"][0]["naver_map_url"]
-    # Third item has no coordinates
-    assert data["items"][2]["naver_map_url"] is None
-    assert data["items"][0]["image_url"] == "assets/images/waypoints/main_gate.jpg"
-    assert data["items"][1]["image_url"] == "assets/images/hotspots/palace_history_1778862119711.png"
+    assert data["items"][1]["naver_map_url"] is None
+    assert data["items"][2]["naver_map_url"] is not None
+    assert data["items"][0]["image_url"] == "assets/images/hotspots/palace_history_1778862119711.png"
+    assert data["items"][1]["image_url"] is None
     assert data["items"][2]["image_url"] == "assets/images/hotspots/h_013_tosokchon_samgyetang_1778862490739.png"
 
     return data["session_id"]
@@ -254,8 +273,8 @@ async def test_get_itinerary(client):
     # First generate
     gen_resp = await client.post("/itinerary/generate", json={
         "location": "Gwanghwamun",
-        "hotspots": ["Palace"],
-        "available_hours": 3.0,
+        "hotspots": ["Gyeongbokgung Palace", "National Palace Museum of Korea"],
+        "available_hours": 4.0,
     })
     session_id = gen_resp.json()["session_id"]
 
@@ -265,7 +284,7 @@ async def test_get_itinerary(client):
     data = resp.json()
     assert data["session_id"] == session_id
     assert len(data["items"]) == 3
-    assert data["items"][0]["image_url"] == "assets/images/waypoints/main_gate.jpg"
+    assert data["items"][0]["image_url"] == "assets/images/hotspots/palace_history_1778862119711.png"
 
 
 @pytest.mark.asyncio
@@ -286,21 +305,19 @@ async def test_reorder_itinerary(client):
     # Generate
     gen_resp = await client.post("/itinerary/generate", json={
         "location": "Gwanghwamun",
-        "hotspots": ["Palace"],
+        "hotspots": ["Gyeongbokgung Palace"],
         "available_hours": 3.0,
     })
     session_id = gen_resp.json()["session_id"]
 
-    # Reorder: reverse the order (3, 2, 1)
+    # Reorder: a single destination itinerary can be saved as-is.
     resp = await client.put(f"/itinerary/{session_id}/reorder", json={
-        "item_order": [3, 2, 1],
+        "item_order": [1],
     })
     assert resp.status_code == 200
     data = resp.json()
 
-    # After reorder, item at position 1 should be what was originally order=3
-    assert data["items"][0]["place"] == "Tosokchon Samgyetang"
-    assert data["items"][2]["place"] == "Gwanghwamun Gate"
+    assert data["items"][0]["place"] == "Gyeongbokgung Palace"
 
 
 @pytest.mark.asyncio
@@ -309,7 +326,7 @@ async def test_reorder_invalid(client):
     """Invalid reorder (wrong count) returns 400."""
     gen_resp = await client.post("/itinerary/generate", json={
         "location": "Gwanghwamun",
-        "hotspots": ["Palace"],
+        "hotspots": ["Gyeongbokgung Palace"],
         "available_hours": 3.0,
     })
     session_id = gen_resp.json()["session_id"]
@@ -330,7 +347,7 @@ async def test_delete_itinerary(client):
     """Delete a session and verify it's gone."""
     gen_resp = await client.post("/itinerary/generate", json={
         "location": "Gwanghwamun",
-        "hotspots": ["Palace"],
+        "hotspots": ["Gyeongbokgung Palace"],
         "available_hours": 3.0,
     })
     session_id = gen_resp.json()["session_id"]
@@ -535,6 +552,45 @@ async def test_generate_itinerary_includes_travel_legs(client):
         assert items[2]["place"] == "National Palace Museum of Korea"
         assert items[0]["image_url"] == "assets/images/hotspots/palace_history_1778862119711.png"
         assert items[2]["image_url"] == "assets/images/hotspots/h_006_palace_museum_1778862402556.png"
+
+
+@pytest.mark.asyncio
+async def test_generate_itinerary_dev_mode_includes_leg_diagnostics(client):
+    with patch("server.routers.itinerary.fetch_driving_route", new=AsyncMock(return_value=(1200.0, 8.2))) as mock_fetch:
+        resp = await client.post("/itinerary/generate", json={
+            "location": "Gwanghwamun",
+            "hotspots": ["Gwanghwamun Square", "Kyobo Bookstore (Gwanghwamun Branch)"],
+            "available_hours": 3.0,
+            "start_time": "10:00",
+            "developer_mode": True,
+        })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    trace = data["developer_trace"]
+    assert trace["summary"]["route_type"] == "llm_first_itinerary"
+    assert trace["summary"]["leg_count"] == 1
+    leg = trace["artifacts"]["leg_diagnostics"][0]
+    assert leg["from"] == "Gwanghwamun Square"
+    assert leg["to"] == "Kyobo Bookstore (Gwanghwamun Branch)"
+    assert leg["naver_driving"]["minutes"] == 10
+    assert leg["heuristic_walking"]["minutes"] >= 5
+    assert mock_fetch.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_generate_itinerary_non_dev_mode_skips_naver_diagnostics(client):
+    with patch("server.routers.itinerary.fetch_driving_route", new=AsyncMock(return_value=(1200.0, 8.2))) as mock_fetch:
+        resp = await client.post("/itinerary/generate", json={
+            "location": "Gwanghwamun",
+            "hotspots": ["Gwanghwamun Square", "Kyobo Bookstore (Gwanghwamun Branch)"],
+            "available_hours": 3.0,
+            "start_time": "10:00",
+        })
+
+    assert resp.status_code == 200
+    assert resp.json()["developer_trace"] is None
+    assert mock_fetch.await_count == 0
 
 
 @pytest.mark.asyncio

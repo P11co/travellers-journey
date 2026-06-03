@@ -449,7 +449,7 @@ function TimeBudgetWarningModal({ visible, detail, onClose }) {
       <View style={[styles.modalBackdrop, { backgroundColor: colors.overlay }]}>
         <View style={[styles.modalContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.modalTitle, { color: colors.text }]}>Not Enough Time</Text>
-          
+
           <Text style={[styles.modalWarningText, { color: colors.text }]}>
             Your {budgetStr} budget is too short.
           </Text>
@@ -510,8 +510,10 @@ export default function PlanYourJourneyView({ navigation }) {
   const generatedItinerary = useAppStore((s) => s.generatedItinerary);
   const isLoadingItinerary = useAppStore((s) => s.isLoadingItinerary);
   const itineraryError = useAppStore((s) => s.itineraryError);
+  const developerModeEnabled = useAppStore((s) => s.developerModeEnabled);
   const [reviewError, setReviewError] = useState(null);
   const [timeBudgetWarning, setTimeBudgetWarning] = useState(null);
+  const [developerTraceExpanded, setDeveloperTraceExpanded] = useState(false);
 
   const activities = draft.activities;
   const hasGeneratedRoute = Boolean(generatedItinerary);
@@ -602,6 +604,58 @@ export default function PlanYourJourneyView({ navigation }) {
     routeStops.slice(0, flatIndex).filter((s) => !s.isTravelLeg).length;
 
   const destCount = routeStops.filter((s) => !s.isTravelLeg).length;
+  const itineraryDeveloperTrace = generatedItinerary?.developerTrace;
+
+  const renderItineraryDeveloperTrace = () => {
+    if (!developerModeEnabled || !itineraryDeveloperTrace) return null;
+
+    const models = Array.isArray(itineraryDeveloperTrace.models) ? itineraryDeveloperTrace.models : [];
+    const diagnostics =
+      itineraryDeveloperTrace.artifacts?.leg_diagnostics ||
+      itineraryDeveloperTrace.timeline?.find((step) => step.role === 'diagnostics')?.content ||
+      [];
+
+    return (
+      <View style={[styles.itineraryDeveloperTraceBlock, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
+        <View style={styles.itineraryDeveloperPillRow}>
+          {models.map((model, index) => (
+            <View key={`${model.role || 'model'}-${index}`} style={[styles.itineraryDeveloperPill, { backgroundColor: colors.input, borderColor: colors.border }]}>
+              <Text style={[styles.itineraryDeveloperPillText, { color: colors.muted }]}>
+                {model.model || 'Planner'}{model.duration_ms != null ? `: ${model.duration_ms}ms` : ''}
+              </Text>
+            </View>
+          ))}
+        </View>
+        <TouchableOpacity
+          style={styles.itineraryDeveloperToggle}
+          onPress={() => setDeveloperTraceExpanded((value) => !value)}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.itineraryDeveloperToggleText, { color: colors.muted }]}>
+            {developerTraceExpanded ? 'v' : '>'} Itinerary developer trace
+          </Text>
+        </TouchableOpacity>
+        {developerTraceExpanded && (
+          <View style={styles.itineraryDeveloperDetails}>
+            {diagnostics.length ? diagnostics.map((leg, index) => (
+              <View key={`${leg.from}-${leg.to}-${index}`} style={[styles.itineraryDeveloperLegRow, { borderColor: colors.border }]}>
+                <Text style={[styles.itineraryDeveloperLegTitle, { color: colors.text }]}>
+                  {leg.from} -> {leg.to}
+                </Text>
+                <Text style={[styles.itineraryDeveloperLegText, { color: colors.muted }]}>
+                  LLM: {leg.llm_leg?.minutes ?? '?'}m | Naver driving: {leg.naver_driving?.minutes ?? 'n/a'}m | Walk heuristic: {leg.heuristic_walking?.minutes ?? '?'}m
+                </Text>
+              </View>
+            )) : (
+              <Text style={[styles.itineraryDeveloperLegText, { color: colors.muted }]}>
+                No travel legs were returned for diagnostics.
+              </Text>
+            )}
+          </View>
+        )}
+      </View>
+    );
+  };
 
   const renderMoveControls = (flatIndex, destIdx) => {
     if (routeHasTravelLegs) return null;
@@ -927,9 +981,9 @@ export default function PlanYourJourneyView({ navigation }) {
               <View style={styles.routeSplitHeaderRow}>
                 <View style={styles.routeHeaderMain}>
                   <View style={styles.badgeLabelContainerAlign}>
-                  <Text style={[styles.routeHeadlineText, { color: colors.text }]}>Generated Route</Text>
-                  <View style={[styles.aiBadgeTag, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}>
-                    <Text style={[styles.aiBadgeText, { color: colors.accent }]}>AI OPTIMIZED</Text>
+                    <Text style={[styles.routeHeadlineText, { color: colors.text }]}>Generated Route</Text>
+                    <View style={[styles.aiBadgeTag, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}>
+                      <Text style={[styles.aiBadgeText, { color: colors.accent }]}>AI OPTIMIZED</Text>
                     </View>
                   </View>
                   <Text style={[styles.dragSubtextHelper, { color: colors.subtle }]}>
@@ -956,6 +1010,7 @@ export default function PlanYourJourneyView({ navigation }) {
                   </View>
                 )}
               </View>
+              {renderItineraryDeveloperTrace()}
             </View>
           </>
         )}
@@ -1016,7 +1071,7 @@ export default function PlanYourJourneyView({ navigation }) {
             <View style={styles.generationNoticeTextWrap}>
               <Text style={[styles.generationNoticeTitle, { color: colors.text }]}>Generating itinerary</Text>
               <Text style={[styles.generationNoticeSubtitle, { color: colors.muted }]}>
-                This may take a while. Click into (...) to learn more
+                Please wait, we are creating an itinerary with minimal commute!
               </Text>
             </View>
           </View>
@@ -1448,6 +1503,55 @@ const styles = StyleSheet.create({
     bottom: 24,
     width: 1,
     backgroundColor: '#333333',
+  },
+  itineraryDeveloperTraceBlock: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+  },
+  itineraryDeveloperPillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  itineraryDeveloperPill: {
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  itineraryDeveloperPillText: {
+    fontSize: 10,
+    fontWeight: '600',
+    lineHeight: 13,
+  },
+  itineraryDeveloperToggle: {
+    paddingTop: 8,
+    paddingBottom: 2,
+  },
+  itineraryDeveloperToggleText: {
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 15,
+  },
+  itineraryDeveloperDetails: {
+    marginTop: 8,
+    gap: 8,
+  },
+  itineraryDeveloperLegRow: {
+    borderTopWidth: 1,
+    paddingTop: 8,
+  },
+  itineraryDeveloperLegTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 16,
+  },
+  itineraryDeveloperLegText: {
+    marginTop: 3,
+    fontSize: 11,
+    lineHeight: 15,
   },
   stopsTimelineRow: {
     flexDirection: 'row',

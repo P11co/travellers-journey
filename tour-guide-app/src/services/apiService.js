@@ -441,6 +441,7 @@ export function generateItinerary({
   startTime = '09:00',
   sessionId,
   allowAiFill = false,
+  developerMode = false,
 }) {
   return request('/itinerary/generate', {
     method: 'POST',
@@ -452,6 +453,7 @@ export function generateItinerary({
       start_time: startTime,
       session_id: sessionId || undefined,
       allow_ai_fill: allowAiFill,
+      developer_mode: developerMode || undefined,
     },
   });
 }

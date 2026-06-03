@@ -414,7 +414,13 @@ const getNearestStop = (stops, currentLocation) => {
 const isTravelLeg = (stop) => {
   if (stop.latitude != null || stop.longitude != null) return false;
   const place = (stop.place || stop.name || '').toLowerCase();
-  return place.startsWith('walk to ') || place.startsWith('taxi to ');
+  return (
+    place.startsWith('walk to ') ||
+    place.startsWith('taxi to ') ||
+    place.startsWith('transit to ') ||
+    place.startsWith('subway to ') ||
+    place.startsWith('bus to ')
+  );
 };
 
 
@@ -469,6 +475,7 @@ const normalizeServerItinerary = (itinerary) => {
     items,
     totalEstimatedCostKrw: itinerary.total_estimated_cost_krw || 0,
     createdAt: itinerary.created_at || new Date().toISOString(),
+    developerTrace: itinerary.developer_trace || null,
   };
 };
 
@@ -701,7 +708,7 @@ const useAppStore = create((set, get) => ({
     })),
 
   generateItinerary: async (overrides = {}) => {
-    const { draft, sessionId } = get();
+    const { draft, sessionId, developerModeEnabled } = get();
 
     set({ isLoadingItinerary: true, itineraryError: null });
 
@@ -714,6 +721,7 @@ const useAppStore = create((set, get) => ({
         startTime: overrides.startTime || draft.startTime,
         sessionId: overrides.sessionId || sessionId,
         allowAiFill: overrides.allowAiFill ?? draft.allowAiFill,
+        developerMode: overrides.developerMode ?? developerModeEnabled,
       });
 
       const normalized = normalizeServerItinerary(response);

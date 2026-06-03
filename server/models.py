@@ -73,6 +73,10 @@ class ItineraryGenerateRequest(BaseModel):
         False,
         description="If true, the planner may add extra known hotspots when selected stops leave substantial free time.",
     )
+    developer_mode: bool = Field(
+        False,
+        description="Return live itinerary planner diagnostics for this response.",
+    )
 
 
 class ItineraryItem(BaseModel):
@@ -97,6 +101,7 @@ class ItineraryResponse(BaseModel):
     items: list[ItineraryItem]
     total_estimated_cost_krw: int = 0
     created_at: str | None = None
+    developer_trace: dict | None = None
 
 
 class ItineraryReorderRequest(BaseModel):
