@@ -554,7 +554,7 @@ const useAppStore = create((set, get) => ({
   activityError: null,
 
   // Voice + appearance
-  themeMode: 'dark',
+  themeMode: 'light',
   hotspotSuggestionsEnabled: true,
   voiceModeEnabled: true,
   voiceOutputProvider: 'system',
@@ -625,7 +625,7 @@ const useAppStore = create((set, get) => ({
       activeTourId: null,
       currentLocation: null,
       activityError: null,
-      themeMode: 'dark',
+      themeMode: 'light',
       hotspotSuggestionsEnabled: true,
       voiceModeEnabled: true,
       voiceOutputProvider: 'system',
