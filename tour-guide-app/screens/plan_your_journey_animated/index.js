@@ -6,7 +6,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Image,
   Modal,
   TextInput
 } from 'react-native';
@@ -14,10 +13,10 @@ import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useAppStore from '../../src/store';
 import hotspotsData from '../../src/data/hotspots.json';
-import hotspotImages from '../../src/data/hotspotImages';
 import AppleBackButton from '../../src/components/AppleBackButton';
+import RemoteImage from '../../src/components/RemoteImage';
 
-const primaryLocationImage = require('../../assets/images/hotspots/gyeongbokgung-primary-location.png');
+const primaryLocationImage = 'assets/images/hotspots/gyeongbokgung-primary-location.png';
 
 const BUDGET_OPTIONS = ['$25', '$50', '$100', '$200'];
 const TIME_OPTIONS = ['Half Day (4 hrs)', 'Full Day (8 hrs)', 'Two Days (16 hrs)'];
@@ -655,7 +654,6 @@ export default function PlanYourJourneyView({ navigation }) {
 
   const renderHotspotActivity = (hotspot) => {
     const selected = Boolean(activities[hotspot.id]);
-    const imageSource = hotspotImages[hotspot.id];
     const isUnavailable = hotspot.opening_hours?.status === 'unavailable';
 
     return (
@@ -675,8 +673,8 @@ export default function PlanYourJourneyView({ navigation }) {
         >
           <View style={styles.activityCardLeftInfo}>
             <View style={styles.activityIconBox}>
-              {imageSource && (
-                <Image source={imageSource} style={styles.activityImage} />
+              {hotspot.image_url && (
+                <RemoteImage sourcePath={hotspot.image_url} style={styles.activityImage} />
               )}
             </View>
             <View style={styles.activityTextWrap}>
@@ -798,8 +796,8 @@ export default function PlanYourJourneyView({ navigation }) {
           </View>
 
           <View style={styles.parallaxCardWrapper}>
-            <Image
-              source={primaryLocationImage}
+            <RemoteImage
+              sourcePath={primaryLocationImage}
               style={styles.parallaxHeroImage}
               resizeMode="cover"
             />

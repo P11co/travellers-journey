@@ -2,12 +2,12 @@ import { create } from 'zustand';
 import {
   AudioModule,
   createAudioPlayer,
-  RecordingPresets,
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
   setIsAudioActiveAsync,
 } from 'expo-audio';
 import * as Speech from 'expo-speech';
+import { Platform } from 'react-native';
 import {
   generateItinerary as generateItineraryRequest,
   getItinerary as getItineraryRequest,
@@ -25,14 +25,59 @@ import {
   transcribeAudio,
 } from './services/apiService';
 import hotspotsData from './data/hotspots.json';
+import { resolveBackendAssetUrl } from './utils/assetUrls';
 
 let activeTtsPlayer = null;
 let activeTtsSubscription = null;
 let preferredSystemVoice = undefined;
 let availableSystemVoicesCache = null;
+let activeVoiceRecordingStartedAt = 0;
 
-const DEFAULT_SYSTEM_VOICE_IDENTIFIER = 'com.apple.speech.synthesis.voice.Samantha';
-const DEFAULT_SYSTEM_VOICE_NAME = 'Samantha';
+const DEFAULT_SYSTEM_VOICE_IDENTIFIER = 'com.apple.speech.synthesis.voice.Kathy';
+const DEFAULT_SYSTEM_VOICE_NAME = 'Kathy';
+const MIN_VOICE_RECORDING_DURATION_MS = 700;
+
+const VOICE_RECORDING_OPTIONS = {
+  extension: '.m4a',
+  sampleRate: 44100,
+  numberOfChannels: 1,
+  bitRate: 64000,
+  isMeteringEnabled: true,
+  android: {
+    outputFormat: 'mpeg4',
+    audioEncoder: 'aac',
+    audioSource: 'voice_recognition',
+  },
+  ios: {
+    outputFormat: 'aac ',
+    audioQuality: 0x40,
+    linearPCMBitDepth: 16,
+    linearPCMIsBigEndian: false,
+    linearPCMIsFloat: false,
+  },
+  web: {
+    mimeType: 'audio/webm',
+    bitsPerSecond: 64000,
+  },
+};
+
+const getVoiceRecordingOptions = () => {
+  const commonOptions = {
+    extension: VOICE_RECORDING_OPTIONS.extension,
+    sampleRate: VOICE_RECORDING_OPTIONS.sampleRate,
+    numberOfChannels: VOICE_RECORDING_OPTIONS.numberOfChannels,
+    bitRate: VOICE_RECORDING_OPTIONS.bitRate,
+    isMeteringEnabled: VOICE_RECORDING_OPTIONS.isMeteringEnabled,
+  };
+
+  if (Platform.OS === 'ios') {
+    return { ...commonOptions, ...VOICE_RECORDING_OPTIONS.ios };
+  }
+  if (Platform.OS === 'android') {
+    return { ...commonOptions, ...VOICE_RECORDING_OPTIONS.android };
+  }
+  return { ...commonOptions, ...VOICE_RECORDING_OPTIONS.web };
+};
 
 const releaseActiveTtsPlayer = () => {
   if (activeTtsSubscription) {
@@ -403,6 +448,8 @@ const normalizeServerItinerary = (itinerary) => {
     longitude: item.longitude,
     naverMapUrl: item.naver_map_url,
     routingSource: item.routing_source ?? null,
+    image: resolveBackendAssetUrl(item.image_url),
+    imageUrl: resolveBackendAssetUrl(item.image_url),
     isTravelLeg: isTravelLeg({
       place: item.place,
       latitude: item.latitude,
@@ -507,7 +554,7 @@ const useAppStore = create((set, get) => ({
   activityError: null,
 
   // Voice + appearance
-  themeMode: 'light',
+  themeMode: 'dark',
   hotspotSuggestionsEnabled: true,
   voiceModeEnabled: true,
   voiceOutputProvider: 'system',
@@ -578,7 +625,7 @@ const useAppStore = create((set, get) => ({
       activeTourId: null,
       currentLocation: null,
       activityError: null,
-      themeMode: 'light',
+      themeMode: 'dark',
       hotspotSuggestionsEnabled: true,
       voiceModeEnabled: true,
       voiceOutputProvider: 'system',
@@ -1121,10 +1168,12 @@ const useAppStore = create((set, get) => ({
         allowsRecording: true,
         playsInSilentMode: true,
       });
+      await setIsAudioActiveAsync(true);
 
-      const recording = new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY);
+      const recording = new AudioModule.AudioRecorder(getVoiceRecordingOptions());
       await recording.prepareToRecordAsync();
       recording.record();
+      activeVoiceRecordingStartedAt = Date.now();
       set({
         voiceRecording: recording,
         isRecording: true,
@@ -1138,6 +1187,7 @@ const useAppStore = create((set, get) => ({
         voiceRecording: null,
         voiceError: error.message || 'Could not start voice recording.',
       });
+      activeVoiceRecordingStartedAt = 0;
       return null;
     }
   },
@@ -1148,18 +1198,33 @@ const useAppStore = create((set, get) => ({
 
     set({ isRecording: false, isTranscribing: true, voiceError: null });
     try {
+      const recordingDurationMs = activeVoiceRecordingStartedAt
+        ? Date.now() - activeVoiceRecordingStartedAt
+        : 0;
       await voiceRecording.stop();
+      const recordingStatus = voiceRecording.getStatus?.();
       await setAudioModeAsync({
         allowsRecording: false,
         playsInSilentMode: true,
       });
+      activeVoiceRecordingStartedAt = 0;
+
+      if (recordingDurationMs < MIN_VOICE_RECORDING_DURATION_MS) {
+        throw new Error('Hold the microphone for at least one second.');
+      }
 
       const uri = voiceRecording.uri || voiceRecording.getStatus?.()?.url;
       if (!uri) {
         throw new Error('Recording file was not created.');
       }
 
-      get().logTraceEvent('voice_recording_stopped', { uri });
+      get().logTraceEvent('voice_recording_stopped', {
+        uri,
+        duration_ms: recordingDurationMs,
+        status_duration_ms: recordingStatus?.durationMillis,
+        status_has_error: recordingStatus?.hasError,
+        status_error: recordingStatus?.error,
+      });
       const response = await transcribeAudio({
         uri,
         mimeType: 'audio/m4a',
@@ -1195,6 +1260,7 @@ const useAppStore = create((set, get) => ({
       get().logTraceEvent('voice_transcription_failed', {
         error: rawError,
       });
+      activeVoiceRecordingStartedAt = 0;
       return null;
     }
   },

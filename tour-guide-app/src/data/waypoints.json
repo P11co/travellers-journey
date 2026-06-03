@@ -20,7 +20,8 @@
             "restrooms": "Near the National Palace Museum on the left",
             "vendingMachines": "Next to the ticket booth",
             "emergency": "Palace security office near the ticket booth"
-        }
+        },
+        "image_url": "assets/images/waypoints/main_gate.jpg"
     },
     {
         "id": "ticket_booth",
@@ -43,7 +44,8 @@
             "restrooms": "Public restrooms located just behind the ticket booth building",
             "waterFountains": "Next to the restrooms",
             "emergency": "First aid station at the ticket booth"
-        }
+        },
+        "image_url": "assets/images/waypoints/main_gate.jpg"
     },
     {
         "id": "geunjeongjeon",
@@ -65,7 +67,8 @@
             "restrooms": "Located outside the courtyard, to the east near the entrance of Donggung",
             "waterFountains": "Near the restrooms to the east",
             "emergency": "Palace staff stationed near the entrance"
-        }
+        },
+        "image_url": "assets/images/waypoints/geunjeongjeon.jpg"
     },
     {
         "id": "gyeonghoeru",
@@ -87,7 +90,8 @@
             "restrooms": "Restrooms and a small cafe are located just south of the pavilion",
             "vendingMachines": "At the cafe south of the pavilion",
             "waterFountains": "At the cafe south of the pavilion"
-        }
+        },
+        "image_url": "assets/images/waypoints/gyeonghoeru.jpg"
     },
     {
         "id": "national_palace_museum",
@@ -111,7 +115,8 @@
             "vendingMachines": "Museum cafe and gift shop inside",
             "emergency": "Information desk inside the museum lobby",
             "ticketBooth": "Museum ticket desk inside the lobby"
-        }
+        },
+        "image_url": "assets/images/hotspots/h_006_palace_museum_1778862402556.png"
     },
     {
         "id": "heungnyemun",
@@ -132,7 +137,8 @@
         "facilities": {
             "ticketBooth": "Just outside this gate",
             "restrooms": "Near the ticket booth outside"
-        }
+        },
+        "image_url": "assets/images/waypoints/main_gate.jpg"
     },
     {
         "id": "sajeongjeon",
@@ -150,7 +156,8 @@
             "left": "Sujeongjeon Hall",
             "right": "Eastern palace buildings"
         },
-        "facilities": {}
+        "facilities": {},
+        "image_url": "assets/images/waypoints/sajeongjeon.jpg"
     },
     {
         "id": "gangnyeongjeon",
@@ -168,7 +175,8 @@
             "left": "Gyeonghoeru Pavilion (over the wall)",
             "right": "Eastern residential buildings"
         },
-        "facilities": {}
+        "facilities": {},
+        "image_url": "assets/images/waypoints/royal_residences.jpg"
     },
     {
         "id": "gyotaejeon",
@@ -186,7 +194,8 @@
             "left": "Western palace paths",
             "right": "Eastern palace paths"
         },
-        "facilities": {}
+        "facilities": {},
+        "image_url": "assets/images/waypoints/royal_residences.jpg"
     },
     {
         "id": "amisan",
@@ -204,7 +213,8 @@
             "left": "Wooded area",
             "right": "Palace paths"
         },
-        "facilities": {}
+        "facilities": {},
+        "image_url": "assets/images/waypoints/amisan.jpg"
     },
     {
         "id": "hyangwonjeong",
@@ -225,7 +235,8 @@
         "facilities": {
             "restrooms": "Near the National Folk Museum",
             "cafe": "Cafe near the pond"
-        }
+        },
+        "image_url": "assets/images/waypoints/hyangwonjeong.jpg"
     },
     {
         "id": "national_folk_museum",
@@ -247,7 +258,8 @@
             "restrooms": "Inside the museum",
             "waterFountains": "Inside the museum",
             "cafe": "Museum cafe on the first floor"
-        }
+        },
+        "image_url": "assets/images/waypoints/national_folk_museum.jpg"
     },
     {
         "id": "sinmumun",
@@ -267,7 +279,8 @@
         },
         "facilities": {
             "restrooms": "Just outside the gate near the Blue House"
-        }
+        },
+        "image_url": "assets/images/waypoints/palace_gate.jpg"
     },
     {
         "id": "yeonchumun",
@@ -285,7 +298,8 @@
             "left": "Southwest palace walls",
             "right": "Northwest palace walls"
         },
-        "facilities": {}
+        "facilities": {},
+        "image_url": "assets/images/waypoints/palace_gate.jpg"
     },
     {
         "id": "geonchunmun",
@@ -303,7 +317,8 @@
             "left": "Northeast palace walls",
             "right": "Southeast palace walls"
         },
-        "facilities": {}
+        "facilities": {},
+        "image_url": "assets/images/waypoints/palace_gate.jpg"
     },
     {
         "id": "sejong_statue",
@@ -323,7 +338,8 @@
         },
         "facilities": {
             "restrooms": "Inside the underground museum (entrance behind the statue)"
-        }
+        },
+        "image_url": "assets/images/waypoints/gwanghwamun_square.jpg"
     },
     {
         "id": "yi_sun_sin_statue",
@@ -341,7 +357,8 @@
             "left": "Sejong Center",
             "right": "Kyobo Bookstore"
         },
-        "facilities": {}
+        "facilities": {},
+        "image_url": "assets/images/waypoints/gwanghwamun_square.jpg"
     },
     {
         "id": "cheonggyecheon_plaza",
@@ -361,7 +378,8 @@
         },
         "facilities": {
             "restrooms": "Public restrooms down by the stream path"
-        }
+        },
+        "image_url": "assets/images/waypoints/cheonggyecheon_plaza.jpg"
     },
     {
         "id": "gwanghwamun_station_9",
@@ -382,7 +400,8 @@
         "facilities": {
             "restrooms": "Inside the subway station",
             "vendingMachines": "Inside the subway station"
-        }
+        },
+        "image_url": "assets/images/waypoints/gwanghwamun_square.jpg"
     },
     {
         "id": "sejong_center",
@@ -403,6 +422,7 @@
         "facilities": {
             "restrooms": "Inside the center",
             "cafe": "Multiple cafes inside and around the stairs"
-        }
+        },
+        "image_url": "assets/images/waypoints/gwanghwamun_square.jpg"
     }
 ]

@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,9 +8,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import hotspotsData from '../../src/data/hotspots.json';
-import hotspotImages from '../../src/data/hotspotImages';
 import useAppStore from '../../src/store';
 import AppleBackButton from '../../src/components/AppleBackButton';
+import RemoteImage from '../../src/components/RemoteImage';
 
 export default function HotspotDetailScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
@@ -45,7 +44,6 @@ export default function HotspotDetailScreen({ navigation, route }) {
     );
   }
 
-  const imageSource = hotspotImages[hotspot.id];
   const selected = Boolean(activities[hotspot.id]);
   const openingHours = hotspot.opening_hours;
   const isUnavailable = openingHours?.status === 'unavailable';
@@ -63,9 +61,9 @@ export default function HotspotDetailScreen({ navigation, route }) {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {imageSource && (
+        {hotspot.image_url && (
           <View style={styles.imageFrame}>
-            <Image source={imageSource} style={styles.image} resizeMode="cover" />
+            <RemoteImage sourcePath={hotspot.image_url} style={styles.image} resizeMode="cover" />
           </View>
         )}
 

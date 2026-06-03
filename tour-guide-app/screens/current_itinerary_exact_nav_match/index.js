@@ -5,14 +5,14 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
-  Image
+  TouchableOpacity
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useAppStore from '../../src/store';
 import { getTheme } from '../../src/theme';
 import AppleBackButton from '../../src/components/AppleBackButton';
+import RemoteImage from '../../src/components/RemoteImage';
 
 export default function CurrentItineraryView({ navigation, route }) {
   const insets = useSafeAreaInsets();
@@ -87,8 +87,8 @@ export default function CurrentItineraryView({ navigation, route }) {
         </View>
         <View style={[styles.cardBg, { backgroundColor: theme.surface, borderColor: theme.border }, hasImage ? styles.overflowClipCard : [styles.cardPaddingArea, styles.radiusPatch]]}>
           {hasImage && (
-            <Image
-              source={{ uri: stop.image }}
+            <RemoteImage
+              sourcePath={stop.image}
               style={styles.cardHeroImage}
             />
           )}

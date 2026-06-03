@@ -121,6 +121,9 @@ async def test_generate_itinerary(client):
     assert "nmap://" in data["items"][0]["naver_map_url"]
     # Third item has no coordinates
     assert data["items"][2]["naver_map_url"] is None
+    assert data["items"][0]["image_url"] == "assets/images/waypoints/main_gate.jpg"
+    assert data["items"][1]["image_url"] == "assets/images/hotspots/palace_history_1778862119711.png"
+    assert data["items"][2]["image_url"] == "assets/images/hotspots/h_013_tosokchon_samgyetang_1778862490739.png"
 
     return data["session_id"]
 
@@ -262,6 +265,7 @@ async def test_get_itinerary(client):
     data = resp.json()
     assert data["session_id"] == session_id
     assert len(data["items"]) == 3
+    assert data["items"][0]["image_url"] == "assets/images/waypoints/main_gate.jpg"
 
 
 @pytest.mark.asyncio
@@ -527,7 +531,10 @@ async def test_generate_itinerary_includes_travel_legs(client):
         assert items[1]["latitude"] is None
         assert items[1]["longitude"] is None
         assert items[1]["routing_source"] is not None
+        assert items[1]["image_url"] is None
         assert items[2]["place"] == "National Palace Museum of Korea"
+        assert items[0]["image_url"] == "assets/images/hotspots/palace_history_1778862119711.png"
+        assert items[2]["image_url"] == "assets/images/hotspots/h_006_palace_museum_1778862402556.png"
 
 
 @pytest.mark.asyncio

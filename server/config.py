@@ -84,6 +84,7 @@ NVIDIA_BASE_URL: str = "https://integrate.api.nvidia.com/v1/chat/completions"
 # Database
 # ---------------------------------------------------------------------------
 DATABASE_PATH: str = os.path.join(_PROJECT_ROOT, "data", "seoulwalk.db")
+ASSETS_DIR: str = os.path.join(_PROJECT_ROOT, "server", "assets")
 
 # ---------------------------------------------------------------------------
 # Waypoints data (shared with the frontend)

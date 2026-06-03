@@ -87,6 +87,7 @@ class ItineraryItem(BaseModel):
     longitude: float | None = None
     naver_map_url: str | None = None
     routing_source: str | None = None
+    image_url: str | None = None
 
 
 class ItineraryResponse(BaseModel):

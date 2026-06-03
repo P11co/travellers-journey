@@ -1,7 +1,6 @@
 import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Dimensions,
   Modal,
   StyleSheet,
   Text,
@@ -167,7 +166,7 @@ export default function VisionCameraPanel({
   // ========================================================================
   return (
     <>
-      {fullscreenCamera}
+      {isFullscreen && fullscreenCamera}
       <View style={[styles.panel, style]}>
         {/* Unmount the compact camera entirely when fullscreen is open.
             This ensures only one camera session is live and cameraRef
@@ -238,7 +237,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   camera: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
   },
   liveBadge: {
     position: 'absolute',

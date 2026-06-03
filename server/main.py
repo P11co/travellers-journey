@@ -8,10 +8,12 @@ Entry point for the API server. Run with:
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from server.database import init_db
 from server.models import HealthResponse
 from server.routers import itinerary, chat, handoff, activity, voice
+from server.config import ASSETS_DIR
 
 
 # ---------------------------------------------------------------------------
@@ -56,6 +58,7 @@ app.include_router(chat.router)
 app.include_router(handoff.router)
 app.include_router(activity.router)
 app.include_router(voice.router)
+app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
 
 
 # ---------------------------------------------------------------------------

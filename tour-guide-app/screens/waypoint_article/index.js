@@ -1,13 +1,13 @@
 import React from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useAppStore from '../../src/store';
 import { getTheme } from '../../src/theme';
 import articles from '../../src/data/waypointArticles.json';
 import waypoints from '../../src/data/waypoints.json';
-import { getWaypointImage } from '../../src/data/waypointImages';
 import AppleBackButton from '../../src/components/AppleBackButton';
+import RemoteImage from '../../src/components/RemoteImage';
 
 export default function WaypointArticleScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
@@ -57,8 +57,8 @@ export default function WaypointArticleScreen({ navigation, route }) {
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.inner, { width: contentWidth }]}>
-          <Image
-            source={getWaypointImage(waypointId)}
+          <RemoteImage
+            sourcePath={waypoint?.image_url}
             style={[styles.heroImage, { width: contentWidth, height: heroHeight }]}
             resizeMode="cover"
           />

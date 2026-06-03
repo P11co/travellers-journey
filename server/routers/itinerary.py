@@ -144,6 +144,47 @@ def _hotspot_by_normalized_name(name: str) -> dict | None:
     return None
 
 
+def _waypoint_by_normalized_name(name: str) -> dict | None:
+    normalized = _normalize_name(name)
+    aliases = {
+        "gwanghwamun gate": "main_gate",
+        "gyeongbokgung gate": "main_gate",
+        "main gate": "main_gate",
+        "gyeongbokgung palace": "h_001",
+    }
+    alias_id = aliases.get(normalized)
+    for waypoint in WAYPOINTS:
+        if waypoint.get("id") == alias_id or _normalize_name(waypoint["name"]) == normalized:
+            return waypoint
+    return None
+
+
+def _image_url_for_item(item: dict) -> str | None:
+    if _is_utility_item(item):
+        return None
+
+    place = str(item.get("place", ""))
+    hotspot = _hotspot_by_normalized_name(place)
+    if hotspot and hotspot.get("image_url"):
+        return hotspot["image_url"]
+
+    waypoint = _waypoint_by_normalized_name(place)
+    if waypoint and waypoint.get("image_url"):
+        return waypoint["image_url"]
+
+    return None
+
+
+def _with_image_urls(items: list[dict]) -> list[dict]:
+    return [
+        {
+            **item,
+            "image_url": item.get("image_url") or _image_url_for_item(item),
+        }
+        for item in items
+    ]
+
+
 def _is_last_monday(service_dt: datetime) -> bool:
     return (
         service_dt.weekday() == 0
@@ -813,6 +854,7 @@ async def generate_itinerary(req: ItineraryGenerateRequest):
             urls = build_naver_urls(item.get("place", ""), lat, lng)
             naver_url = urls["naver_app_url"]
         final_items.append({**item, "naver_map_url": naver_url})
+    response_items = _with_image_urls(final_items)
 
     # 10. Persist
     await save_itinerary_items(session_id, final_items)
@@ -824,7 +866,7 @@ async def generate_itinerary(req: ItineraryGenerateRequest):
     return ItineraryResponse(
         session_id=session_id,
         location=req.location,
-        items=[ItineraryItem(**item) for item in final_items],
+        items=[ItineraryItem(**item) for item in response_items],
         total_estimated_cost_krw=total_cost,
         created_at=session_data["created_at"] if session_data else None,
     )
@@ -841,11 +883,12 @@ async def get_itinerary(session_id: str):
     if not items:
         raise HTTPException(status_code=404, detail="No itinerary found for this session")
 
-    total_cost = sum(item.get("estimated_cost_krw", 0) for item in items)
+    response_items = _with_image_urls(items)
+    total_cost = sum(item.get("estimated_cost_krw", 0) for item in response_items)
     return ItineraryResponse(
         session_id=session_id,
         location=session["location"],
-        items=[ItineraryItem(**item) for item in items],
+        items=[ItineraryItem(**item) for item in response_items],
         total_estimated_cost_krw=total_cost,
         created_at=session["created_at"],
     )
@@ -867,11 +910,12 @@ async def reorder(session_id: str, req: ItineraryReorderRequest):
 
     # Return updated itinerary
     items = await get_itinerary_items(session_id)
-    total_cost = sum(item.get("estimated_cost_krw", 0) for item in items)
+    response_items = _with_image_urls(items)
+    total_cost = sum(item.get("estimated_cost_krw", 0) for item in response_items)
     return ItineraryResponse(
         session_id=session_id,
         location=session["location"],
-        items=[ItineraryItem(**item) for item in items],
+        items=[ItineraryItem(**item) for item in response_items],
         total_estimated_cost_krw=total_cost,
         created_at=session["created_at"],
     )

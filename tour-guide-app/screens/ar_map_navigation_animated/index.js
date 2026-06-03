@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, TouchableOpacity, View, Text, StyleSheet } from 'react-native';
+import { ActivityIndicator, TouchableOpacity, View, Text, StyleSheet } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useAppStore from '../../src/store';
 import waypointsData from '../../src/data/waypoints.json';
-import { getWaypointImage } from '../../src/data/waypointImages';
 import TrioDock from '../../src/components/TrioDock';
 import { getTheme } from '../../src/theme';
+import RemoteImage from '../../src/components/RemoteImage';
 
 const PALACE_CENTER = {
   latitude: 37.5796,
@@ -616,8 +616,8 @@ export default function ARMapNavigationView({
       {(hotspotSuggestionsEnabled || selectedWaypoint) && (
         <View style={[styles.topNotificationContainer, { top: notificationTop }]}>
           <View style={[styles.notificationPanel, { backgroundColor: theme.panel, borderColor: theme.border, shadowColor: theme.shadow }]}>
-            <Image
-              source={getWaypointImage(displayWaypoint?.id)}
+            <RemoteImage
+              sourcePath={displayWaypoint?.image_url}
               style={[styles.notificationThumbnail, { backgroundColor: theme.iconSurface, borderColor: theme.accent }]}
               resizeMode="cover"
             />
