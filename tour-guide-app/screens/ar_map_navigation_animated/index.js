@@ -451,6 +451,7 @@ export default function ARMapNavigationView({
       latitude: wp.coordinates.latitude,
       longitude: wp.coordinates.longitude,
       radius: wp.radius,
+      image_url: wp.image_url,
       active: wp.id === activeWaypointId,
     }))
   ), [activeWaypointId]);

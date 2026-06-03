@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Image, View } from 'react-native';
 import { backendImageSource } from '../utils/assetUrls';
 
@@ -11,6 +11,10 @@ export default function RemoteImage({
 }) {
   const [failed, setFailed] = useState(false);
   const source = useMemo(() => backendImageSource(sourcePath), [sourcePath]);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [sourcePath]);
 
   if (!source || failed) {
     return (
