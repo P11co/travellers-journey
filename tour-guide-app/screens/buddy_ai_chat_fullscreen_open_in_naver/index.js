@@ -181,11 +181,11 @@ export default function AIChatInterface({
     }
   };
 
-  const handleCapturePhoto = async (imageBase64, imageUri) => {
+  const handleCapturePhoto = async (imageBase64, imageUri, imageMimeType = 'image/jpeg') => {
     setChatPhotoContext({
       imageBase64,
       imageUri,
-      imageMimeType: 'image/jpeg',
+      imageMimeType,
       attachedAt: new Date().toISOString(),
     });
     setCameraVisible(false);
@@ -832,7 +832,6 @@ const styles = StyleSheet.create({
     borderColor: '#5c77ff',
     overflow: 'hidden',
     zIndex: 120,
-    elevation: 80,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.5,

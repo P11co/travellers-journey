@@ -200,11 +200,11 @@ export default function BuddyAIChatOverlay({
     }
   };
 
-  const handleCapturePhoto = async (imageBase64, imageUri) => {
+  const handleCapturePhoto = async (imageBase64, imageUri, imageMimeType = 'image/jpeg') => {
     setChatPhotoContext({
       imageBase64,
       imageUri,
-      imageMimeType: 'image/jpeg',
+      imageMimeType,
       attachedAt: new Date().toISOString(),
     });
     setCameraVisible(false);

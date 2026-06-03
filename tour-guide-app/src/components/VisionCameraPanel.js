@@ -1,6 +1,38 @@
 import React, { useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Device from 'expo-device';
+
+const FAKE_CAMERA_ASSET = require('../../screens/ar_map_navigation_animated/screen.png');
+const FAKE_CAMERA_MIME_TYPE = 'image/png';
+
+const isFakeCameraEnabled =
+  __DEV__ &&
+  process.env.EXPO_PUBLIC_FAKE_CAMERA === '1' &&
+  Platform.OS === 'ios' &&
+  !Device.isDevice;
+
+const readAssetAsBase64 = async (assetModule) => {
+  const source = Image.resolveAssetSource(assetModule);
+  if (!source?.uri) {
+    throw new Error('Fake camera asset URI unavailable');
+  }
+
+  const response = await fetch(source.uri);
+  const blob = await response.blob();
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error('Fake camera asset read failed'));
+    reader.readAsDataURL(blob);
+  });
+  const [, base64] = String(dataUrl).split(',');
+  if (!base64) {
+    throw new Error('Fake camera asset base64 unavailable');
+  }
+
+  return { base64, uri: source.uri };
+};
 
 export default function VisionCameraPanel({
   style,
@@ -13,23 +45,33 @@ export default function VisionCameraPanel({
   const [isCapturing, setIsCapturing] = useState(false);
 
   const handleCapture = async () => {
-    if (!cameraRef.current || isCapturing || disabled) return;
+    if (isCapturing || disabled) return;
+    if (!isFakeCameraEnabled && !cameraRef.current) return;
+
     setIsCapturing(true);
     try {
+      if (isFakeCameraEnabled) {
+        const photo = await readAssetAsBase64(FAKE_CAMERA_ASSET);
+        await onCapture?.(photo.base64, photo.uri, FAKE_CAMERA_MIME_TYPE);
+        return;
+      }
+
       const photo = await cameraRef.current.takePictureAsync({
         base64: true,
         quality: 0.55,
         skipProcessing: true,
       });
       if (photo?.base64) {
-        await onCapture?.(photo.base64, photo.uri);
+        await onCapture?.(photo.base64, photo.uri, 'image/jpeg');
       }
+    } catch (error) {
+      console.warn('[VisionCameraPanel] Image could not be captured', error);
     } finally {
       setIsCapturing(false);
     }
   };
 
-  if (!permission?.granted) {
+  if (!isFakeCameraEnabled && !permission?.granted) {
     return (
       <View style={[styles.panel, styles.permissionPanel, style]}>
         <Text style={styles.title}>Camera access</Text>
@@ -46,10 +88,14 @@ export default function VisionCameraPanel({
 
   return (
     <View style={[styles.panel, style]}>
-      <CameraView ref={cameraRef} style={styles.camera} facing="back" />
+      {isFakeCameraEnabled ? (
+        <Image source={FAKE_CAMERA_ASSET} style={styles.camera} resizeMode="cover" />
+      ) : (
+        <CameraView ref={cameraRef} style={styles.camera} facing="back" />
+      )}
       <View style={styles.liveBadge}>
         <View style={styles.liveDot} />
-        <Text style={styles.liveText}>LIVE</Text>
+        <Text style={styles.liveText}>{isFakeCameraEnabled ? 'SIM' : 'LIVE'}</Text>
       </View>
       <View style={styles.controls}>
         <TouchableOpacity style={styles.closeButton} onPress={onClose}>
